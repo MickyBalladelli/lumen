@@ -210,6 +210,36 @@ println(content)
 `readFile(...)` returns a string. Missing files currently return an empty
 string.
 
+### HTTP
+
+The `http` library can serve a static file directory.
+
+```lumen
+function main(): i32 {
+  return serveFiles(8080, "examples/public")
+}
+```
+
+It can also serve a simple API route.
+
+```lumen
+function main(): i32 {
+  return serveApi(
+    8081,
+    "GET",
+    "/health",
+    'Content-Type: application/json
+X-Lumen: yes
+',
+    '{"ok":true}'
+  )
+}
+```
+
+`serveApi` takes port, method, route, response headers, and response body.
+Query params are accepted on requests and ignored for route matching for now.
+These servers run until stopped.
+
 ### Error Handling
 
 `try/catch` catches Lumen `throw` values.
@@ -295,6 +325,8 @@ console.log(ast)
 - `examples/for-loop.lm`: classic for loop semicolon rule
 - `examples/for-of.lm`: for-of loop over arrays
 - `examples/fs.lm`: read file content with `readFile`
+- `examples/http-api.lm`: API server example
+- `examples/http-files.lm`: static file server example
 - `examples/newline-continuation.lm`: newline after incomplete expression
 - `examples/native-main.lm`: compiles to LLVM IR and native code
 - `examples/numbers.lm`: `i64` and `f32` numbers

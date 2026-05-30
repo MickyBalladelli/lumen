@@ -1,0 +1,11 @@
+function main(): i32 {
+  return serveApi(
+    8081,
+    "GET",
+    "/health",
+    'Content-Type: application/json
+X-Lumen: yes
+',
+    '{"ok":true}'
+  )
+}

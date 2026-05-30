@@ -7,6 +7,10 @@ const examplesDir = 'examples'
 const outputDir = 'build'
 const compiler = new Compiler()
 const dataText = await readFile(join(examplesDir, 'data.txt'), 'utf8')
+const compileOnly = new Set([
+  'http-api',
+  'http-files'
+])
 
 const expectations = new Map([
   ['array', {
@@ -74,6 +78,11 @@ for (const file of files) {
 
   await compiler.writeLLVM(source, llvmPath)
   await compiler.buildExecutable(llvmPath, executablePath)
+
+  if (compileOnly.has(name)) {
+    console.log(`ok ${name} compile`)
+    continue
+  }
 
   const result = await runExecutable(executablePath)
   const expected = expectations.get(name)

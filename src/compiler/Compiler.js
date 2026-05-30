@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { mkdir, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import { Tokenizer } from '../lexer/Tokenizer.js'
 import { Parser } from '../parser/Parser.js'
 import { SemanticAnalyzer } from '../semantics/SemanticAnalyzer.js'
@@ -53,7 +53,7 @@ export class Compiler {
   }
 
   async buildExecutable(llvmPath, outputPath, { clang = 'clang' } = {}) {
-    await this.run(clang, ['-Wno-override-module', llvmPath, '-o', outputPath])
+    await this.run(clang, ['-Wno-override-module', llvmPath, resolve('src/runtime/http.c'), '-o', outputPath])
     return outputPath
   }
 

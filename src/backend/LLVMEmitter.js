@@ -3,6 +3,7 @@ import { Diagnostic } from '../diagnostics/Diagnostic.js'
 import { LumenTypes, TypeSystem } from '../semantics/TypeSystem.js'
 import { SystemFunctions } from '../system/SystemLibrary.js'
 import { FsFunctions } from '../fs/FsLibrary.js'
+import { HttpFunctions } from '../http/HttpLibrary.js'
 
 const BINARY_PRECEDENCE = new Map([
   ['*', 40],
@@ -29,6 +30,7 @@ export class LLVMEmitter {
     this.usesPrintf = false
     this.usesStrstr = false
     this.usesFileIO = false
+    this.usesHttp = false
     const typeDefinitions = irModule.structs.map(struct => this.emitStructType(struct))
     const functions = irModule.functions.flatMap(func => this.emitFunction(func))
 
@@ -44,6 +46,8 @@ export class LLVMEmitter {
       this.usesFileIO ? 'declare i64 @fread(ptr, i64, i64, ptr)' : '',
       this.usesFileIO ? 'declare ptr @malloc(i64)' : '',
       this.usesFileIO ? 'declare i32 @fclose(ptr)' : '',
+      this.usesHttp ? 'declare i32 @lumen_http_serve_files(i32, ptr)' : '',
+      this.usesHttp ? 'declare i32 @lumen_http_serve_api(i32, ptr, ptr, ptr, ptr)' : '',
       '',
       ...functions,
       ''
@@ -343,6 +347,8 @@ export class LLVMEmitter {
     if (this.isCall(expression.tokens, SystemFunctions.Len)) return this.emitLen(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.Includes)) return this.emitIncludes(expression.tokens)
     if (this.isCall(expression.tokens, FsFunctions.ReadFile)) return this.emitReadFile(expression.tokens)
+    if (this.isCall(expression.tokens, HttpFunctions.ServeFiles)) return this.emitServeFiles(expression.tokens)
+    if (this.isCall(expression.tokens, HttpFunctions.ServeApi)) return this.emitServeApi(expression.tokens)
     if (this.isFieldAccess(expression.tokens)) return this.emitFieldLoad(expression.tokens)
     if (this.isArrayAccess(expression.tokens)) return this.emitArrayLoad(expression.tokens)
 
@@ -564,6 +570,70 @@ export class LLVMEmitter {
 
     return {
       type: LumenTypes.String,
+      value: result
+    }
+  }
+
+  emitServeFiles(tokens) {
+    this.usesHttp = true
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 2) {
+      throw new Diagnostic('serveFiles expects port and root', tokens[0].location, 'backend')
+    }
+
+    const port = this.emitExpression({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+    const root = this.emitExpression({
+      tokens: args[1],
+      location: tokens[0].location
+    })
+    const result = this.nextTemp()
+
+    this.lines.push(`  ${result} = call i32 @lumen_http_serve_files(i32 ${this.cast(port, LumenTypes.I32)}, ptr ${root.value})`)
+
+    return {
+      type: LumenTypes.I32,
+      value: result
+    }
+  }
+
+  emitServeApi(tokens) {
+    this.usesHttp = true
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 5) {
+      throw new Diagnostic('serveApi expects port, method, route, headers, and body', tokens[0].location, 'backend')
+    }
+
+    const port = this.emitExpression({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+    const method = this.emitExpression({
+      tokens: args[1],
+      location: tokens[0].location
+    })
+    const route = this.emitExpression({
+      tokens: args[2],
+      location: tokens[0].location
+    })
+    const headers = this.emitExpression({
+      tokens: args[3],
+      location: tokens[0].location
+    })
+    const body = this.emitExpression({
+      tokens: args[4],
+      location: tokens[0].location
+    })
+    const result = this.nextTemp()
+
+    this.lines.push(`  ${result} = call i32 @lumen_http_serve_api(i32 ${this.cast(port, LumenTypes.I32)}, ptr ${method.value}, ptr ${route.value}, ptr ${headers.value}, ptr ${body.value})`)
+
+    return {
+      type: LumenTypes.I32,
       value: result
     }
   }
