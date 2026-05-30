@@ -240,6 +240,24 @@ X-Lumen: yes
 Query params are accepted on requests and ignored for route matching for now.
 These servers run until stopped.
 
+Run the full browser example:
+
+```bash
+npm run http
+```
+
+Then open:
+
+```text
+http://localhost:8088
+```
+
+The full example serves static HTML and API routes from one server:
+
+```lumen
+serveHttp(8088, "examples/http-public", methods, routes, headers, bodies)
+```
+
 ### Error Handling
 
 `try/catch` catches Lumen `throw` values.
@@ -327,6 +345,7 @@ console.log(ast)
 - `examples/fs.lm`: read file content with `readFile`
 - `examples/http-api.lm`: API server example
 - `examples/http-files.lm`: static file server example
+- `examples/http-server.lm`: static files plus API routes
 - `examples/newline-continuation.lm`: newline after incomplete expression
 - `examples/native-main.lm`: compiles to LLVM IR and native code
 - `examples/numbers.lm`: `i64` and `f32` numbers

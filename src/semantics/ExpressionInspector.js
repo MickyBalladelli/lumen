@@ -23,6 +23,7 @@ export class ExpressionInspector {
     if (this.isCall(rawExpression, FsFunctions.ReadFile)) return LumenTypes.String
     if (this.isCall(rawExpression, HttpFunctions.ServeFiles)) return LumenTypes.I32
     if (this.isCall(rawExpression, HttpFunctions.ServeApi)) return LumenTypes.I32
+    if (this.isCall(rawExpression, HttpFunctions.ServeHttp)) return LumenTypes.I32
     if (this.isStructLiteral(rawExpression.tokens)) return rawExpression.tokens[0].lexeme
     if (this.isFieldAccess(rawExpression.tokens)) return this.fieldAccessType(rawExpression.tokens)
     if (this.isArrayLiteral(rawExpression.tokens)) return this.arrayLiteralType(rawExpression.tokens)

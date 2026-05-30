@@ -202,3 +202,89 @@ int lumen_http_serve_api(int port, const char *method, const char *route, const 
     close(client);
   }
 }
+
+int lumen_http_serve_http(
+  int port,
+  const char *root,
+  const char **methods,
+  const char **routes,
+  const char **headers,
+  const char **bodies,
+  int route_count
+) {
+  int server = make_server(port);
+  if (server < 0) return 1;
+
+  printf("Lumen HTTP listening on http://localhost:%d\n", port);
+  fflush(stdout);
+
+  for (;;) {
+    int client = accept(server, NULL, NULL);
+    if (client < 0) continue;
+
+    char request[2048];
+    ssize_t read_count = recv(client, request, sizeof(request) - 1, 0);
+    if (read_count <= 0) {
+      close(client);
+      continue;
+    }
+
+    request[read_count] = '\0';
+    char method[32];
+    char path[512];
+    request_method(request, method, sizeof(method));
+    request_path(request, path, sizeof(path));
+
+    int handled = 0;
+    for (int i = 0; i < route_count; i += 1) {
+      if (strcmp(method, methods[i]) == 0 && strcmp(path, routes[i]) == 0) {
+        write_response_with_headers(client, 200, headers[i], bodies[i], strlen(bodies[i]));
+        handled = 1;
+        break;
+      }
+    }
+
+    if (handled) {
+      close(client);
+      continue;
+    }
+
+    if (strstr(path, "..")) {
+      const char *body = "not found\n";
+      write_response(client, 404, "text/plain", body, strlen(body));
+      close(client);
+      continue;
+    }
+
+    if (strcmp(path, "/") == 0) snprintf(path, sizeof(path), "/index.html");
+
+    char full_path[1024];
+    snprintf(full_path, sizeof(full_path), "%s%s", root, path);
+
+    FILE *file = fopen(full_path, "rb");
+    if (!file) {
+      const char *body = "not found\n";
+      write_response(client, 404, "text/plain", body, strlen(body));
+      close(client);
+      continue;
+    }
+
+    fseek(file, 0, SEEK_END);
+    long size = ftell(file);
+    fseek(file, 0, SEEK_SET);
+
+    char *body = malloc((size_t)size);
+    if (!body) {
+      fclose(file);
+      close(client);
+      continue;
+    }
+
+    fread(body, 1, (size_t)size, file);
+    fclose(file);
+
+    write_response(client, 200, content_type(full_path), body, (size_t)size);
+    free(body);
+    close(client);
+  }
+}

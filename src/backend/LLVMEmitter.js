@@ -48,6 +48,7 @@ export class LLVMEmitter {
       this.usesFileIO ? 'declare i32 @fclose(ptr)' : '',
       this.usesHttp ? 'declare i32 @lumen_http_serve_files(i32, ptr)' : '',
       this.usesHttp ? 'declare i32 @lumen_http_serve_api(i32, ptr, ptr, ptr, ptr)' : '',
+      this.usesHttp ? 'declare i32 @lumen_http_serve_http(i32, ptr, ptr, ptr, ptr, ptr, i32)' : '',
       '',
       ...functions,
       ''
@@ -349,6 +350,7 @@ export class LLVMEmitter {
     if (this.isCall(expression.tokens, FsFunctions.ReadFile)) return this.emitReadFile(expression.tokens)
     if (this.isCall(expression.tokens, HttpFunctions.ServeFiles)) return this.emitServeFiles(expression.tokens)
     if (this.isCall(expression.tokens, HttpFunctions.ServeApi)) return this.emitServeApi(expression.tokens)
+    if (this.isCall(expression.tokens, HttpFunctions.ServeHttp)) return this.emitServeHttp(expression.tokens)
     if (this.isFieldAccess(expression.tokens)) return this.emitFieldLoad(expression.tokens)
     if (this.isArrayAccess(expression.tokens)) return this.emitArrayLoad(expression.tokens)
 
@@ -635,6 +637,60 @@ export class LLVMEmitter {
     return {
       type: LumenTypes.I32,
       value: result
+    }
+  }
+
+  emitServeHttp(tokens) {
+    this.usesHttp = true
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 6) {
+      throw new Diagnostic('serveHttp expects port, root, methods, routes, headers, and bodies', tokens[0].location, 'backend')
+    }
+
+    const port = this.emitExpression({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+    const root = this.emitExpression({
+      tokens: args[1],
+      location: tokens[0].location
+    })
+    const methods = this.arrayPointerArgument(args[2], tokens[0].location)
+    const routes = this.arrayPointerArgument(args[3], tokens[0].location)
+    const headers = this.arrayPointerArgument(args[4], tokens[0].location)
+    const bodies = this.arrayPointerArgument(args[5], tokens[0].location)
+
+    if (methods.length !== routes.length || methods.length !== headers.length || methods.length !== bodies.length) {
+      throw new Diagnostic('serveHttp arrays must have same length', tokens[0].location, 'backend')
+    }
+
+    const result = this.nextTemp()
+    this.lines.push(`  ${result} = call i32 @lumen_http_serve_http(i32 ${this.cast(port, LumenTypes.I32)}, ptr ${root.value}, ptr ${methods.pointer}, ptr ${routes.pointer}, ptr ${headers.pointer}, ptr ${bodies.pointer}, i32 ${methods.length})`)
+
+    return {
+      type: LumenTypes.I32,
+      value: result
+    }
+  }
+
+  arrayPointerArgument(tokens, location) {
+    const name = this.singleIdentifierName({
+      tokens,
+      location
+    })
+    const symbol = this.resolve(name)
+
+    if (!this.typeSystem.isArray(symbol.type) || symbol.length === null) {
+      throw new Diagnostic('serveHttp expects array variables', location, 'backend')
+    }
+
+    const pointer = this.nextTemp()
+    this.lines.push(`  ${pointer} = getelementptr inbounds ${this.typeSystem.llvmArray(symbol.type, symbol.length)}, ptr ${symbol.pointer}, i32 0, i32 0`)
+
+    return {
+      pointer,
+      length: symbol.length
     }
   }
 

@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Lumen HTTP</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 40px;
+      }
+
+      pre {
+        background: #f2f2f2;
+        padding: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Lumen HTTP server</h1>
+    <p id="message">Loading...</p>
+    <pre id="raw"></pre>
+    <script>
+      Promise.all([
+        fetch('/api/hello').then(response => response.json()),
+        fetch('/api/time').then(response => response.json()),
+        fetch('/api/echo', { method: 'POST' }).then(response => response.text())
+      ]).then(([hello, time, echo]) => {
+        document.getElementById('message').textContent = hello.message
+        document.getElementById('raw').textContent = JSON.stringify({ hello, time, echo }, null, 2)
+      })
+    </script>
+  </body>
+</html>

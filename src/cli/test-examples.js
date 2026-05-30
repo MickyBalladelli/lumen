@@ -9,7 +9,8 @@ const compiler = new Compiler()
 const dataText = await readFile(join(examplesDir, 'data.txt'), 'utf8')
 const compileOnly = new Set([
   'http-api',
-  'http-files'
+  'http-files',
+  'http-server'
 ])
 
 const expectations = new Map([

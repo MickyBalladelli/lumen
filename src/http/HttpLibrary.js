@@ -1,6 +1,7 @@
 export const HttpFunctions = Object.freeze({
   ServeFiles: 'serveFiles',
-  ServeApi: 'serveApi'
+  ServeApi: 'serveApi',
+  ServeHttp: 'serveHttp'
 })
 
 export class HttpLibrary {

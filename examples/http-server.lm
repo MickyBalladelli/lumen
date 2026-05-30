@@ -1,0 +1,19 @@
+function main(): i32 {
+  let methods: string[] = ["GET", "GET", "POST"]
+  let routes: string[] = ["/api/hello", "/api/time", "/api/echo"]
+  let headers: string[] = [
+    'Content-Type: application/json
+',
+    'Content-Type: application/json
+',
+    'Content-Type: text/plain
+'
+  ]
+  let bodies: string[] = [
+    '{"message":"hello world"}',
+    '{"time":"now"}',
+    "hello world"
+  ]
+
+  return serveHttp(8088, "examples/http-public", methods, routes, headers, bodies)
+}
