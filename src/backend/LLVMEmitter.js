@@ -31,6 +31,7 @@ export class LLVMEmitter {
     this.usesStrstr = false
     this.usesFileIO = false
     this.usesHttp = false
+    this.usesUuid = false
     const typeDefinitions = irModule.structs.map(struct => this.emitStructType(struct))
     const functions = irModule.functions.flatMap(func => this.emitFunction(func))
 
@@ -46,6 +47,7 @@ export class LLVMEmitter {
       this.usesFileIO ? 'declare i64 @fread(ptr, i64, i64, ptr)' : '',
       this.usesFileIO ? 'declare ptr @malloc(i64)' : '',
       this.usesFileIO ? 'declare i32 @fclose(ptr)' : '',
+      this.usesUuid ? 'declare ptr @lumen_uuid()' : '',
       this.usesHttp ? 'declare i32 @lumen_http_serve_files(i32, ptr)' : '',
       this.usesHttp ? 'declare i32 @lumen_http_serve_api(i32, ptr, ptr, ptr, ptr)' : '',
       this.usesHttp ? 'declare i32 @lumen_http_serve_http(i32, ptr, ptr, ptr, ptr, ptr, i32)' : '',
@@ -347,6 +349,7 @@ export class LLVMEmitter {
     if (this.isCall(expression.tokens, SystemFunctions.Println)) return this.emitPrintln(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.Len)) return this.emitLen(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.Includes)) return this.emitIncludes(expression.tokens)
+    if (this.isCall(expression.tokens, SystemFunctions.Uuid)) return this.emitUuid(expression.tokens)
     if (this.isCall(expression.tokens, FsFunctions.ReadFile)) return this.emitReadFile(expression.tokens)
     if (this.isCall(expression.tokens, HttpFunctions.ServeFiles)) return this.emitServeFiles(expression.tokens)
     if (this.isCall(expression.tokens, HttpFunctions.ServeApi)) return this.emitServeApi(expression.tokens)
@@ -487,6 +490,23 @@ export class LLVMEmitter {
     return {
       type: LumenTypes.I32,
       value: String(iterable.length)
+    }
+  }
+
+  emitUuid(tokens) {
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 0) {
+      throw new Diagnostic('uuid expects no arguments', tokens[0].location, 'backend')
+    }
+
+    this.usesUuid = true
+    const value = this.nextTemp()
+    this.lines.push(`  ${value} = call ptr @lumen_uuid()`)
+
+    return {
+      type: LumenTypes.String,
+      value
     }
   }
 

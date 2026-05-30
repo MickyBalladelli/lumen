@@ -2,7 +2,8 @@ export const SystemFunctions = Object.freeze({
   Println: 'println',
   Len: 'len',
   Filter: 'filter',
-  Includes: 'includes'
+  Includes: 'includes',
+  Uuid: 'uuid'
 })
 
 export class SystemLibrary {

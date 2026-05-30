@@ -188,6 +188,13 @@ println(includes("lumen language", "lumen"))
 println(includes(values, 4))
 ```
 
+`uuid()` returns a UUID-like string.
+
+```lumen
+let id = uuid()
+println(id)
+```
+
 `filter(...)` can be used in a for-of loop with a JS-like arrow predicate.
 
 ```lumen

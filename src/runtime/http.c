@@ -5,7 +5,38 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <time.h>
 #include <unistd.h>
+
+char *lumen_uuid(void) {
+  static int seeded = 0;
+  if (!seeded) {
+    srand((unsigned int)(time(NULL) ^ getpid()));
+    seeded = 1;
+  }
+
+  unsigned int a = (unsigned int)rand();
+  unsigned int b = (unsigned int)rand();
+  unsigned int c = (unsigned int)rand();
+  unsigned int d = (unsigned int)rand();
+  unsigned int e = (unsigned int)rand();
+
+  char *out = malloc(37);
+  if (!out) return "";
+
+  snprintf(
+    out,
+    37,
+    "%08x-%04x-%04x-%04x-%012x",
+    a,
+    b & 0xffff,
+    ((c & 0x0fff) | 0x4000),
+    ((d & 0x3fff) | 0x8000),
+    e
+  );
+
+  return out;
+}
 
 static int make_server(int port) {
   int server = socket(AF_INET, SOCK_STREAM, 0);

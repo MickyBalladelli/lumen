@@ -8,6 +8,7 @@ function main(): i32 {
   println(includes(values, 9))
   println(includes(text, "lumen"))
   println(includes(text, "rust"))
+  println(includes(uuid(), "-"))
 
   for (let value of filter(values, value => value > 2)) {
     println(value)
