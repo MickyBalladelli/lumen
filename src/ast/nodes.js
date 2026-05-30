@@ -31,6 +31,22 @@ export class TypeAnnotationNode extends AstNode {
   }
 }
 
+export class StructDeclarationNode extends AstNode {
+  constructor(name, fields, location = null) {
+    super('StructDeclaration', location)
+    this.name = name
+    this.fields = fields
+  }
+}
+
+export class StructFieldNode extends AstNode {
+  constructor(name, typeAnnotation, location = null) {
+    super('StructField', location)
+    this.name = name
+    this.typeAnnotation = typeAnnotation
+  }
+}
+
 export class VariableDeclarationNode extends AstNode {
   constructor(kind, declarations, location = null) {
     super('VariableDeclaration', location)

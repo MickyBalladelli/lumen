@@ -1,0 +1,13 @@
+struct Point {
+  x: i32
+  y: i32
+}
+
+function main(): i32 {
+  let point: Point = Point { x: 4, y: 7 }
+  let total: i32 = point.x + point.y
+
+  println(total)
+
+  return total
+}

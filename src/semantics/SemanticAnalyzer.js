@@ -6,6 +6,9 @@ export class SemanticAnalyzer {
     const scope = new Scope()
 
     for (const node of program.body) {
+      if (node.kind === 'StructDeclaration') {
+        this.defineStruct(scope, node)
+      }
       if (node.kind === 'FunctionDeclaration') {
         this.defineFunction(scope, node)
       }
@@ -16,6 +19,15 @@ export class SemanticAnalyzer {
     }
 
     return scope
+  }
+
+  defineStruct(scope, node) {
+    if (!scope.define(node.name.name, {
+      kind: 'struct',
+      node
+    })) {
+      throw new Diagnostic(`Duplicate type "${node.name.name}"`, node.location, 'semantic')
+    }
   }
 
   defineFunction(scope, node) {
@@ -30,6 +42,7 @@ export class SemanticAnalyzer {
   visit(node, scope) {
     if (!node) return
 
+    if (node.kind === 'StructDeclaration') return
     if (node.kind === 'FunctionDeclaration') return this.visitFunction(node, scope)
     if (node.kind === 'BlockStatement') return this.visitBlock(node, scope)
     if (node.kind === 'VariableDeclaration') return this.visitVariableDeclaration(node, scope)

@@ -8,6 +8,8 @@ import {
   ProgramNode,
   RawExpressionNode,
   ReturnStatementNode,
+  StructDeclarationNode,
+  StructFieldNode,
   TypeAnnotationNode,
   VariableDeclarationNode,
   VariableDeclaratorNode
@@ -43,6 +45,8 @@ export class AstNodeRegistry {
       .register('Program', ProgramNode)
       .register('Identifier', IdentifierNode)
       .register('TypeAnnotation', TypeAnnotationNode)
+      .register('StructDeclaration', StructDeclarationNode)
+      .register('StructField', StructFieldNode)
       .register('VariableDeclaration', VariableDeclarationNode)
       .register('VariableDeclarator', VariableDeclaratorNode)
       .register('FunctionDeclaration', FunctionDeclarationNode)

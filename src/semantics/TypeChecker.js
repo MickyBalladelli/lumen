@@ -12,6 +12,9 @@ export class TypeChecker {
     const scope = new Scope()
 
     for (const node of program.body) {
+      if (node.kind === 'StructDeclaration') {
+        this.registerStruct(node)
+      }
       if (node.kind === 'FunctionDeclaration') {
         scope.define(node.name.name, {
           kind: 'function',
@@ -25,9 +28,28 @@ export class TypeChecker {
     return program
   }
 
+  registerStruct(node) {
+    const seen = new Set()
+    const fields = node.fields.map(field => {
+      if (seen.has(field.name)) {
+        throw new Diagnostic(`Duplicate field "${field.name}"`, field.location, 'type')
+      }
+
+      seen.add(field.name)
+      return {
+        name: field.name,
+        type: this.resolveType(field.typeAnnotation, null),
+        location: field.location
+      }
+    })
+
+    this.typeSystem.registerStruct(node.name.name, fields)
+  }
+
   checkNode(node, scope, currentFunction) {
     if (!node) return LumenTypes.Void
 
+    if (node.kind === 'StructDeclaration') return LumenTypes.Void
     if (node.kind === 'FunctionDeclaration') return this.checkFunction(node, scope)
     if (node.kind === 'BlockStatement') return this.checkBlock(node, scope, currentFunction)
     if (node.kind === 'VariableDeclaration') return this.checkVariableDeclaration(node, scope)
@@ -81,6 +103,14 @@ export class TypeChecker {
         throw new Diagnostic(`Cannot assign ${actual} to ${expected}`, declaration.location, 'type')
       }
 
+      if (declaration.initializer && this.isStructLiteral(declaration.initializer.tokens)) {
+        this.checkStructLiteral(declaration.initializer, expected ?? actual, scope)
+      }
+
+      if (declaration.initializer && this.isArrayLiteral(declaration.initializer.tokens)) {
+        declaration.arrayLength = this.checkArrayLiteral(declaration.initializer, expected ?? actual, scope)
+      }
+
       declaration.inferredType = finalType
       scope.define(declaration.id.name, {
         kind: 'variable',
@@ -123,6 +153,127 @@ export class TypeChecker {
     const inspector = new ExpressionInspector(scope, this.typeSystem)
     inspector.validateNames(expression)
     return inspector.infer(expression)
+  }
+
+  checkStructLiteral(expression, typeName, scope) {
+    const struct = this.typeSystem.getStruct(typeName)
+    if (!struct) return
+
+    const values = this.structLiteralFields(expression.tokens)
+    const seen = new Set()
+
+    for (const [name, valueTokens] of values.entries()) {
+      const field = this.typeSystem.getField(typeName, name)
+      if (!field) {
+        throw new Diagnostic(`Unknown field "${name}"`, expression.location, 'type')
+      }
+
+      seen.add(name)
+      const valueType = new ExpressionInspector(scope, this.typeSystem).infer({
+        tokens: valueTokens
+      })
+
+      if (!this.typeSystem.canAssign(valueType, field.type)) {
+        throw new Diagnostic(`Cannot assign ${valueType} to ${field.type}`, expression.location, 'type')
+      }
+    }
+
+    for (const field of struct.fields) {
+      if (!seen.has(field.name)) {
+        throw new Diagnostic(`Missing field "${field.name}"`, expression.location, 'type')
+      }
+    }
+  }
+
+  structLiteralFields(tokens) {
+    const fields = new Map()
+    let index = 2
+
+    while (index < tokens.length - 1) {
+      const name = tokens[index]?.lexeme
+      index += 2
+      const value = []
+      let depth = 0
+
+      while (index < tokens.length - 1) {
+        const token = tokens[index]
+        if (depth === 0 && token.lexeme === ',') break
+        if (token.lexeme === '(' || token.lexeme === '{') depth += 1
+        if (token.lexeme === ')' || token.lexeme === '}') depth -= 1
+        value.push(token)
+        index += 1
+      }
+
+      fields.set(name, value)
+      if (tokens[index]?.lexeme === ',') index += 1
+    }
+
+    return fields
+  }
+
+  isStructLiteral(tokens) {
+    return tokens[0]?.lexeme &&
+      tokens[1]?.lexeme === '{' &&
+      this.typeSystem.getStruct(tokens[0].lexeme)
+  }
+
+  checkArrayLiteral(expression, typeName, scope) {
+    if (!this.typeSystem.isArray(typeName)) {
+      throw new Diagnostic('Array literal needs array type', expression.location, 'type')
+    }
+
+    const elementType = this.typeSystem.elementType(typeName)
+    const elements = this.splitDelimited(expression.tokens.slice(1, -1))
+
+    if (elements.length === 0) {
+      throw new Diagnostic('Array literal cannot be empty yet', expression.location, 'type')
+    }
+
+    const inspector = new ExpressionInspector(scope, this.typeSystem)
+
+    for (const element of elements) {
+      const actual = inspector.infer({
+        tokens: element
+      })
+
+      if (!this.typeSystem.canAssign(actual, elementType)) {
+        throw new Diagnostic(`Cannot assign ${actual} to ${elementType}`, expression.location, 'type')
+      }
+
+      if (this.isStructLiteral(element)) {
+        this.checkStructLiteral({
+          tokens: element,
+          location: element[0]?.location ?? expression.location
+        }, elementType, scope)
+      }
+    }
+
+    return elements.length
+  }
+
+  isArrayLiteral(tokens) {
+    return tokens[0]?.lexeme === '[' && tokens.at(-1)?.lexeme === ']'
+  }
+
+  splitDelimited(tokens) {
+    const parts = []
+    let current = []
+    let depth = 0
+
+    for (const token of tokens) {
+      if (depth === 0 && token.lexeme === ',') {
+        parts.push(current)
+        current = []
+        continue
+      }
+
+      if (['(', '[', '{'].includes(token.lexeme)) depth += 1
+      if ([')', ']', '}'].includes(token.lexeme)) depth -= 1
+      current.push(token)
+    }
+
+    if (current.length > 0) parts.push(current)
+    return parts
   }
 
   resolveType(typeAnnotation, fallback) {

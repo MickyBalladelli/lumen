@@ -86,6 +86,42 @@ let big: i64 = 10000000000
 let ratio: f32 = 1.5 + 2.25
 ```
 
+### Object Types
+
+Use `struct` to define a fixed object shape.
+
+```lumen
+struct Point {
+  x: i32
+  y: i32
+}
+
+let point: Point = Point { x: 4, y: 7 }
+println(point.x + point.y)
+```
+
+Structs compile to LLVM aggregate types.
+
+### Arrays
+
+Arrays hold a fixed list of values with the same element type.
+
+```lumen
+let values: i32[] = [2, 3, 5]
+println(values[0])
+```
+
+Arrays can also hold structs.
+
+```lumen
+let points: Point[] = [
+  Point { x: 4, y: 7 },
+  Point { x: 1, y: 9 }
+]
+
+println(points[1].y)
+```
+
 ### Loops
 
 Classic `for` loops compile to native code.
@@ -148,6 +184,12 @@ Build every Lumen example:
 npm run compile:examples
 ```
 
+Build and verify every example:
+
+```bash
+npm run test
+```
+
 Run it:
 
 ```bash
@@ -180,11 +222,13 @@ console.log(ast)
 ## Examples
 
 - `examples/basic.lm`: variables, function, return
+- `examples/array.lm`: arrays of numbers and structs
 - `examples/for-loop.lm`: classic for loop semicolon rule
 - `examples/newline-continuation.lm`: newline after incomplete expression
 - `examples/native-main.lm`: compiles to LLVM IR and native code
 - `examples/numbers.lm`: `i64` and `f32` numbers
 - `examples/println.lm`: native print through `printf`
+- `examples/struct.lm`: object type with fields
 - `examples/use-api.js`: tokenizer and parser from JavaScript
 
 Run the API example:

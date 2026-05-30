@@ -9,6 +9,7 @@
   "scripts": {
     "parse": "node ./src/cli/parse.js",
     "compile": "node ./src/cli/compile.js",
-    "compile:examples": "node ./src/cli/compile-examples.js"
+    "compile:examples": "node ./src/cli/compile-examples.js",
+    "test": "node ./src/cli/test-examples.js"
   }
 }

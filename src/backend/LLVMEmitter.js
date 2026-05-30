@@ -25,16 +25,23 @@ export class LLVMEmitter {
     this.globals = []
     this.stringId = 0
     this.usesPrintf = false
+    const typeDefinitions = irModule.structs.map(struct => this.emitStructType(struct))
     const functions = irModule.functions.flatMap(func => this.emitFunction(func))
 
     return [
       '; Lumen LLVM IR',
+      ...typeDefinitions,
       ...this.globals,
       this.usesPrintf ? 'declare i32 @printf(ptr, ...)' : '',
       '',
       ...functions,
       ''
     ].filter(line => line !== null).join('\n')
+  }
+
+  emitStructType(struct) {
+    const fields = struct.fields.map(field => this.llvmType(field.type)).join(', ')
+    return `%${struct.name} = type { ${fields} }`
   }
 
   emitFunction(func) {
@@ -85,9 +92,21 @@ export class LLVMEmitter {
   emitVariableDeclaration(node) {
     for (const declaration of node.declarations) {
       const type = declaration.inferredType ?? LumenTypes.I32
-      const pointer = this.alloca(declaration.id.name, type)
+      const pointer = this.alloca(declaration.id.name, type, {
+        length: declaration.arrayLength
+      })
 
       if (declaration.initializer) {
+        if (this.isArrayLiteral(declaration.initializer.tokens)) {
+          this.emitArrayInitializer(pointer, type, declaration.initializer.tokens)
+          continue
+        }
+
+        if (this.isStructLiteral(declaration.initializer.tokens)) {
+          this.emitStructInitializer(pointer, type, declaration.initializer.tokens)
+          continue
+        }
+
         const value = this.emitExpression(declaration.initializer)
         this.lines.push(`  store ${this.llvmType(type)} ${this.cast(value, type)}, ptr ${pointer}`)
       }
@@ -146,6 +165,8 @@ export class LLVMEmitter {
     }
 
     if (this.isCall(expression.tokens, 'println')) return this.emitPrintln(expression.tokens)
+    if (this.isFieldAccess(expression.tokens)) return this.emitFieldLoad(expression.tokens)
+    if (this.isArrayAccess(expression.tokens)) return this.emitArrayLoad(expression.tokens)
 
     const assignmentIndex = this.findTopLevelOperator(expression.tokens, '=')
     if (assignmentIndex > 0) return this.emitAssignment(expression.tokens, assignmentIndex)
@@ -172,6 +193,39 @@ export class LLVMEmitter {
     return {
       type: symbol.type,
       value: this.cast(value, symbol.type)
+    }
+  }
+
+  emitStructInitializer(pointer, type, tokens) {
+    const struct = this.typeSystem.getStruct(type)
+    const values = this.structLiteralFields(tokens)
+
+    for (let index = 0; index < struct.fields.length; index += 1) {
+      const field = struct.fields[index]
+      const valueTokens = values.get(field.name)
+      const value = this.emitRpn(this.toRpn(valueTokens), tokens[0].location)
+      const fieldPointer = this.nextTemp()
+
+      this.lines.push(`  ${fieldPointer} = getelementptr inbounds ${this.llvmType(type)}, ptr ${pointer}, i32 0, i32 ${index}`)
+      this.lines.push(`  store ${this.llvmType(field.type)} ${this.cast(value, field.type)}, ptr ${fieldPointer}`)
+    }
+  }
+
+  emitArrayInitializer(pointer, type, tokens) {
+    const elementType = this.typeSystem.elementType(type)
+    const elements = this.splitDelimited(tokens.slice(1, -1))
+
+    for (let index = 0; index < elements.length; index += 1) {
+      const elementPointer = this.nextTemp()
+      this.lines.push(`  ${elementPointer} = getelementptr inbounds ${this.typeSystem.llvmArray(type, elements.length)}, ptr ${pointer}, i32 0, i32 ${index}`)
+
+      if (this.isStructLiteral(elements[index])) {
+        this.emitStructInitializer(elementPointer, elementType, elements[index])
+        continue
+      }
+
+      const value = this.emitRpn(this.toRpn(elements[index]), tokens[0].location)
+      this.lines.push(`  store ${this.llvmType(elementType)} ${this.cast(value, elementType)}, ptr ${elementPointer}`)
     }
   }
 
@@ -264,6 +318,16 @@ export class LLVMEmitter {
       }
 
       if (token.type === TokenType.Identifier) {
+        if (token.fieldAccess) {
+          stack.push(this.emitFieldLoad(token.fieldAccess))
+          continue
+        }
+
+        if (token.arrayAccess) {
+          stack.push(this.emitArrayLoad(token.arrayAccess))
+          continue
+        }
+
         const symbol = this.resolve(token.lexeme)
         const temp = this.nextTemp()
         this.lines.push(`  ${temp} = load ${this.llvmType(symbol.type)}, ptr ${symbol.pointer}`)
@@ -326,8 +390,9 @@ export class LLVMEmitter {
   toRpn(tokens) {
     const output = []
     const operators = []
+    const normalized = this.normalizeAccessTokens(tokens)
 
-    for (const token of tokens) {
+    for (const token of normalized) {
       if ([TokenType.Number, TokenType.String, TokenType.Identifier, TokenType.Keyword].includes(token.type)) {
         output.push(token)
         continue
@@ -377,6 +442,213 @@ export class LLVMEmitter {
     return tokens[0]?.lexeme === name &&
       tokens[1]?.lexeme === '(' &&
       tokens.at(-1)?.lexeme === ')'
+  }
+
+  isStructLiteral(tokens) {
+    return tokens[0]?.type === TokenType.Identifier &&
+      tokens[1]?.lexeme === '{' &&
+      tokens.at(-1)?.lexeme === '}' &&
+      this.typeSystem.getStruct(tokens[0].lexeme)
+  }
+
+  isArrayLiteral(tokens) {
+    return tokens[0]?.lexeme === '[' && tokens.at(-1)?.lexeme === ']'
+  }
+
+  isArrayAccess(tokens) {
+    if (tokens[0]?.type !== TokenType.Identifier || tokens[1]?.lexeme !== '[') return false
+
+    const closeIndex = this.findMatching(tokens, 1, '[', ']')
+    return closeIndex === tokens.length - 1 ||
+      (tokens[closeIndex + 1]?.lexeme === '.' && closeIndex + 2 === tokens.length - 1)
+  }
+
+  isFieldAccess(tokens) {
+    return tokens.length === 3 &&
+      tokens[0]?.type === TokenType.Identifier &&
+      tokens[1]?.lexeme === '.' &&
+      tokens[2]?.type === TokenType.Identifier
+  }
+
+  emitFieldLoad(tokens) {
+    const base = this.resolve(tokens[0].lexeme)
+    const fieldName = tokens.length === 2 ? tokens[1].lexeme : tokens[2].lexeme
+    const field = this.typeSystem.getField(base.type, fieldName)
+    const index = this.typeSystem.getStruct(base.type).fields.indexOf(field)
+    const fieldPointer = this.nextTemp()
+    const value = this.nextTemp()
+
+    this.lines.push(`  ${fieldPointer} = getelementptr inbounds ${this.llvmType(base.type)}, ptr ${base.pointer}, i32 0, i32 ${index}`)
+    this.lines.push(`  ${value} = load ${this.llvmType(field.type)}, ptr ${fieldPointer}`)
+
+    return {
+      type: field.type,
+      value
+    }
+  }
+
+  emitArrayLoad(tokens) {
+    const base = this.resolve(tokens[0].lexeme)
+    const closeIndex = this.findMatching(tokens, 1, '[', ']')
+    const indexTokens = tokens.slice(2, closeIndex)
+    const index = this.emitRpn(this.toRpn(indexTokens), tokens[0].location)
+    const elementType = this.typeSystem.elementType(base.type)
+    const elementPointer = this.nextTemp()
+
+    this.lines.push(`  ${elementPointer} = getelementptr inbounds ${this.typeSystem.llvmArray(base.type, base.length)}, ptr ${base.pointer}, i32 0, i32 ${this.cast(index, LumenTypes.I32)}`)
+
+    if (tokens[closeIndex + 1]?.lexeme === '.') {
+      const fieldName = tokens[closeIndex + 2].lexeme
+      const field = this.typeSystem.getField(elementType, fieldName)
+      const fieldIndex = this.typeSystem.getStruct(elementType).fields.indexOf(field)
+      const fieldPointer = this.nextTemp()
+      const value = this.nextTemp()
+
+      this.lines.push(`  ${fieldPointer} = getelementptr inbounds ${this.llvmType(elementType)}, ptr ${elementPointer}, i32 0, i32 ${fieldIndex}`)
+      this.lines.push(`  ${value} = load ${this.llvmType(field.type)}, ptr ${fieldPointer}`)
+
+      return {
+        type: field.type,
+        value
+      }
+    }
+
+    const value = this.nextTemp()
+    this.lines.push(`  ${value} = load ${this.llvmType(elementType)}, ptr ${elementPointer}`)
+
+    return {
+      type: elementType,
+      value
+    }
+  }
+
+  normalizeFieldAccessTokens(tokens) {
+    const normalized = []
+
+    for (let index = 0; index < tokens.length; index += 1) {
+      if (tokens[index]?.type === TokenType.Identifier &&
+        tokens[index + 1]?.lexeme === '.' &&
+        tokens[index + 2]?.type === TokenType.Identifier) {
+        normalized.push({
+          type: TokenType.Identifier,
+          lexeme: `${tokens[index].lexeme}.${tokens[index + 2].lexeme}`,
+          literal: null,
+          location: tokens[index].location,
+          fieldAccess: [tokens[index], tokens[index + 2]]
+        })
+        index += 2
+        continue
+      }
+
+      normalized.push(tokens[index])
+    }
+
+    return normalized
+  }
+
+  normalizeAccessTokens(tokens) {
+    const normalized = []
+
+    for (let index = 0; index < tokens.length; index += 1) {
+      if (tokens[index]?.type === TokenType.Identifier && tokens[index + 1]?.lexeme === '[') {
+        const closeIndex = this.findMatching(tokens, index + 1, '[', ']')
+        let endIndex = closeIndex
+
+        if (tokens[closeIndex + 1]?.lexeme === '.' && tokens[closeIndex + 2]?.type === TokenType.Identifier) {
+          endIndex = closeIndex + 2
+        }
+
+        const accessTokens = tokens.slice(index, endIndex + 1)
+        normalized.push({
+          type: TokenType.Identifier,
+          lexeme: accessTokens.map(token => token.lexeme).join(''),
+          literal: null,
+          location: tokens[index].location,
+          arrayAccess: accessTokens
+        })
+        index = endIndex
+        continue
+      }
+
+      if (tokens[index]?.type === TokenType.Identifier &&
+        tokens[index + 1]?.lexeme === '.' &&
+        tokens[index + 2]?.type === TokenType.Identifier) {
+        normalized.push({
+          type: TokenType.Identifier,
+          lexeme: `${tokens[index].lexeme}.${tokens[index + 2].lexeme}`,
+          literal: null,
+          location: tokens[index].location,
+          fieldAccess: [tokens[index], tokens[index + 2]]
+        })
+        index += 2
+        continue
+      }
+
+      normalized.push(tokens[index])
+    }
+
+    return normalized
+  }
+
+  structLiteralFields(tokens) {
+    const fields = new Map()
+    let index = 2
+
+    while (index < tokens.length - 1) {
+      const name = tokens[index]?.lexeme
+      index += 2
+      const value = []
+      let depth = 0
+
+      while (index < tokens.length - 1) {
+        const token = tokens[index]
+        if (depth === 0 && token.lexeme === ',') break
+        if (token.lexeme === '(' || token.lexeme === '{') depth += 1
+        if (token.lexeme === ')' || token.lexeme === '}') depth -= 1
+        value.push(token)
+        index += 1
+      }
+
+      fields.set(name, value)
+      if (tokens[index]?.lexeme === ',') index += 1
+    }
+
+    return fields
+  }
+
+  splitDelimited(tokens) {
+    const parts = []
+    let current = []
+    let depth = 0
+
+    for (const token of tokens) {
+      if (depth === 0 && token.lexeme === ',') {
+        parts.push(current)
+        current = []
+        continue
+      }
+
+      if (['(', '[', '{'].includes(token.lexeme)) depth += 1
+      if ([')', ']', '}'].includes(token.lexeme)) depth -= 1
+      current.push(token)
+    }
+
+    if (current.length > 0) parts.push(current)
+    return parts
+  }
+
+  findMatching(tokens, start, open, close) {
+    let depth = 0
+
+    for (let index = start; index < tokens.length; index += 1) {
+      if (tokens[index].lexeme === open) depth += 1
+      if (tokens[index].lexeme === close) {
+        depth -= 1
+        if (depth === 0) return index
+      }
+    }
+
+    return -1
   }
 
   callArguments(tokens) {
@@ -492,13 +764,17 @@ export class LLVMEmitter {
     return `\\${byte.toString(16).padStart(2, '0').toUpperCase()}`
   }
 
-  alloca(name, type) {
+  alloca(name, type, { length = null } = {}) {
     const pointer = `%${name}.addr.${this.temp}`
     this.temp += 1
-    this.lines.push(`  ${pointer} = alloca ${this.llvmType(type)}`)
+    const storageType = this.typeSystem.isArray(type)
+      ? this.typeSystem.llvmArray(type, length)
+      : this.llvmType(type)
+    this.lines.push(`  ${pointer} = alloca ${storageType}`)
     this.define(name, {
       pointer,
-      type
+      type,
+      length
     })
     return pointer
   }

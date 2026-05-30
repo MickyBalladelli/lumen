@@ -9,6 +9,8 @@ import {
   ProgramNode,
   RawExpressionNode,
   ReturnStatementNode,
+  StructDeclarationNode,
+  StructFieldNode,
   TypeAnnotationNode,
   VariableDeclarationNode,
   VariableDeclaratorNode
@@ -40,9 +42,32 @@ export class Parser {
   declaration() {
     // This is the main extension point for future syntax families:
     // imports, structs, traits, modules, extern blocks, etc.
+    if (this.matchKeyword('struct')) return this.structDeclaration()
     if (this.matchKeyword('function')) return this.functionDeclaration()
     if (this.checkKeyword('let') || this.checkKeyword('const')) return this.variableDeclaration()
     return this.statement()
+  }
+
+  structDeclaration() {
+    const keyword = this.previous()
+    const name = this.identifier()
+    const fields = []
+
+    this.consumePunctuation('{', 'Expected "{" after struct name')
+
+    while (!this.isAtEnd() && !this.checkPunctuation('}')) {
+      this.skipTerminators()
+      if (this.checkPunctuation('}')) break
+
+      const field = this.identifier()
+      this.consumeOperator(':', 'Expected ":" after struct field name')
+      fields.push(new StructFieldNode(field.name, this.typeAnnotation(), field.location))
+      this.consumeOptionalFieldTerminator()
+    }
+
+    this.consumePunctuation('}', 'Expected "}" after struct fields')
+    this.consumeOptionalTopLevelTerminator()
+    return new StructDeclarationNode(name, fields, keyword.location)
   }
 
   functionDeclaration() {
@@ -178,8 +203,8 @@ export class Parser {
 
       if (depth === 0 && this.isDelimiter(token, delimiters)) break
 
-      if (token.is(TokenType.Punctuation, '(') || token.is(TokenType.Punctuation, '[')) depth += 1
-      if (token.is(TokenType.Punctuation, ')') || token.is(TokenType.Punctuation, ']')) depth -= 1
+      if (token.is(TokenType.Punctuation, '(') || token.is(TokenType.Punctuation, '[') || token.is(TokenType.Punctuation, '{')) depth += 1
+      if (token.is(TokenType.Punctuation, ')') || token.is(TokenType.Punctuation, ']') || token.is(TokenType.Punctuation, '}')) depth -= 1
 
       tokens.push(this.advance())
     }
@@ -194,7 +219,14 @@ export class Parser {
 
   typeAnnotation() {
     const token = this.consume(TokenType.Identifier, 'Expected type name')
-    return new TypeAnnotationNode(token.lexeme, token.location)
+    let name = token.lexeme
+
+    if (this.matchPunctuation('[')) {
+      this.consumePunctuation(']', 'Expected "]" after array type')
+      name = `${name}[]`
+    }
+
+    return new TypeAnnotationNode(name, token.location)
   }
 
   consumeOptionalTerminator() {
@@ -216,9 +248,24 @@ export class Parser {
     return this.consume(TokenType.Semicolon, message)
   }
 
+  consumeOperator(lexeme, message) {
+    if (this.check(TokenType.Operator, lexeme)) return this.advance()
+    throw this.error(this.peek(), message)
+  }
+
   consumePunctuation(lexeme, message) {
     if (this.checkPunctuation(lexeme)) return this.advance()
     throw this.error(this.peek(), message)
+  }
+
+  consumeOptionalFieldTerminator() {
+    if (this.match(TokenType.Semicolon)) return
+    if (this.matchPunctuation(',')) return
+    if (this.checkPunctuation('}')) return
+  }
+
+  consumeOptionalTopLevelTerminator() {
+    if (this.match(TokenType.Semicolon)) this.skipTerminators()
   }
 
   consume(type, message) {

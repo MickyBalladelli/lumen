@@ -1,6 +1,7 @@
 export class IRModule {
-  constructor(functions = []) {
+  constructor(functions = [], structs = []) {
     this.functions = functions
+    this.structs = structs
   }
 }
 

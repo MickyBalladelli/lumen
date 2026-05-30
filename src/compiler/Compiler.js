@@ -5,6 +5,7 @@ import { Tokenizer } from '../lexer/Tokenizer.js'
 import { Parser } from '../parser/Parser.js'
 import { SemanticAnalyzer } from '../semantics/SemanticAnalyzer.js'
 import { TypeChecker } from '../semantics/TypeChecker.js'
+import { TypeSystem } from '../semantics/TypeSystem.js'
 import { IRBuilder } from '../ir/IRBuilder.js'
 import { LLVMEmitter } from '../backend/LLVMEmitter.js'
 
@@ -13,9 +14,10 @@ export class Compiler {
     tokenizer = Tokenizer,
     parser = Parser,
     semanticAnalyzer = new SemanticAnalyzer(),
-    typeChecker = new TypeChecker(),
+    typeSystem = new TypeSystem(),
+    typeChecker = new TypeChecker({ typeSystem }),
     irBuilder = new IRBuilder(),
-    backend = new LLVMEmitter()
+    backend = new LLVMEmitter({ typeSystem })
   } = {}) {
     this.tokenizer = tokenizer
     this.parser = parser
