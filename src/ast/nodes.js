@@ -107,6 +107,22 @@ export class ReturnStatementNode extends AstNode {
   }
 }
 
+export class ThrowStatementNode extends AstNode {
+  constructor(argument, location = null) {
+    super('ThrowStatement', location)
+    this.argument = argument
+  }
+}
+
+export class TryCatchStatementNode extends AstNode {
+  constructor(tryBlock, catchParam, catchBlock, location = null) {
+    super('TryCatchStatement', location)
+    this.tryBlock = tryBlock
+    this.catchParam = catchParam
+    this.catchBlock = catchBlock
+  }
+}
+
 export class ExpressionStatementNode extends AstNode {
   constructor(expression, location = null) {
     super('ExpressionStatement', location)

@@ -11,6 +11,8 @@ import {
   ReturnStatementNode,
   StructDeclarationNode,
   StructFieldNode,
+  ThrowStatementNode,
+  TryCatchStatementNode,
   TypeAnnotationNode,
   VariableDeclarationNode,
   VariableDeclaratorNode
@@ -55,6 +57,8 @@ export class AstNodeRegistry {
       .register('ForOfStatement', ForOfStatementNode)
       .register('ForStatement', ForStatementNode)
       .register('ReturnStatement', ReturnStatementNode)
+      .register('ThrowStatement', ThrowStatementNode)
+      .register('TryCatchStatement', TryCatchStatementNode)
       .register('ExpressionStatement', ExpressionStatementNode)
       .register('RawExpression', RawExpressionNode)
   }

@@ -12,6 +12,8 @@ import {
   ReturnStatementNode,
   StructDeclarationNode,
   StructFieldNode,
+  ThrowStatementNode,
+  TryCatchStatementNode,
   TypeAnnotationNode,
   VariableDeclarationNode,
   VariableDeclaratorNode
@@ -129,9 +131,30 @@ export class Parser {
     // Statements stay separate from declarations so block grammar can evolve
     // without turning the parser into one giant switch.
     if (this.matchKeyword('for')) return this.forStatement()
+    if (this.matchKeyword('try')) return this.tryCatchStatement()
+    if (this.matchKeyword('throw')) return this.throwStatement()
     if (this.matchKeyword('return')) return this.returnStatement()
     if (this.checkPunctuation('{')) return this.blockStatement()
     return this.expressionStatement()
+  }
+
+  tryCatchStatement() {
+    const keyword = this.previous()
+    const tryBlock = this.blockStatement()
+
+    this.consumeKeyword('catch', 'Expected catch after try block')
+    const catchParam = this.identifier()
+    const catchBlock = this.blockStatement()
+
+    return new TryCatchStatementNode(tryBlock, catchParam, catchBlock, keyword.location)
+  }
+
+  throwStatement() {
+    const keyword = this.previous()
+    const argument = this.rawExpressionUntil([';'])
+
+    this.consumeOptionalTerminator()
+    return new ThrowStatementNode(argument, keyword.location)
   }
 
   forStatement() {

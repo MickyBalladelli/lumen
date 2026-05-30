@@ -198,6 +198,21 @@ for (let value of filter(values, value => value > 2)) {
 
 Current filter lowering is a view over the source array inside `for-of`.
 
+### Error Handling
+
+`try/catch` catches Lumen `throw` values.
+
+```lumen
+try {
+  throw "boom"
+} catch error {
+  println(error)
+}
+```
+
+Current throw values must be strings. This is branch-based Lumen control flow,
+not native exception unwinding.
+
 ## Run parser
 
 ```bash
@@ -273,6 +288,7 @@ console.log(ast)
 - `examples/println.lm`: native print through `printf`
 - `examples/struct.lm`: object type with fields
 - `examples/system.lm`: `println`, `len`, and `filter`
+- `examples/try-catch.lm`: Lumen `try/catch` and `throw`
 - `examples/use-api.js`: tokenizer and parser from JavaScript
 
 Run the API example:

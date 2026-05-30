@@ -48,6 +48,7 @@ export class SemanticAnalyzer {
     if (node.kind === 'VariableDeclaration') return this.visitVariableDeclaration(node, scope)
     if (node.kind === 'ForStatement') return this.visitFor(node, scope)
     if (node.kind === 'ForOfStatement') return this.visitForOf(node, scope)
+    if (node.kind === 'TryCatchStatement') return this.visitTryCatch(node, scope)
   }
 
   visitFunction(node, scope) {
@@ -103,5 +104,18 @@ export class SemanticAnalyzer {
     })
 
     this.visit(node.body, loopScope)
+  }
+
+  visitTryCatch(node, scope) {
+    this.visit(node.tryBlock, scope)
+
+    const catchScope = new Scope(scope)
+    catchScope.define(node.catchParam.name, {
+      kind: 'variable',
+      node: node.catchParam,
+      mutable: false
+    })
+
+    this.visit(node.catchBlock, catchScope)
   }
 }

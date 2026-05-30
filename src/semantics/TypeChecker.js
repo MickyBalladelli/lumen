@@ -55,6 +55,8 @@ export class TypeChecker {
     if (node.kind === 'VariableDeclaration') return this.checkVariableDeclaration(node, scope)
     if (node.kind === 'ForStatement') return this.checkFor(node, scope, currentFunction)
     if (node.kind === 'ForOfStatement') return this.checkForOf(node, scope, currentFunction)
+    if (node.kind === 'TryCatchStatement') return this.checkTryCatch(node, scope, currentFunction)
+    if (node.kind === 'ThrowStatement') return this.checkThrow(node, scope)
     if (node.kind === 'ReturnStatement') return this.checkReturn(node, scope, currentFunction)
     if (node.kind === 'ExpressionStatement') return this.checkExpression(node.expression, scope)
 
@@ -172,6 +174,32 @@ export class TypeChecker {
     }
 
     return actual
+  }
+
+  checkThrow(node, scope) {
+    const actual = this.checkExpression(node.argument, scope)
+
+    if (actual !== LumenTypes.String) {
+      throw new Diagnostic(`Throw expects string, got ${actual}`, node.location, 'type')
+    }
+
+    return LumenTypes.Void
+  }
+
+  checkTryCatch(node, parentScope, currentFunction) {
+    this.checkNode(node.tryBlock, parentScope, currentFunction)
+
+    const catchScope = new Scope(parentScope)
+    node.catchParam.inferredType = LumenTypes.String
+    catchScope.define(node.catchParam.name, {
+      kind: 'variable',
+      node: node.catchParam,
+      type: LumenTypes.String,
+      mutable: false
+    })
+
+    this.checkNode(node.catchBlock, catchScope, currentFunction)
+    return LumenTypes.Void
   }
 
   checkExpression(expression, scope) {

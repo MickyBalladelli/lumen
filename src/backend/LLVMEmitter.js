@@ -52,6 +52,7 @@ export class LLVMEmitter {
     this.label = 0
     this.lines = []
     this.scopes = [new Map()]
+    this.tryStack = []
     this.returnType = func.returnType
 
     const params = func.params
@@ -80,6 +81,8 @@ export class LLVMEmitter {
     if (node.kind === 'VariableDeclaration') return this.emitVariableDeclaration(node)
     if (node.kind === 'ExpressionStatement') return this.emitExpression(node.expression)
     if (node.kind === 'ReturnStatement') return this.emitReturn(node)
+    if (node.kind === 'ThrowStatement') return this.emitThrow(node)
+    if (node.kind === 'TryCatchStatement') return this.emitTryCatch(node)
     if (node.kind === 'BlockStatement') return this.emitBlock(node)
     if (node.kind === 'ForOfStatement') return this.emitForOf(node)
     if (node.kind === 'ForStatement') return this.emitFor(node)
@@ -89,8 +92,63 @@ export class LLVMEmitter {
 
   emitBlock(node) {
     this.pushScope()
-    for (const statement of node.body) this.emitStatement(statement)
+    for (const statement of node.body) {
+      if (this.hasTerminator()) break
+      this.emitStatement(statement)
+    }
     this.popScope()
+  }
+
+  emitTryCatch(node) {
+    const catchLabel = this.nextLabel('catch')
+    const endLabel = this.nextLabel('try.end')
+    const errorPointer = this.alloca(`.${node.catchParam.name}.error`, LumenTypes.String)
+
+    this.tryStack.push({
+      catchLabel,
+      errorPointer
+    })
+
+    this.emitStatement(node.tryBlock)
+
+    if (!this.hasTerminator()) {
+      this.lines.push(`  br label %${endLabel}`)
+    }
+
+    this.tryStack.pop()
+    this.lines.push(`${catchLabel}:`)
+
+    this.pushScope()
+    this.define(node.catchParam.name, {
+      pointer: errorPointer,
+      type: LumenTypes.String,
+      length: null
+    })
+    this.emitStatement(node.catchBlock)
+    this.popScope()
+
+    if (!this.hasTerminator()) {
+      this.lines.push(`  br label %${endLabel}`)
+    }
+
+    this.lines.push(`${endLabel}:`)
+  }
+
+  emitThrow(node) {
+    const active = this.tryStack.at(-1)
+
+    if (!active) {
+      throw new Diagnostic('throw needs active try/catch', node.location, 'backend')
+    }
+
+    const value = this.emitExpression(node.argument)
+
+    if (value.type !== LumenTypes.String) {
+      throw new Diagnostic('throw expects string', node.location, 'backend')
+    }
+
+    this.lines.push(`  store ptr ${value.value}, ptr ${active.errorPointer}`)
+    this.lines.push(`  br label %${active.catchLabel}`)
   }
 
   emitVariableDeclaration(node) {

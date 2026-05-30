@@ -1,0 +1,15 @@
+function main(): i32 {
+  let recovered: i32 = 0
+
+  try {
+    throw "boom"
+    recovered = 99
+  } catch error {
+    println(error)
+    recovered = 7
+  }
+
+  println(recovered)
+
+  return recovered
+}
