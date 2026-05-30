@@ -26,6 +26,7 @@ export class LLVMEmitter {
     this.globals = []
     this.stringId = 0
     this.usesPrintf = false
+    this.usesStrstr = false
     const typeDefinitions = irModule.structs.map(struct => this.emitStructType(struct))
     const functions = irModule.functions.flatMap(func => this.emitFunction(func))
 
@@ -34,6 +35,7 @@ export class LLVMEmitter {
       ...typeDefinitions,
       ...this.globals,
       this.usesPrintf ? 'declare i32 @printf(ptr, ...)' : '',
+      this.usesStrstr ? 'declare ptr @strstr(ptr, ptr)' : '',
       '',
       ...functions,
       ''
@@ -273,6 +275,7 @@ export class LLVMEmitter {
 
     if (this.isCall(expression.tokens, SystemFunctions.Println)) return this.emitPrintln(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.Len)) return this.emitLen(expression.tokens)
+    if (this.isCall(expression.tokens, SystemFunctions.Includes)) return this.emitIncludes(expression.tokens)
     if (this.isFieldAccess(expression.tokens)) return this.emitFieldLoad(expression.tokens)
     if (this.isArrayAccess(expression.tokens)) return this.emitArrayLoad(expression.tokens)
 
@@ -412,6 +415,120 @@ export class LLVMEmitter {
     }
   }
 
+  emitIncludes(tokens) {
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 2) {
+      throw new Diagnostic('includes expects two arguments', tokens[0].location, 'backend')
+    }
+
+    const haystack = this.emitExpression({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+
+    if (haystack.type === LumenTypes.String) {
+      return this.emitStringIncludes(haystack, args[1], tokens[0].location)
+    }
+
+    const name = this.singleIdentifierName({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+
+    return this.emitArrayIncludes(name, args[1], tokens[0].location)
+  }
+
+  emitStringIncludes(haystack, needleTokens, location) {
+    this.usesStrstr = true
+    const needle = this.emitExpression({
+      tokens: needleTokens,
+      location
+    })
+
+    if (needle.type !== LumenTypes.String) {
+      throw new Diagnostic('string includes needs string needle', location, 'backend')
+    }
+
+    const found = this.nextTemp()
+    const result = this.nextTemp()
+    this.lines.push(`  ${found} = call ptr @strstr(ptr ${haystack.value}, ptr ${needle.value})`)
+    this.lines.push(`  ${result} = icmp ne ptr ${found}, null`)
+
+    return {
+      type: LumenTypes.Bool,
+      value: result
+    }
+  }
+
+  emitArrayIncludes(name, needleTokens, location) {
+    const array = this.resolve(name)
+
+    if (!this.typeSystem.isArray(array.type) || array.length === null) {
+      throw new Diagnostic('array includes needs fixed array', location, 'backend')
+    }
+
+    const elementType = this.typeSystem.elementType(array.type)
+    if (!this.typeSystem.isNumeric(elementType) && elementType !== LumenTypes.Bool) {
+      throw new Diagnostic('array includes supports numeric and bool elements', location, 'backend')
+    }
+
+    const needle = this.emitExpression({
+      tokens: needleTokens,
+      location
+    })
+    const resultPointer = this.alloca('.includes.result', LumenTypes.Bool)
+    const indexPointer = this.alloca('.includes.index', LumenTypes.I32)
+    const conditionLabel = this.nextLabel('includes.cond')
+    const bodyLabel = this.nextLabel('includes.body')
+    const foundLabel = this.nextLabel('includes.found')
+    const updateLabel = this.nextLabel('includes.update')
+    const endLabel = this.nextLabel('includes.end')
+
+    this.lines.push(`  store i1 0, ptr ${resultPointer}`)
+    this.lines.push(`  store i32 0, ptr ${indexPointer}`)
+    this.lines.push(`  br label %${conditionLabel}`)
+    this.lines.push(`${conditionLabel}:`)
+
+    const currentIndex = this.nextTemp()
+    const inBounds = this.nextTemp()
+    this.lines.push(`  ${currentIndex} = load i32, ptr ${indexPointer}`)
+    this.lines.push(`  ${inBounds} = icmp slt i32 ${currentIndex}, ${array.length}`)
+    this.lines.push(`  br i1 ${inBounds}, label %${bodyLabel}, label %${endLabel}`)
+    this.lines.push(`${bodyLabel}:`)
+
+    const elementPointer = this.nextTemp()
+    const elementValue = this.nextTemp()
+    this.lines.push(`  ${elementPointer} = getelementptr inbounds ${this.typeSystem.llvmArray(array.type, array.length)}, ptr ${array.pointer}, i32 0, i32 ${currentIndex}`)
+    this.lines.push(`  ${elementValue} = load ${this.llvmType(elementType)}, ptr ${elementPointer}`)
+
+    const comparison = this.emitEqualityComparison({
+      type: elementType,
+      value: elementValue
+    }, needle)
+    this.lines.push(`  br i1 ${comparison.value}, label %${foundLabel}, label %${updateLabel}`)
+    this.lines.push(`${foundLabel}:`)
+    this.lines.push(`  store i1 1, ptr ${resultPointer}`)
+    this.lines.push(`  br label %${endLabel}`)
+    this.lines.push(`${updateLabel}:`)
+
+    const updateIndex = this.nextTemp()
+    const nextIndex = this.nextTemp()
+    this.lines.push(`  ${updateIndex} = load i32, ptr ${indexPointer}`)
+    this.lines.push(`  ${nextIndex} = add i32 ${updateIndex}, 1`)
+    this.lines.push(`  store i32 ${nextIndex}, ptr ${indexPointer}`)
+    this.lines.push(`  br label %${conditionLabel}`)
+    this.lines.push(`${endLabel}:`)
+
+    const result = this.nextTemp()
+    this.lines.push(`  ${result} = load i1, ptr ${resultPointer}`)
+
+    return {
+      type: LumenTypes.Bool,
+      value: result
+    }
+  }
+
   emitRpn(rpn, location) {
     const stack = []
 
@@ -514,6 +631,22 @@ export class LLVMEmitter {
 
     const instruction = type === LumenTypes.F32 ? 'fcmp' : 'icmp'
     this.lines.push(`  ${temp} = ${instruction} ${predicate} ${this.llvmType(type)} ${this.cast(left, type)}, ${this.cast(right, type)}`)
+    return {
+      type: LumenTypes.Bool,
+      value: temp
+    }
+  }
+
+  emitEqualityComparison(left, right) {
+    const type = this.typeSystem.widest(left.type, right.type)
+    const temp = this.nextTemp()
+
+    if (type === LumenTypes.F32) {
+      this.lines.push(`  ${temp} = fcmp oeq float ${this.cast(left, type)}, ${this.cast(right, type)}`)
+    } else {
+      this.lines.push(`  ${temp} = icmp eq ${this.llvmType(type)} ${this.cast(left, type)}, ${this.cast(right, type)}`)
+    }
+
     return {
       type: LumenTypes.Bool,
       value: temp

@@ -1,8 +1,13 @@
 function main(): i32 {
   let values: i32[] = [1, 2, 3, 4, 5]
+  let text = "lumen language"
   let total: i32 = 0
 
   println(len(values))
+  println(includes(values, 4))
+  println(includes(values, 9))
+  println(includes(text, "lumen"))
+  println(includes(text, "rust"))
 
   for (let value of filter(values, value => value > 2)) {
     println(value)

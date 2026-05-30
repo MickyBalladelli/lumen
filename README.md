@@ -180,6 +180,14 @@ It lowers to native `printf` in the LLVM backend.
 println(len(values))
 ```
 
+`includes(...)` checks whether a string contains another string, or whether an
+array contains a value.
+
+```lumen
+println(includes("lumen language", "lumen"))
+println(includes(values, 4))
+```
+
 `filter(...)` can be used in a for-of loop with a JS-like arrow predicate.
 
 ```lumen

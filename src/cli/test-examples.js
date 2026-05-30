@@ -45,7 +45,7 @@ const expectations = new Map([
     code: 11
   }],
   ['system', {
-    stdout: '5\n3\n4\n5\n12\n',
+    stdout: '5\n1\n0\n1\n0\n3\n4\n5\n12\n',
     code: 12
   }]
 ])

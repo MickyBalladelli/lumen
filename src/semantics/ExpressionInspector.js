@@ -15,6 +15,7 @@ export class ExpressionInspector {
     if (this.isCall(rawExpression, SystemFunctions.Println)) return LumenTypes.Void
     if (this.isCall(rawExpression, SystemFunctions.Len)) return LumenTypes.I32
     if (this.isCall(rawExpression, SystemFunctions.Filter)) return this.filterType(rawExpression.tokens)
+    if (this.isCall(rawExpression, SystemFunctions.Includes)) return this.includesType(rawExpression.tokens)
     if (this.isStructLiteral(rawExpression.tokens)) return rawExpression.tokens[0].lexeme
     if (this.isFieldAccess(rawExpression.tokens)) return this.fieldAccessType(rawExpression.tokens)
     if (this.isArrayLiteral(rawExpression.tokens)) return this.arrayLiteralType(rawExpression.tokens)
@@ -218,6 +219,23 @@ export class ExpressionInspector {
     return this.infer({
       tokens: args[0]
     })
+  }
+
+  includesType(tokens) {
+    const args = this.callArguments(tokens)
+    if (args.length !== 2) {
+      throw new Diagnostic('includes expects collection and value', tokens[0].location, 'semantic')
+    }
+
+    const haystackType = this.infer({
+      tokens: args[0]
+    })
+
+    if (haystackType !== LumenTypes.String && !this.typeSystem.isArray(haystackType)) {
+      throw new Diagnostic('includes needs string or array', tokens[0].location, 'semantic')
+    }
+
+    return LumenTypes.Bool
   }
 
   splitDelimited(tokens) {
