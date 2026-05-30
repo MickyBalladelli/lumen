@@ -198,6 +198,18 @@ for (let value of filter(values, value => value > 2)) {
 
 Current filter lowering is a view over the source array inside `for-of`.
 
+### File System
+
+The `fs` library starts with `readFile(path)`.
+
+```lumen
+let content = readFile("examples/data.txt")
+println(content)
+```
+
+`readFile(...)` returns a string. Missing files currently return an empty
+string.
+
 ### Error Handling
 
 `try/catch` catches Lumen `throw` values.
@@ -282,6 +294,7 @@ console.log(ast)
 - `examples/array.lm`: arrays of numbers and structs
 - `examples/for-loop.lm`: classic for loop semicolon rule
 - `examples/for-of.lm`: for-of loop over arrays
+- `examples/fs.lm`: read file content with `readFile`
 - `examples/newline-continuation.lm`: newline after incomplete expression
 - `examples/native-main.lm`: compiles to LLVM IR and native code
 - `examples/numbers.lm`: `i64` and `f32` numbers

@@ -6,6 +6,7 @@ import { Compiler } from '../compiler/Compiler.js'
 const examplesDir = 'examples'
 const outputDir = 'build'
 const compiler = new Compiler()
+const dataText = await readFile(join(examplesDir, 'data.txt'), 'utf8')
 
 const expectations = new Map([
   ['array', {
@@ -23,6 +24,10 @@ const expectations = new Map([
   ['for-of', {
     stdout: '26\n',
     code: 26
+  }],
+  ['fs', {
+    stdout: `${dataText}\n1\n`,
+    code: 0
   }],
   ['native-main', {
     stdout: '10\n',

@@ -1,0 +1,8 @@
+function main(): i32 {
+  let content = readFile("examples/data.txt")
+
+  println(content)
+  println(includes(content, "file"))
+
+  return 0
+}

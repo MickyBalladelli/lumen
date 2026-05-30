@@ -2,12 +2,14 @@ import { TokenType } from '../lexer/TokenType.js'
 import { Diagnostic } from '../diagnostics/Diagnostic.js'
 import { LumenTypes } from './TypeSystem.js'
 import { SystemFunctions, SystemLibrary } from '../system/SystemLibrary.js'
+import { FsFunctions, FsLibrary } from '../fs/FsLibrary.js'
 
 export class ExpressionInspector {
-  constructor(scope, typeSystem, systemLibrary = new SystemLibrary()) {
+  constructor(scope, typeSystem, systemLibrary = new SystemLibrary(), fsLibrary = new FsLibrary()) {
     this.scope = scope
     this.typeSystem = typeSystem
     this.systemLibrary = systemLibrary
+    this.fsLibrary = fsLibrary
   }
 
   infer(rawExpression) {
@@ -16,6 +18,7 @@ export class ExpressionInspector {
     if (this.isCall(rawExpression, SystemFunctions.Len)) return LumenTypes.I32
     if (this.isCall(rawExpression, SystemFunctions.Filter)) return this.filterType(rawExpression.tokens)
     if (this.isCall(rawExpression, SystemFunctions.Includes)) return this.includesType(rawExpression.tokens)
+    if (this.isCall(rawExpression, FsFunctions.ReadFile)) return LumenTypes.String
     if (this.isStructLiteral(rawExpression.tokens)) return rawExpression.tokens[0].lexeme
     if (this.isFieldAccess(rawExpression.tokens)) return this.fieldAccessType(rawExpression.tokens)
     if (this.isArrayLiteral(rawExpression.tokens)) return this.arrayLiteralType(rawExpression.tokens)
@@ -60,6 +63,7 @@ export class ExpressionInspector {
     for (const token of rawExpression.tokens) {
       if (token.type !== TokenType.Identifier) continue
       if (this.isBuiltinCallName(rawExpression.tokens, token)) continue
+      if (this.isFsCallName(rawExpression.tokens, token)) continue
       if (this.isFilterParameter(rawExpression.tokens, token)) continue
       if (this.isStructLiteralName(rawExpression.tokens, token)) continue
       if (this.isKnownStructName(rawExpression.tokens, token)) continue
@@ -197,6 +201,11 @@ export class ExpressionInspector {
   isBuiltinCallName(tokens, token) {
     const index = tokens.indexOf(token)
     return this.systemLibrary.has(token.lexeme) && tokens[index + 1]?.lexeme === '('
+  }
+
+  isFsCallName(tokens, token) {
+    const index = tokens.indexOf(token)
+    return this.fsLibrary.has(token.lexeme) && tokens[index + 1]?.lexeme === '('
   }
 
   isFilterParameter(tokens, token) {

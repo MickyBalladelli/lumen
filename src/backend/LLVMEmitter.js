@@ -2,6 +2,7 @@ import { TokenType } from '../lexer/TokenType.js'
 import { Diagnostic } from '../diagnostics/Diagnostic.js'
 import { LumenTypes, TypeSystem } from '../semantics/TypeSystem.js'
 import { SystemFunctions } from '../system/SystemLibrary.js'
+import { FsFunctions } from '../fs/FsLibrary.js'
 
 const BINARY_PRECEDENCE = new Map([
   ['*', 40],
@@ -27,6 +28,7 @@ export class LLVMEmitter {
     this.stringId = 0
     this.usesPrintf = false
     this.usesStrstr = false
+    this.usesFileIO = false
     const typeDefinitions = irModule.structs.map(struct => this.emitStructType(struct))
     const functions = irModule.functions.flatMap(func => this.emitFunction(func))
 
@@ -36,6 +38,12 @@ export class LLVMEmitter {
       ...this.globals,
       this.usesPrintf ? 'declare i32 @printf(ptr, ...)' : '',
       this.usesStrstr ? 'declare ptr @strstr(ptr, ptr)' : '',
+      this.usesFileIO ? 'declare ptr @fopen(ptr, ptr)' : '',
+      this.usesFileIO ? 'declare i32 @fseek(ptr, i64, i32)' : '',
+      this.usesFileIO ? 'declare i64 @ftell(ptr)' : '',
+      this.usesFileIO ? 'declare i64 @fread(ptr, i64, i64, ptr)' : '',
+      this.usesFileIO ? 'declare ptr @malloc(i64)' : '',
+      this.usesFileIO ? 'declare i32 @fclose(ptr)' : '',
       '',
       ...functions,
       ''
@@ -334,6 +342,7 @@ export class LLVMEmitter {
     if (this.isCall(expression.tokens, SystemFunctions.Println)) return this.emitPrintln(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.Len)) return this.emitLen(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.Includes)) return this.emitIncludes(expression.tokens)
+    if (this.isCall(expression.tokens, FsFunctions.ReadFile)) return this.emitReadFile(expression.tokens)
     if (this.isFieldAccess(expression.tokens)) return this.emitFieldLoad(expression.tokens)
     if (this.isArrayAccess(expression.tokens)) return this.emitArrayLoad(expression.tokens)
 
@@ -495,6 +504,68 @@ export class LLVMEmitter {
     })
 
     return this.emitArrayIncludes(name, args[1], tokens[0].location)
+  }
+
+  emitReadFile(tokens) {
+    this.usesFileIO = true
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 1) {
+      throw new Diagnostic('readFile expects one path', tokens[0].location, 'backend')
+    }
+
+    const path = this.emitExpression({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+
+    if (path.type !== LumenTypes.String) {
+      throw new Diagnostic('readFile path must be string', tokens[0].location, 'backend')
+    }
+
+    const resultPointer = this.alloca('.readFile.result', LumenTypes.String)
+    const mode = this.globalCString('rb')
+    const empty = this.globalCString('')
+    const file = this.nextTemp()
+    const isMissing = this.nextTemp()
+    const missingLabel = this.nextLabel('read.missing')
+    const openLabel = this.nextLabel('read.open')
+    const endLabel = this.nextLabel('read.end')
+
+    this.lines.push(`  ${file} = call ptr @fopen(ptr ${path.value}, ptr ${mode.pointer})`)
+    this.lines.push(`  ${isMissing} = icmp eq ptr ${file}, null`)
+    this.lines.push(`  br i1 ${isMissing}, label %${missingLabel}, label %${openLabel}`)
+
+    this.lines.push(`${missingLabel}:`)
+    this.lines.push(`  store ptr ${empty.pointer}, ptr ${resultPointer}`)
+    this.lines.push(`  br label %${endLabel}`)
+
+    this.lines.push(`${openLabel}:`)
+    this.lines.push(`  call i32 @fseek(ptr ${file}, i64 0, i32 2)`)
+    const size = this.nextTemp()
+    this.lines.push(`  ${size} = call i64 @ftell(ptr ${file})`)
+    this.lines.push(`  call i32 @fseek(ptr ${file}, i64 0, i32 0)`)
+    const bufferSize = this.nextTemp()
+    const buffer = this.nextTemp()
+    const bytesRead = this.nextTemp()
+    const terminator = this.nextTemp()
+    this.lines.push(`  ${bufferSize} = add i64 ${size}, 1`)
+    this.lines.push(`  ${buffer} = call ptr @malloc(i64 ${bufferSize})`)
+    this.lines.push(`  ${bytesRead} = call i64 @fread(ptr ${buffer}, i64 1, i64 ${size}, ptr ${file})`)
+    this.lines.push(`  ${terminator} = getelementptr inbounds i8, ptr ${buffer}, i64 ${bytesRead}`)
+    this.lines.push(`  store i8 0, ptr ${terminator}`)
+    this.lines.push(`  call i32 @fclose(ptr ${file})`)
+    this.lines.push(`  store ptr ${buffer}, ptr ${resultPointer}`)
+    this.lines.push(`  br label %${endLabel}`)
+
+    this.lines.push(`${endLabel}:`)
+    const result = this.nextTemp()
+    this.lines.push(`  ${result} = load ptr, ptr ${resultPointer}`)
+
+    return {
+      type: LumenTypes.String,
+      value: result
+    }
   }
 
   emitStringIncludes(haystack, needleTokens, location) {
