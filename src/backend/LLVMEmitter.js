@@ -1,0 +1,616 @@
+import { TokenType } from '../lexer/TokenType.js'
+import { Diagnostic } from '../diagnostics/Diagnostic.js'
+import { LumenTypes, TypeSystem } from '../semantics/TypeSystem.js'
+
+const BINARY_PRECEDENCE = new Map([
+  ['*', 40],
+  ['/', 40],
+  ['%', 40],
+  ['+', 30],
+  ['-', 30],
+  ['<', 20],
+  ['<=', 20],
+  ['>', 20],
+  ['>=', 20],
+  ['==', 15],
+  ['!=', 15]
+])
+
+export class LLVMEmitter {
+  constructor({ typeSystem = new TypeSystem() } = {}) {
+    this.typeSystem = typeSystem
+  }
+
+  emit(irModule) {
+    this.globals = []
+    this.stringId = 0
+    this.usesPrintf = false
+    const functions = irModule.functions.flatMap(func => this.emitFunction(func))
+
+    return [
+      '; Lumen LLVM IR',
+      ...this.globals,
+      this.usesPrintf ? 'declare i32 @printf(ptr, ...)' : '',
+      '',
+      ...functions,
+      ''
+    ].filter(line => line !== null).join('\n')
+  }
+
+  emitFunction(func) {
+    this.temp = 0
+    this.label = 0
+    this.lines = []
+    this.scopes = [new Map()]
+    this.returnType = func.returnType
+
+    const params = func.params
+      .map(param => `${this.llvmType(param.type)} %${param.name}`)
+      .join(', ')
+
+    this.lines.push(`define ${this.llvmType(func.returnType)} @${func.name}(${params}) {`)
+    this.lines.push('entry:')
+
+    for (const param of func.params) {
+      const pointer = this.alloca(param.name, param.type)
+      this.lines.push(`  store ${this.llvmType(param.type)} %${param.name}, ptr ${pointer}`)
+    }
+
+    for (const statement of func.body) this.emitStatement(statement)
+
+    if (!this.hasTerminator()) {
+      this.lines.push(this.defaultReturn(func.returnType))
+    }
+
+    this.lines.push('}')
+    return this.lines
+  }
+
+  emitStatement(node) {
+    if (node.kind === 'VariableDeclaration') return this.emitVariableDeclaration(node)
+    if (node.kind === 'ExpressionStatement') return this.emitExpression(node.expression)
+    if (node.kind === 'ReturnStatement') return this.emitReturn(node)
+    if (node.kind === 'BlockStatement') return this.emitBlock(node)
+    if (node.kind === 'ForStatement') return this.emitFor(node)
+
+    throw new Diagnostic(`LLVM backend does not support ${node.kind}`, node.location, 'backend')
+  }
+
+  emitBlock(node) {
+    this.pushScope()
+    for (const statement of node.body) this.emitStatement(statement)
+    this.popScope()
+  }
+
+  emitVariableDeclaration(node) {
+    for (const declaration of node.declarations) {
+      const type = declaration.inferredType ?? LumenTypes.I32
+      const pointer = this.alloca(declaration.id.name, type)
+
+      if (declaration.initializer) {
+        const value = this.emitExpression(declaration.initializer)
+        this.lines.push(`  store ${this.llvmType(type)} ${this.cast(value, type)}, ptr ${pointer}`)
+      }
+    }
+  }
+
+  emitReturn(node) {
+    if (!node.argument) {
+      this.lines.push('  ret void')
+      return
+    }
+
+    const value = this.emitExpression(node.argument)
+    this.lines.push(`  ret ${this.llvmType(this.returnType)} ${this.cast(value, this.returnType)}`)
+  }
+
+  emitFor(node) {
+    this.pushScope()
+
+    if (node.init?.kind === 'VariableDeclaration') {
+      this.emitVariableDeclaration(node.init)
+    } else if (node.init) {
+      this.emitExpression(node.init)
+    }
+
+    const conditionLabel = this.nextLabel('for.cond')
+    const bodyLabel = this.nextLabel('for.body')
+    const updateLabel = this.nextLabel('for.update')
+    const endLabel = this.nextLabel('for.end')
+
+    this.lines.push(`  br label %${conditionLabel}`)
+    this.lines.push(`${conditionLabel}:`)
+
+    if (node.test) {
+      const condition = this.emitExpression(node.test)
+      this.lines.push(`  br i1 ${this.cast(condition, LumenTypes.Bool)}, label %${bodyLabel}, label %${endLabel}`)
+    } else {
+      this.lines.push(`  br label %${bodyLabel}`)
+    }
+
+    this.lines.push(`${bodyLabel}:`)
+    this.emitStatement(node.body)
+    if (!this.hasTerminator()) this.lines.push(`  br label %${updateLabel}`)
+
+    this.lines.push(`${updateLabel}:`)
+    if (node.update) this.emitExpression(node.update)
+    this.lines.push(`  br label %${conditionLabel}`)
+
+    this.lines.push(`${endLabel}:`)
+    this.popScope()
+  }
+
+  emitExpression(expression) {
+    if (!expression || expression.tokens.length === 0) {
+      return { type: LumenTypes.Void, value: '' }
+    }
+
+    if (this.isCall(expression.tokens, 'println')) return this.emitPrintln(expression.tokens)
+
+    const assignmentIndex = this.findTopLevelOperator(expression.tokens, '=')
+    if (assignmentIndex > 0) return this.emitAssignment(expression.tokens, assignmentIndex)
+
+    if (expression.tokens.length === 2 &&
+      expression.tokens[0].type === TokenType.Identifier &&
+      expression.tokens[1].lexeme === '++') {
+      return this.emitIncrement(expression.tokens[0])
+    }
+
+    return this.emitRpn(this.toRpn(expression.tokens), expression.location)
+  }
+
+  emitAssignment(tokens, index) {
+    const target = tokens[index - 1]
+    if (target.type !== TokenType.Identifier) {
+      throw new Diagnostic('Assignment target must be an identifier', target.location, 'backend')
+    }
+
+    const symbol = this.resolve(target.lexeme)
+    const value = this.emitRpn(this.toRpn(tokens.slice(index + 1)), target.location)
+
+    this.lines.push(`  store ${this.llvmType(symbol.type)} ${this.cast(value, symbol.type)}, ptr ${symbol.pointer}`)
+    return {
+      type: symbol.type,
+      value: this.cast(value, symbol.type)
+    }
+  }
+
+  emitIncrement(token) {
+    const symbol = this.resolve(token.lexeme)
+    const current = this.nextTemp()
+    const next = this.nextTemp()
+    const instruction = symbol.type === LumenTypes.F32 ? 'fadd' : 'add'
+    const one = symbol.type === LumenTypes.F32 ? '1.000000e+00' : '1'
+
+    this.lines.push(`  ${current} = load ${this.llvmType(symbol.type)}, ptr ${symbol.pointer}`)
+    this.lines.push(`  ${next} = ${instruction} ${this.llvmType(symbol.type)} ${current}, ${one}`)
+    this.lines.push(`  store ${this.llvmType(symbol.type)} ${next}, ptr ${symbol.pointer}`)
+
+    return {
+      type: symbol.type,
+      value: next
+    }
+  }
+
+  emitPrintln(tokens) {
+    this.usesPrintf = true
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 1) {
+      throw new Diagnostic('println expects one argument', tokens[0].location, 'backend')
+    }
+
+    const arg = args[0]
+
+    if (arg.length === 1 && arg[0].type === TokenType.String) {
+      const format = this.globalCString('%s\n')
+      const value = this.globalCString(arg[0].literal)
+      this.lines.push(`  call i32 (ptr, ...) @printf(ptr ${format.pointer}, ptr ${value.pointer})`)
+      return {
+        type: LumenTypes.Void,
+        value: ''
+      }
+    }
+
+    const value = this.emitRpn(this.toRpn(arg), tokens[0].location)
+    const format = this.printlnFormat(value.type)
+    const argumentType = this.printlnArgumentType(value.type)
+    const argumentValue = this.printlnArgumentValue(value)
+
+    this.lines.push(`  call i32 (ptr, ...) @printf(ptr ${format.pointer}, ${argumentType} ${argumentValue})`)
+
+    return {
+      type: LumenTypes.Void,
+      value: ''
+    }
+  }
+
+  emitRpn(rpn, location) {
+    const stack = []
+
+    for (const token of rpn) {
+      if (token.type === TokenType.Number) {
+        const type = this.numberLiteralType(token)
+        stack.push({
+          type,
+          value: type === LumenTypes.F32 ? this.floatConstant(token.literal) : String(token.literal)
+        })
+        continue
+      }
+
+      if (token.type === TokenType.String) {
+        const value = this.globalCString(token.literal)
+        stack.push({
+          type: LumenTypes.String,
+          value: value.pointer
+        })
+        continue
+      }
+
+      if (token.type === TokenType.Keyword && token.lexeme === 'true') {
+        stack.push({
+          type: LumenTypes.Bool,
+          value: '1'
+        })
+        continue
+      }
+
+      if (token.type === TokenType.Keyword && token.lexeme === 'false') {
+        stack.push({
+          type: LumenTypes.Bool,
+          value: '0'
+        })
+        continue
+      }
+
+      if (token.type === TokenType.Identifier) {
+        const symbol = this.resolve(token.lexeme)
+        const temp = this.nextTemp()
+        this.lines.push(`  ${temp} = load ${this.llvmType(symbol.type)}, ptr ${symbol.pointer}`)
+        stack.push({
+          type: symbol.type,
+          value: temp
+        })
+        continue
+      }
+
+      if (token.type === TokenType.Operator) {
+        const right = stack.pop()
+        const left = stack.pop()
+
+        if (!left || !right) {
+          throw new Diagnostic('Invalid expression', token.location, 'backend')
+        }
+
+        stack.push(this.emitBinary(token, left, right))
+      }
+    }
+
+    if (stack.length !== 1) {
+      throw new Diagnostic('Invalid expression', location, 'backend')
+    }
+
+    return stack[0]
+  }
+
+  emitBinary(token, left, right) {
+    const op = token.lexeme
+    const temp = this.nextTemp()
+
+    if (['+', '-', '*', '/', '%'].includes(op)) {
+      const type = this.typeSystem.widest(left.type, right.type)
+      const instruction = this.arithmeticInstruction(op, type)
+
+      this.lines.push(`  ${temp} = ${instruction} ${this.llvmType(type)} ${this.cast(left, type)}, ${this.cast(right, type)}`)
+      return {
+        type,
+        value: temp
+      }
+    }
+
+    const type = this.typeSystem.widest(left.type, right.type)
+    const predicate = this.comparePredicate(op, type)
+
+    if (!predicate) {
+      throw new Diagnostic(`Unsupported operator "${op}"`, token.location, 'backend')
+    }
+
+    const instruction = type === LumenTypes.F32 ? 'fcmp' : 'icmp'
+    this.lines.push(`  ${temp} = ${instruction} ${predicate} ${this.llvmType(type)} ${this.cast(left, type)}, ${this.cast(right, type)}`)
+    return {
+      type: LumenTypes.Bool,
+      value: temp
+    }
+  }
+
+  toRpn(tokens) {
+    const output = []
+    const operators = []
+
+    for (const token of tokens) {
+      if ([TokenType.Number, TokenType.String, TokenType.Identifier, TokenType.Keyword].includes(token.type)) {
+        output.push(token)
+        continue
+      }
+
+      if (token.is(TokenType.Punctuation, '(')) {
+        operators.push(token)
+        continue
+      }
+
+      if (token.is(TokenType.Punctuation, ')')) {
+        while (operators.length && !operators.at(-1).is(TokenType.Punctuation, '(')) {
+          output.push(operators.pop())
+        }
+        operators.pop()
+        continue
+      }
+
+      if (token.type === TokenType.Operator) {
+        while (operators.length &&
+          BINARY_PRECEDENCE.has(operators.at(-1).lexeme) &&
+          BINARY_PRECEDENCE.get(operators.at(-1).lexeme) >= BINARY_PRECEDENCE.get(token.lexeme)) {
+          output.push(operators.pop())
+        }
+        operators.push(token)
+      }
+    }
+
+    while (operators.length) output.push(operators.pop())
+    return output
+  }
+
+  findTopLevelOperator(tokens, operator) {
+    let depth = 0
+
+    for (let index = 0; index < tokens.length; index += 1) {
+      const token = tokens[index]
+      if (token.lexeme === '(') depth += 1
+      if (token.lexeme === ')') depth -= 1
+      if (depth === 0 && token.lexeme === operator) return index
+    }
+
+    return -1
+  }
+
+  isCall(tokens, name) {
+    return tokens[0]?.lexeme === name &&
+      tokens[1]?.lexeme === '(' &&
+      tokens.at(-1)?.lexeme === ')'
+  }
+
+  callArguments(tokens) {
+    const args = []
+    let current = []
+    let depth = 0
+
+    for (const token of tokens.slice(2, -1)) {
+      if (token.lexeme === '(') depth += 1
+      if (token.lexeme === ')') depth -= 1
+
+      if (depth === 0 && token.lexeme === ',') {
+        args.push(current)
+        current = []
+      } else {
+        current.push(token)
+      }
+    }
+
+    if (current.length > 0) args.push(current)
+    return args
+  }
+
+  globalCString(value) {
+    const name = `@.str.${this.stringId}`
+    this.stringId += 1
+    const bytes = this.cStringBytes(value)
+    const content = bytes.map(byte => this.escapeByte(byte)).join('')
+
+    this.globals.push(`${name} = private unnamed_addr constant [${bytes.length} x i8] c"${content}"`)
+
+    return {
+      pointer: `getelementptr inbounds ([${bytes.length} x i8], ptr ${name}, i64 0, i64 0)`
+    }
+  }
+
+  printlnFormat(type) {
+    if (type === LumenTypes.String) return this.globalCString('%s\n')
+    if (type === LumenTypes.I64) return this.globalCString('%lld\n')
+    if (type === LumenTypes.F32) return this.globalCString('%f\n')
+    return this.globalCString('%d\n')
+  }
+
+  printlnArgumentType(type) {
+    if (type === LumenTypes.String) return 'ptr'
+    if (type === LumenTypes.I64) return 'i64'
+    if (type === LumenTypes.F32) return 'double'
+    return 'i32'
+  }
+
+  printlnArgumentValue(value) {
+    if (value.type === LumenTypes.String) return value.value
+    if (value.type === LumenTypes.I64) return this.cast(value, LumenTypes.I64)
+    if (value.type === LumenTypes.F32) return this.cast(value, 'f64')
+    return this.cast(value, LumenTypes.I32)
+  }
+
+  arithmeticInstruction(op, type) {
+    if (type === LumenTypes.F32) {
+      return {
+        '+': 'fadd',
+        '-': 'fsub',
+        '*': 'fmul',
+        '/': 'fdiv',
+        '%': 'frem'
+      }[op]
+    }
+
+    return {
+      '+': 'add',
+      '-': 'sub',
+      '*': 'mul',
+      '/': 'sdiv',
+      '%': 'srem'
+    }[op]
+  }
+
+  comparePredicate(op, type) {
+    if (type === LumenTypes.F32) {
+      return {
+        '<': 'olt',
+        '<=': 'ole',
+        '>': 'ogt',
+        '>=': 'oge',
+        '==': 'oeq',
+        '!=': 'one'
+      }[op]
+    }
+
+    return {
+      '<': 'slt',
+      '<=': 'sle',
+      '>': 'sgt',
+      '>=': 'sge',
+      '==': 'eq',
+      '!=': 'ne'
+    }[op]
+  }
+
+  cStringBytes(value) {
+    return [
+      ...Array.from(value, char => char.charCodeAt(0)),
+      0
+    ]
+  }
+
+  escapeByte(byte) {
+    if (byte === 10) return '\\0A'
+    if (byte === 0) return '\\00'
+    if (byte === 34) return '\\22'
+    if (byte === 92) return '\\5C'
+    if (byte >= 32 && byte <= 126) return String.fromCharCode(byte)
+    return `\\${byte.toString(16).padStart(2, '0').toUpperCase()}`
+  }
+
+  alloca(name, type) {
+    const pointer = `%${name}.addr.${this.temp}`
+    this.temp += 1
+    this.lines.push(`  ${pointer} = alloca ${this.llvmType(type)}`)
+    this.define(name, {
+      pointer,
+      type
+    })
+    return pointer
+  }
+
+  cast(value, targetType) {
+    if (value.type === targetType) return value.value
+
+    if (value.type === LumenTypes.Bool && targetType === LumenTypes.I64) {
+      const temp = this.nextTemp()
+      this.lines.push(`  ${temp} = zext i1 ${value.value} to i64`)
+      return temp
+    }
+
+    if (value.type === LumenTypes.Bool && targetType === LumenTypes.I32) {
+      const temp = this.nextTemp()
+      this.lines.push(`  ${temp} = zext i1 ${value.value} to i32`)
+      return temp
+    }
+
+    if (this.typeSystem.isNumeric(value.type) && targetType === LumenTypes.Bool) {
+      const temp = this.nextTemp()
+      const zero = value.type === LumenTypes.F32 ? '0.000000e+00' : '0'
+      const instruction = value.type === LumenTypes.F32 ? 'fcmp one' : 'icmp ne'
+      this.lines.push(`  ${temp} = ${instruction} ${this.llvmType(value.type)} ${value.value}, ${zero}`)
+      return temp
+    }
+
+    if (value.type === LumenTypes.I32 && targetType === LumenTypes.I64) {
+      const temp = this.nextTemp()
+      this.lines.push(`  ${temp} = sext i32 ${value.value} to i64`)
+      return temp
+    }
+
+    if ([LumenTypes.I32, LumenTypes.I64, LumenTypes.Bool].includes(value.type) && targetType === LumenTypes.F32) {
+      const temp = this.nextTemp()
+      const sourceType = this.llvmType(value.type)
+      const sourceValue = value.type === LumenTypes.Bool ? this.cast(value, LumenTypes.I32) : value.value
+      const normalizedSourceType = value.type === LumenTypes.Bool ? 'i32' : sourceType
+      this.lines.push(`  ${temp} = sitofp ${normalizedSourceType} ${sourceValue} to float`)
+      return temp
+    }
+
+    if (value.type === LumenTypes.F32 && [LumenTypes.I32, LumenTypes.I64].includes(targetType)) {
+      const temp = this.nextTemp()
+      this.lines.push(`  ${temp} = fptosi float ${value.value} to ${this.llvmType(targetType)}`)
+      return temp
+    }
+
+    if (value.type === LumenTypes.F32 && targetType === 'f64') {
+      const temp = this.nextTemp()
+      this.lines.push(`  ${temp} = fpext float ${value.value} to double`)
+      return temp
+    }
+
+    return value.value
+  }
+
+  llvmType(type) {
+    return this.typeSystem.llvm(type)
+  }
+
+  nextTemp() {
+    const name = `%t${this.temp}`
+    this.temp += 1
+    return name
+  }
+
+  nextLabel(prefix) {
+    const name = `${prefix}.${this.label}`
+    this.label += 1
+    return name
+  }
+
+  pushScope() {
+    this.scopes.push(new Map())
+  }
+
+  popScope() {
+    this.scopes.pop()
+  }
+
+  define(name, symbol) {
+    this.scopes.at(-1).set(name, symbol)
+  }
+
+  resolve(name) {
+    for (let index = this.scopes.length - 1; index >= 0; index -= 1) {
+      const symbol = this.scopes[index].get(name)
+      if (symbol) return symbol
+    }
+
+    throw new Diagnostic(`Unknown symbol "${name}"`, null, 'backend')
+  }
+
+  hasTerminator() {
+    const last = this.lines.at(-1) ?? ''
+    return last.trim().startsWith('ret ') || last.trim().startsWith('br ')
+  }
+
+  defaultReturn(type) {
+    if (type === LumenTypes.Void) return '  ret void'
+    if (type === LumenTypes.F32) return '  ret float 0.000000e+00'
+    return `  ret ${this.llvmType(type)} 0`
+  }
+
+  floatConstant(value) {
+    return `${Number(value).toFixed(6)}e+00`
+  }
+
+  numberLiteralType(token) {
+    if (token.lexeme.includes('.')) return LumenTypes.F32
+    if (Math.abs(token.literal) > 2147483647) return LumenTypes.I64
+    return LumenTypes.I32
+  }
+}

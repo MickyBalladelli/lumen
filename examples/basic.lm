@@ -1,0 +1,9 @@
+function main(): i32 {
+  let message = "hello"
+  const count = 3
+
+  println(message)
+  println(count)
+
+  return count
+}

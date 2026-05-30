@@ -1,0 +1,14 @@
+{
+  "name": "lumen",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Foundational compiler for the Lumen systems language",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "scripts": {
+    "parse": "node ./src/cli/parse.js",
+    "compile": "node ./src/cli/compile.js",
+    "compile:examples": "node ./src/cli/compile-examples.js"
+  }
+}

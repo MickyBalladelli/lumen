@@ -1,0 +1,12 @@
+function main(): i32 {
+  const limit: i32 = 5
+  let total = 0
+
+  for (let i = 0; i < limit; i++) {
+    total = total + i
+  }
+
+  println(total)
+
+  return total
+}

@@ -1,0 +1,9 @@
+function main(): i32 {
+  let value = 1 +
+    2 +
+    3
+
+  println(value)
+
+  return value
+}

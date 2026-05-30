@@ -1,0 +1,11 @@
+function main(): i32 {
+  let big: i64 = 10000000000
+  let bigger: i64 = big + 32
+  let ratio: f32 = 1.5 + 2.25
+
+  println(bigger)
+  println(ratio)
+  println(ratio > 3.0)
+
+  return 0
+}
