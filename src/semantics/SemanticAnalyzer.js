@@ -47,6 +47,7 @@ export class SemanticAnalyzer {
     if (node.kind === 'BlockStatement') return this.visitBlock(node, scope)
     if (node.kind === 'VariableDeclaration') return this.visitVariableDeclaration(node, scope)
     if (node.kind === 'ForStatement') return this.visitFor(node, scope)
+    if (node.kind === 'ForOfStatement') return this.visitForOf(node, scope)
   }
 
   visitFunction(node, scope) {
@@ -88,6 +89,18 @@ export class SemanticAnalyzer {
     if (node.init?.kind === 'VariableDeclaration') {
       this.visitVariableDeclaration(node.init, loopScope)
     }
+
+    this.visit(node.body, loopScope)
+  }
+
+  visitForOf(node, scope) {
+    const loopScope = new Scope(scope)
+
+    loopScope.define(node.item.name, {
+      kind: 'variable',
+      node: node.item,
+      mutable: false
+    })
 
     this.visit(node.body, loopScope)
   }

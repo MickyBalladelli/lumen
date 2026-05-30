@@ -4,7 +4,7 @@ struct Point {
 }
 
 function main(): i32 {
-  let point: Point = Point { x: 4, y: 7 }
+  let point = Point { x: 4, y: 7 }
   let total: i32 = point.x + point.y
 
   println(total)

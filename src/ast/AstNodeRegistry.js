@@ -2,6 +2,7 @@ import {
   AstNode,
   BlockStatementNode,
   ExpressionStatementNode,
+  ForOfStatementNode,
   ForStatementNode,
   FunctionDeclarationNode,
   IdentifierNode,
@@ -51,6 +52,7 @@ export class AstNodeRegistry {
       .register('VariableDeclarator', VariableDeclaratorNode)
       .register('FunctionDeclaration', FunctionDeclarationNode)
       .register('BlockStatement', BlockStatementNode)
+      .register('ForOfStatement', ForOfStatementNode)
       .register('ForStatement', ForStatementNode)
       .register('ReturnStatement', ReturnStatementNode)
       .register('ExpressionStatement', ExpressionStatementNode)

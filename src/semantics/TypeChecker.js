@@ -54,6 +54,7 @@ export class TypeChecker {
     if (node.kind === 'BlockStatement') return this.checkBlock(node, scope, currentFunction)
     if (node.kind === 'VariableDeclaration') return this.checkVariableDeclaration(node, scope)
     if (node.kind === 'ForStatement') return this.checkFor(node, scope, currentFunction)
+    if (node.kind === 'ForOfStatement') return this.checkForOf(node, scope, currentFunction)
     if (node.kind === 'ReturnStatement') return this.checkReturn(node, scope, currentFunction)
     if (node.kind === 'ExpressionStatement') return this.checkExpression(node.expression, scope)
 
@@ -134,6 +135,30 @@ export class TypeChecker {
 
     if (node.test) this.checkExpression(node.test, scope)
     if (node.update) this.checkExpression(node.update, scope)
+    this.checkNode(node.body, scope, currentFunction)
+    return LumenTypes.Void
+  }
+
+  checkForOf(node, parentScope, currentFunction) {
+    const iterableType = this.checkExpression(node.iterable, parentScope)
+
+    if (!this.typeSystem.isArray(iterableType)) {
+      throw new Diagnostic('for-of needs an array', node.iterable.location, 'type')
+    }
+
+    const scope = new Scope(parentScope)
+    const itemType = this.typeSystem.elementType(iterableType)
+
+    node.item.inferredType = itemType
+    node.iterable.inferredType = iterableType
+
+    scope.define(node.item.name, {
+      kind: 'variable',
+      node: node.item,
+      type: itemType,
+      mutable: false
+    })
+
     this.checkNode(node.body, scope, currentFunction)
     return LumenTypes.Void
   }

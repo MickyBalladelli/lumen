@@ -1,20 +1,27 @@
 import { TokenType } from '../lexer/TokenType.js'
 import { Diagnostic } from '../diagnostics/Diagnostic.js'
 import { LumenTypes } from './TypeSystem.js'
+import { SystemFunctions, SystemLibrary } from '../system/SystemLibrary.js'
 
 export class ExpressionInspector {
-  constructor(scope, typeSystem) {
+  constructor(scope, typeSystem, systemLibrary = new SystemLibrary()) {
     this.scope = scope
     this.typeSystem = typeSystem
+    this.systemLibrary = systemLibrary
   }
 
   infer(rawExpression) {
     if (!rawExpression || rawExpression.tokens.length === 0) return LumenTypes.Void
-    if (this.isCall(rawExpression, 'println')) return LumenTypes.Void
+    if (this.isCall(rawExpression, SystemFunctions.Println)) return LumenTypes.Void
+    if (this.isCall(rawExpression, SystemFunctions.Len)) return LumenTypes.I32
+    if (this.isCall(rawExpression, SystemFunctions.Filter)) return this.filterType(rawExpression.tokens)
     if (this.isStructLiteral(rawExpression.tokens)) return rawExpression.tokens[0].lexeme
     if (this.isFieldAccess(rawExpression.tokens)) return this.fieldAccessType(rawExpression.tokens)
     if (this.isArrayLiteral(rawExpression.tokens)) return this.arrayLiteralType(rawExpression.tokens)
     if (this.isArrayAccess(rawExpression.tokens)) return this.arrayAccessType(rawExpression.tokens)
+    if (this.isSingleIdentifier(rawExpression.tokens)) {
+      return this.scope.resolve(rawExpression.tokens[0].lexeme)?.type ?? LumenTypes.Unknown
+    }
 
     let numericType = LumenTypes.I32
 
@@ -52,6 +59,7 @@ export class ExpressionInspector {
     for (const token of rawExpression.tokens) {
       if (token.type !== TokenType.Identifier) continue
       if (this.isBuiltinCallName(rawExpression.tokens, token)) continue
+      if (this.isFilterParameter(rawExpression.tokens, token)) continue
       if (this.isStructLiteralName(rawExpression.tokens, token)) continue
       if (this.isKnownStructName(rawExpression.tokens, token)) continue
       if (this.isStructFieldKey(rawExpression.tokens, token)) continue
@@ -74,6 +82,10 @@ export class ExpressionInspector {
 
   isArrayLiteral(tokens) {
     return tokens[0]?.lexeme === '[' && tokens.at(-1)?.lexeme === ']'
+  }
+
+  isSingleIdentifier(tokens) {
+    return tokens.length === 1 && tokens[0]?.type === TokenType.Identifier
   }
 
   arrayLiteralType(tokens) {
@@ -183,7 +195,29 @@ export class ExpressionInspector {
 
   isBuiltinCallName(tokens, token) {
     const index = tokens.indexOf(token)
-    return token.lexeme === 'println' && tokens[index + 1]?.lexeme === '('
+    return this.systemLibrary.has(token.lexeme) && tokens[index + 1]?.lexeme === '('
+  }
+
+  isFilterParameter(tokens, token) {
+    if (!this.isCall({ tokens }, SystemFunctions.Filter)) return false
+
+    const args = this.callArguments(tokens)
+    const predicate = args[1] ?? []
+    const arrow = predicate.findIndex(part => part.lexeme === '=>')
+    const name = predicate[arrow - 1]?.lexeme
+
+    return token.lexeme === name
+  }
+
+  filterType(tokens) {
+    const args = this.callArguments(tokens)
+    if (args.length !== 2) {
+      throw new Diagnostic('filter expects array and predicate', tokens[0].location, 'semantic')
+    }
+
+    return this.infer({
+      tokens: args[0]
+    })
   }
 
   splitDelimited(tokens) {
@@ -205,6 +239,10 @@ export class ExpressionInspector {
 
     if (current.length > 0) parts.push(current)
     return parts
+  }
+
+  callArguments(tokens) {
+    return this.splitDelimited(tokens.slice(2, -1))
   }
 
   findMatching(tokens, start, open, close) {

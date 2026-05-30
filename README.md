@@ -96,7 +96,7 @@ struct Point {
   y: i32
 }
 
-let point: Point = Point { x: 4, y: 7 }
+let point = Point { x: 4, y: 7 }
 println(point.x + point.y)
 ```
 
@@ -134,6 +134,22 @@ for (let i: i32 = 0; i < limit; i++) {
 
 Semicolons are required inside the `for (...)` header.
 
+For-of loops iterate over arrays.
+
+```lumen
+for (let value of values) {
+  total = total + value
+}
+```
+
+They also work with arrays of structs.
+
+```lumen
+for (let point of points) {
+  total = total + point.y
+}
+```
+
 ### Expressions
 
 Current compiled expressions support:
@@ -145,6 +161,8 @@ Current compiled expressions support:
 
 ### Helper functions
 
+System helper functions are available by default.
+
 `println(...)` prints a value and adds a newline.
 
 ```lumen
@@ -155,6 +173,22 @@ println(total < 10)
 ```
 
 It lowers to native `printf` in the LLVM backend.
+
+`len(...)` returns the fixed length of an array.
+
+```lumen
+println(len(values))
+```
+
+`filter(...)` can be used in a for-of loop with a JS-like arrow predicate.
+
+```lumen
+for (let value of filter(values, value => value > 2)) {
+  total = total + value
+}
+```
+
+Current filter lowering is a view over the source array inside `for-of`.
 
 ## Run parser
 
@@ -224,11 +258,13 @@ console.log(ast)
 - `examples/basic.lm`: variables, function, return
 - `examples/array.lm`: arrays of numbers and structs
 - `examples/for-loop.lm`: classic for loop semicolon rule
+- `examples/for-of.lm`: for-of loop over arrays
 - `examples/newline-continuation.lm`: newline after incomplete expression
 - `examples/native-main.lm`: compiles to LLVM IR and native code
 - `examples/numbers.lm`: `i64` and `f32` numbers
 - `examples/println.lm`: native print through `printf`
 - `examples/struct.lm`: object type with fields
+- `examples/system.lm`: `println`, `len`, and `filter`
 - `examples/use-api.js`: tokenizer and parser from JavaScript
 
 Run the API example:

@@ -1,0 +1,14 @@
+function main(): i32 {
+  let values: i32[] = [1, 2, 3, 4, 5]
+  let total: i32 = 0
+
+  println(len(values))
+
+  for (let value of filter(values, value => value > 2)) {
+    total = total + value
+  }
+
+  println(total)
+
+  return total
+}

@@ -7,6 +7,7 @@ const KEYWORDS = new Set([
   'const',
   'struct',
   'for',
+  'of',
   'return',
   'true',
   'false',

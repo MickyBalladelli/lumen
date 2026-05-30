@@ -3,6 +3,7 @@ import { AstNodeRegistry } from '../ast/AstNodeRegistry.js'
 import {
   BlockStatementNode,
   ExpressionStatementNode,
+  ForOfStatementNode,
   ForStatementNode,
   FunctionDeclarationNode,
   IdentifierNode,
@@ -137,6 +138,19 @@ export class Parser {
     const keyword = this.previous()
     this.consumePunctuation('(', 'Expected "(" after for')
 
+    if (this.checkKeyword('let') &&
+      this.peekNextToken()?.type === TokenType.Identifier &&
+      this.peekToken(2)?.is(TokenType.Keyword, 'of')) {
+      this.advance()
+      const item = this.identifier()
+      this.consumeKeyword('of', 'Expected "of" in for-of loop')
+      const iterable = this.rawExpressionUntil([')'])
+      this.consumePunctuation(')', 'Expected ")" after for-of iterable')
+      const body = this.statement()
+
+      return new ForOfStatementNode(item, iterable, body, keyword.location)
+    }
+
     // Classic for loops are the one place Lumen demands explicit semicolons.
     const init = this.checkSemicolon()
       ? null
@@ -253,6 +267,11 @@ export class Parser {
     throw this.error(this.peek(), message)
   }
 
+  consumeKeyword(lexeme, message) {
+    if (this.checkKeyword(lexeme)) return this.advance()
+    throw this.error(this.peek(), message)
+  }
+
   consumePunctuation(lexeme, message) {
     if (this.checkPunctuation(lexeme)) return this.advance()
     throw this.error(this.peek(), message)
@@ -336,6 +355,14 @@ export class Parser {
 
   peek() {
     return this.tokens[this.current]
+  }
+
+  peekNextToken() {
+    return this.peekToken(1)
+  }
+
+  peekToken(offset) {
+    return this.tokens[this.current + offset]
   }
 
   previous() {

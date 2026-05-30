@@ -1,6 +1,7 @@
 import { TokenType } from '../lexer/TokenType.js'
 import { Diagnostic } from '../diagnostics/Diagnostic.js'
 import { LumenTypes, TypeSystem } from '../semantics/TypeSystem.js'
+import { SystemFunctions } from '../system/SystemLibrary.js'
 
 const BINARY_PRECEDENCE = new Map([
   ['*', 40],
@@ -78,6 +79,7 @@ export class LLVMEmitter {
     if (node.kind === 'ExpressionStatement') return this.emitExpression(node.expression)
     if (node.kind === 'ReturnStatement') return this.emitReturn(node)
     if (node.kind === 'BlockStatement') return this.emitBlock(node)
+    if (node.kind === 'ForOfStatement') return this.emitForOf(node)
     if (node.kind === 'ForStatement') return this.emitFor(node)
 
     throw new Diagnostic(`LLVM backend does not support ${node.kind}`, node.location, 'backend')
@@ -159,12 +161,118 @@ export class LLVMEmitter {
     this.popScope()
   }
 
+  emitForOf(node) {
+    if (this.isCall(node.iterable.tokens, SystemFunctions.Filter)) {
+      return this.emitFilteredForOf(node)
+    }
+
+    const iterableName = this.singleIdentifierName(node.iterable)
+    const iterable = this.resolve(iterableName)
+
+    if (!this.typeSystem.isArray(iterable.type) || iterable.length === null) {
+      throw new Diagnostic('for-of backend needs fixed array', node.location, 'backend')
+    }
+
+    const elementType = this.typeSystem.elementType(iterable.type)
+    const indexPointer = this.alloca(`.${node.item.name}.index`, LumenTypes.I32)
+    const itemPointer = this.alloca(node.item.name, elementType)
+    const conditionLabel = this.nextLabel('forof.cond')
+    const bodyLabel = this.nextLabel('forof.body')
+    const updateLabel = this.nextLabel('forof.update')
+    const endLabel = this.nextLabel('forof.end')
+
+    this.lines.push(`  store i32 0, ptr ${indexPointer}`)
+    this.lines.push(`  br label %${conditionLabel}`)
+    this.lines.push(`${conditionLabel}:`)
+
+    const currentIndex = this.nextTemp()
+    const condition = this.nextTemp()
+    this.lines.push(`  ${currentIndex} = load i32, ptr ${indexPointer}`)
+    this.lines.push(`  ${condition} = icmp slt i32 ${currentIndex}, ${iterable.length}`)
+    this.lines.push(`  br i1 ${condition}, label %${bodyLabel}, label %${endLabel}`)
+    this.lines.push(`${bodyLabel}:`)
+
+    const elementPointer = this.nextTemp()
+    const elementValue = this.nextTemp()
+    this.lines.push(`  ${elementPointer} = getelementptr inbounds ${this.typeSystem.llvmArray(iterable.type, iterable.length)}, ptr ${iterable.pointer}, i32 0, i32 ${currentIndex}`)
+    this.lines.push(`  ${elementValue} = load ${this.llvmType(elementType)}, ptr ${elementPointer}`)
+    this.lines.push(`  store ${this.llvmType(elementType)} ${elementValue}, ptr ${itemPointer}`)
+
+    this.emitStatement(node.body)
+    if (!this.hasTerminator()) this.lines.push(`  br label %${updateLabel}`)
+
+    this.lines.push(`${updateLabel}:`)
+    const updateIndex = this.nextTemp()
+    const nextIndex = this.nextTemp()
+    this.lines.push(`  ${updateIndex} = load i32, ptr ${indexPointer}`)
+    this.lines.push(`  ${nextIndex} = add i32 ${updateIndex}, 1`)
+    this.lines.push(`  store i32 ${nextIndex}, ptr ${indexPointer}`)
+    this.lines.push(`  br label %${conditionLabel}`)
+
+    this.lines.push(`${endLabel}:`)
+  }
+
+  emitFilteredForOf(node) {
+    const args = this.callArguments(node.iterable.tokens)
+    const iterableName = this.singleIdentifierName({ tokens: args[0], location: node.iterable.location })
+    const iterable = this.resolve(iterableName)
+
+    if (!this.typeSystem.isArray(iterable.type) || iterable.length === null) {
+      throw new Diagnostic('filter needs fixed array', node.location, 'backend')
+    }
+
+    const predicate = this.filterPredicate(args[1], node.iterable.location)
+    const elementType = this.typeSystem.elementType(iterable.type)
+    const indexPointer = this.alloca(`.${node.item.name}.index`, LumenTypes.I32)
+    const itemPointer = this.alloca(node.item.name, elementType)
+    const conditionLabel = this.nextLabel('filter.cond')
+    const predicateLabel = this.nextLabel('filter.pred')
+    const bodyLabel = this.nextLabel('filter.body')
+    const updateLabel = this.nextLabel('filter.update')
+    const endLabel = this.nextLabel('filter.end')
+
+    this.lines.push(`  store i32 0, ptr ${indexPointer}`)
+    this.lines.push(`  br label %${conditionLabel}`)
+    this.lines.push(`${conditionLabel}:`)
+
+    const currentIndex = this.nextTemp()
+    const condition = this.nextTemp()
+    this.lines.push(`  ${currentIndex} = load i32, ptr ${indexPointer}`)
+    this.lines.push(`  ${condition} = icmp slt i32 ${currentIndex}, ${iterable.length}`)
+    this.lines.push(`  br i1 ${condition}, label %${predicateLabel}, label %${endLabel}`)
+    this.lines.push(`${predicateLabel}:`)
+
+    const elementPointer = this.nextTemp()
+    const elementValue = this.nextTemp()
+    this.lines.push(`  ${elementPointer} = getelementptr inbounds ${this.typeSystem.llvmArray(iterable.type, iterable.length)}, ptr ${iterable.pointer}, i32 0, i32 ${currentIndex}`)
+    this.lines.push(`  ${elementValue} = load ${this.llvmType(elementType)}, ptr ${elementPointer}`)
+    this.lines.push(`  store ${this.llvmType(elementType)} ${elementValue}, ptr ${itemPointer}`)
+
+    const passes = this.emitRpn(this.toRpn(predicate.tokens), node.iterable.location)
+    this.lines.push(`  br i1 ${this.cast(passes, LumenTypes.Bool)}, label %${bodyLabel}, label %${updateLabel}`)
+    this.lines.push(`${bodyLabel}:`)
+
+    this.emitStatement(node.body)
+    if (!this.hasTerminator()) this.lines.push(`  br label %${updateLabel}`)
+
+    this.lines.push(`${updateLabel}:`)
+    const updateIndex = this.nextTemp()
+    const nextIndex = this.nextTemp()
+    this.lines.push(`  ${updateIndex} = load i32, ptr ${indexPointer}`)
+    this.lines.push(`  ${nextIndex} = add i32 ${updateIndex}, 1`)
+    this.lines.push(`  store i32 ${nextIndex}, ptr ${indexPointer}`)
+    this.lines.push(`  br label %${conditionLabel}`)
+
+    this.lines.push(`${endLabel}:`)
+  }
+
   emitExpression(expression) {
     if (!expression || expression.tokens.length === 0) {
       return { type: LumenTypes.Void, value: '' }
     }
 
-    if (this.isCall(expression.tokens, 'println')) return this.emitPrintln(expression.tokens)
+    if (this.isCall(expression.tokens, SystemFunctions.Println)) return this.emitPrintln(expression.tokens)
+    if (this.isCall(expression.tokens, SystemFunctions.Len)) return this.emitLen(expression.tokens)
     if (this.isFieldAccess(expression.tokens)) return this.emitFieldLoad(expression.tokens)
     if (this.isArrayAccess(expression.tokens)) return this.emitArrayLoad(expression.tokens)
 
@@ -266,7 +374,10 @@ export class LLVMEmitter {
       }
     }
 
-    const value = this.emitRpn(this.toRpn(arg), tokens[0].location)
+    const value = this.emitExpression({
+      tokens: arg,
+      location: tokens[0].location
+    })
     const format = this.printlnFormat(value.type)
     const argumentType = this.printlnArgumentType(value.type)
     const argumentValue = this.printlnArgumentValue(value)
@@ -276,6 +387,28 @@ export class LLVMEmitter {
     return {
       type: LumenTypes.Void,
       value: ''
+    }
+  }
+
+  emitLen(tokens) {
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 1) {
+      throw new Diagnostic('len expects one argument', tokens[0].location, 'backend')
+    }
+
+    const iterable = this.resolve(this.singleIdentifierName({
+      tokens: args[0],
+      location: tokens[0].location
+    }))
+
+    if (!this.typeSystem.isArray(iterable.type) || iterable.length === null) {
+      throw new Diagnostic('len needs fixed array', tokens[0].location, 'backend')
+    }
+
+    return {
+      type: LumenTypes.I32,
+      value: String(iterable.length)
     }
   }
 
@@ -649,6 +782,27 @@ export class LLVMEmitter {
     }
 
     return -1
+  }
+
+  singleIdentifierName(expression) {
+    if (expression.tokens.length === 1 && expression.tokens[0].type === TokenType.Identifier) {
+      return expression.tokens[0].lexeme
+    }
+
+    throw new Diagnostic('for-of iterable must be an array variable', expression.location, 'backend')
+  }
+
+  filterPredicate(tokens, location) {
+    const arrow = tokens.findIndex(token => token.lexeme === '=>')
+
+    if (arrow < 1) {
+      throw new Diagnostic('filter expects arrow predicate', location, 'backend')
+    }
+
+    return {
+      parameter: tokens[arrow - 1].lexeme,
+      tokens: tokens.slice(arrow + 1)
+    }
   }
 
   callArguments(tokens) {

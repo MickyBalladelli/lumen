@@ -20,6 +20,10 @@ const expectations = new Map([
     stdout: '10\n',
     code: 10
   }],
+  ['for-of', {
+    stdout: '26\n',
+    code: 26
+  }],
   ['native-main', {
     stdout: '10\n',
     code: 10
@@ -39,6 +43,10 @@ const expectations = new Map([
   ['struct', {
     stdout: '11\n',
     code: 11
+  }],
+  ['system', {
+    stdout: '5\n12\n',
+    code: 12
   }]
 ])
 

@@ -91,6 +91,15 @@ export class ForStatementNode extends AstNode {
   }
 }
 
+export class ForOfStatementNode extends AstNode {
+  constructor(item, iterable, body, location = null) {
+    super('ForOfStatement', location)
+    this.item = item
+    this.iterable = iterable
+    this.body = body
+  }
+}
+
 export class ReturnStatementNode extends AstNode {
   constructor(argument = null, location = null) {
     super('ReturnStatement', location)
