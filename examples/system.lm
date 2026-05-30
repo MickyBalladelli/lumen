@@ -5,6 +5,7 @@ function main(): i32 {
   println(len(values))
 
   for (let value of filter(values, value => value > 2)) {
+    println(value)
     total = total + value
   }
 

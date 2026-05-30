@@ -1,6 +1,7 @@
 ; Lumen LLVM IR
 @.str.0 = private unnamed_addr constant [4 x i8] c"%d\0A\00"
 @.str.1 = private unnamed_addr constant [4 x i8] c"%d\0A\00"
+@.str.2 = private unnamed_addr constant [4 x i8] c"%d\0A\00"
 declare i32 @printf(ptr, ...)
 
 define i32 @main() {
@@ -35,19 +36,21 @@ filter.pred.1:
   %t14 = icmp sgt i32 %t13, 2
   br i1 %t14, label %filter.body.2, label %filter.update.3
 filter.body.2:
-  %t15 = load i32, ptr %total.addr.6
-  %t16 = load i32, ptr %value.addr.8
-  %t17 = add i32 %t15, %t16
-  store i32 %t17, ptr %total.addr.6
+  %t15 = load i32, ptr %value.addr.8
+  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.str.1, i64 0, i64 0), i32 %t15)
+  %t16 = load i32, ptr %total.addr.6
+  %t17 = load i32, ptr %value.addr.8
+  %t18 = add i32 %t16, %t17
+  store i32 %t18, ptr %total.addr.6
   br label %filter.update.3
 filter.update.3:
-  %t18 = load i32, ptr %.value.index.addr.7
-  %t19 = add i32 %t18, 1
-  store i32 %t19, ptr %.value.index.addr.7
+  %t19 = load i32, ptr %.value.index.addr.7
+  %t20 = add i32 %t19, 1
+  store i32 %t20, ptr %.value.index.addr.7
   br label %filter.cond.0
 filter.end.4:
-  %t20 = load i32, ptr %total.addr.6
-  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.str.1, i64 0, i64 0), i32 %t20)
   %t21 = load i32, ptr %total.addr.6
-  ret i32 %t21
+  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.str.2, i64 0, i64 0), i32 %t21)
+  %t22 = load i32, ptr %total.addr.6
+  ret i32 %t22
 }
