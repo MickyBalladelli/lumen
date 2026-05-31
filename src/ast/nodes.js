@@ -47,6 +47,14 @@ export class StructFieldNode extends AstNode {
   }
 }
 
+export class ImportDeclarationNode extends AstNode {
+  constructor(names, source, location = null) {
+    super('ImportDeclaration', location)
+    this.names = names
+    this.source = source
+  }
+}
+
 export class VariableDeclarationNode extends AstNode {
   constructor(kind, declarations, location = null) {
     super('VariableDeclaration', location)
@@ -113,6 +121,27 @@ export class DoUntilStatementNode extends AstNode {
     super('DoUntilStatement', location)
     this.body = body
     this.test = test
+  }
+}
+
+export class IfStatementNode extends AstNode {
+  constructor(test, consequent, alternate = null, location = null) {
+    super('IfStatement', location)
+    this.test = test
+    this.consequent = consequent
+    this.alternate = alternate
+  }
+}
+
+export class BreakStatementNode extends AstNode {
+  constructor(location = null) {
+    super('BreakStatement', location)
+  }
+}
+
+export class ContinueStatementNode extends AstNode {
+  constructor(location = null) {
+    super('ContinueStatement', location)
   }
 }
 

@@ -1,12 +1,16 @@
 import {
   AstNode,
   BlockStatementNode,
+  BreakStatementNode,
+  ContinueStatementNode,
   DoUntilStatementNode,
   ExpressionStatementNode,
   ForOfStatementNode,
   ForStatementNode,
   FunctionDeclarationNode,
   IdentifierNode,
+  IfStatementNode,
+  ImportDeclarationNode,
   ProgramNode,
   RawExpressionNode,
   ReturnStatementNode,
@@ -52,6 +56,7 @@ export class AstNodeRegistry {
       .register('TypeAnnotation', TypeAnnotationNode)
       .register('StructDeclaration', StructDeclarationNode)
       .register('StructField', StructFieldNode)
+      .register('ImportDeclaration', ImportDeclarationNode)
       .register('VariableDeclaration', VariableDeclarationNode)
       .register('VariableDeclarator', VariableDeclaratorNode)
       .register('FunctionDeclaration', FunctionDeclarationNode)
@@ -60,6 +65,9 @@ export class AstNodeRegistry {
       .register('ForStatement', ForStatementNode)
       .register('WhileStatement', WhileStatementNode)
       .register('DoUntilStatement', DoUntilStatementNode)
+      .register('IfStatement', IfStatementNode)
+      .register('BreakStatement', BreakStatementNode)
+      .register('ContinueStatement', ContinueStatementNode)
       .register('ReturnStatement', ReturnStatementNode)
       .register('ThrowStatement', ThrowStatementNode)
       .register('TryCatchStatement', TryCatchStatementNode)

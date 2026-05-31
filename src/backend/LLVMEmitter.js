@@ -35,7 +35,13 @@ export class LLVMEmitter {
     this.usesUuid = false
     this.usesEnv = false
     this.usesCrypto = false
+    this.usesArgs = false
+    this.usesMaps = false
+    this.usesResults = false
+    this.usesOptions = false
+    this.usesStringRuntime = false
     this.usesThread = false
+    this.functionSignatures = new Map(irModule.functions.map(func => [func.name, func]))
     const typeDefinitions = irModule.structs.map(struct => this.emitStructType(struct))
     const functions = irModule.functions.flatMap(func => this.emitFunction(func))
 
@@ -55,6 +61,20 @@ export class LLVMEmitter {
       this.usesEnv ? 'declare ptr @lumen_env(ptr)' : '',
       this.usesCrypto ? 'declare ptr @lumen_encrypt(ptr, ptr, ptr)' : '',
       this.usesCrypto ? 'declare ptr @lumen_decrypt(ptr, ptr, ptr)' : '',
+      this.usesArgs ? 'declare ptr @lumen_arg(i32)' : '',
+      this.usesArgs ? 'declare i32 @lumen_arg_count()' : '',
+      this.usesMaps ? 'declare ptr @lumen_map(i32, ...)' : '',
+      this.usesMaps ? 'declare ptr @lumen_map_get(ptr, ptr)' : '',
+      this.usesMaps ? 'declare i1 @lumen_map_has(ptr, ptr)' : '',
+      this.usesResults ? 'declare ptr @lumen_ok(ptr)' : '',
+      this.usesResults ? 'declare ptr @lumen_err(ptr)' : '',
+      this.usesResults ? 'declare i1 @lumen_is_ok(ptr)' : '',
+      this.usesResults ? 'declare ptr @lumen_error_message(ptr)' : '',
+      this.usesOptions ? 'declare ptr @lumen_some(ptr)' : '',
+      this.usesOptions ? 'declare ptr @lumen_none()' : '',
+      this.usesOptions ? 'declare i1 @lumen_has_value(ptr)' : '',
+      this.usesOptions ? 'declare ptr @lumen_value_or(ptr, ptr)' : '',
+      this.usesStringRuntime ? 'declare ptr @lumen_string_concat(ptr, ptr)' : '',
       this.usesHttp ? 'declare i32 @lumen_http_serve_files(i32, ptr)' : '',
       this.usesHttp ? 'declare i32 @lumen_http_serve_api(i32, ptr, ptr, ptr, ptr)' : '',
       this.usesHttp ? 'declare i32 @lumen_http_serve_http(i32, ptr, ptr, ptr, ptr, ptr, i32)' : '',
@@ -81,6 +101,7 @@ export class LLVMEmitter {
     this.lines = []
     this.scopes = [new Map()]
     this.tryStack = []
+    this.loopStack = []
     this.returnType = func.returnType
 
     const params = func.params
@@ -109,8 +130,11 @@ export class LLVMEmitter {
     if (node.kind === 'VariableDeclaration') return this.emitVariableDeclaration(node)
     if (node.kind === 'ExpressionStatement') return this.emitExpression(node.expression)
     if (node.kind === 'ReturnStatement') return this.emitReturn(node)
+    if (node.kind === 'BreakStatement') return this.emitBreak(node)
+    if (node.kind === 'ContinueStatement') return this.emitContinue(node)
     if (node.kind === 'ThrowStatement') return this.emitThrow(node)
     if (node.kind === 'TryCatchStatement') return this.emitTryCatch(node)
+    if (node.kind === 'IfStatement') return this.emitIf(node)
     if (node.kind === 'BlockStatement') return this.emitBlock(node)
     if (node.kind === 'ForOfStatement') return this.emitForOf(node)
     if (node.kind === 'ForStatement') return this.emitFor(node)
@@ -215,6 +239,38 @@ export class LLVMEmitter {
     this.lines.push(`  ret ${this.llvmType(this.returnType)} ${this.cast(value, this.returnType)}`)
   }
 
+  emitBreak(node) {
+    const loop = this.loopStack.at(-1)
+    if (!loop) throw new Diagnostic('break needs active loop', node.location, 'backend')
+    this.lines.push(`  br label %${loop.breakLabel}`)
+  }
+
+  emitContinue(node) {
+    const loop = this.loopStack.at(-1)
+    if (!loop) throw new Diagnostic('continue needs active loop', node.location, 'backend')
+    this.lines.push(`  br label %${loop.continueLabel}`)
+  }
+
+  emitIf(node) {
+    const thenLabel = this.nextLabel('if.then')
+    const elseLabel = this.nextLabel('if.else')
+    const endLabel = this.nextLabel('if.end')
+    const condition = this.emitExpression(node.test)
+
+    this.lines.push(`  br i1 ${this.cast(condition, LumenTypes.Bool)}, label %${thenLabel}, label %${node.alternate ? elseLabel : endLabel}`)
+    this.lines.push(`${thenLabel}:`)
+    this.emitStatement(node.consequent)
+    if (!this.hasTerminator()) this.lines.push(`  br label %${endLabel}`)
+
+    if (node.alternate) {
+      this.lines.push(`${elseLabel}:`)
+      this.emitStatement(node.alternate)
+      if (!this.hasTerminator()) this.lines.push(`  br label %${endLabel}`)
+    }
+
+    this.lines.push(`${endLabel}:`)
+  }
+
   emitFor(node) {
     this.pushScope()
 
@@ -228,6 +284,10 @@ export class LLVMEmitter {
     const bodyLabel = this.nextLabel('for.body')
     const updateLabel = this.nextLabel('for.update')
     const endLabel = this.nextLabel('for.end')
+    this.loopStack.push({
+      breakLabel: endLabel,
+      continueLabel: updateLabel
+    })
 
     this.lines.push(`  br label %${conditionLabel}`)
     this.lines.push(`${conditionLabel}:`)
@@ -248,6 +308,7 @@ export class LLVMEmitter {
     this.lines.push(`  br label %${conditionLabel}`)
 
     this.lines.push(`${endLabel}:`)
+    this.loopStack.pop()
     this.popScope()
   }
 
@@ -255,6 +316,10 @@ export class LLVMEmitter {
     const conditionLabel = this.nextLabel('while.cond')
     const bodyLabel = this.nextLabel('while.body')
     const endLabel = this.nextLabel('while.end')
+    this.loopStack.push({
+      breakLabel: endLabel,
+      continueLabel: conditionLabel
+    })
 
     this.lines.push(`  br label %${conditionLabel}`)
     this.lines.push(`${conditionLabel}:`)
@@ -267,12 +332,17 @@ export class LLVMEmitter {
     if (!this.hasTerminator()) this.lines.push(`  br label %${conditionLabel}`)
 
     this.lines.push(`${endLabel}:`)
+    this.loopStack.pop()
   }
 
   emitDoUntil(node) {
     const bodyLabel = this.nextLabel('do.body')
     const conditionLabel = this.nextLabel('do.cond')
     const endLabel = this.nextLabel('do.end')
+    this.loopStack.push({
+      breakLabel: endLabel,
+      continueLabel: conditionLabel
+    })
 
     this.lines.push(`  br label %${bodyLabel}`)
     this.lines.push(`${bodyLabel}:`)
@@ -285,6 +355,7 @@ export class LLVMEmitter {
     this.lines.push(`  br i1 ${this.cast(condition, LumenTypes.Bool)}, label %${endLabel}, label %${bodyLabel}`)
 
     this.lines.push(`${endLabel}:`)
+    this.loopStack.pop()
   }
 
   emitForOf(node) {
@@ -306,6 +377,10 @@ export class LLVMEmitter {
     const bodyLabel = this.nextLabel('forof.body')
     const updateLabel = this.nextLabel('forof.update')
     const endLabel = this.nextLabel('forof.end')
+    this.loopStack.push({
+      breakLabel: endLabel,
+      continueLabel: updateLabel
+    })
 
     this.lines.push(`  store i32 0, ptr ${indexPointer}`)
     this.lines.push(`  br label %${conditionLabel}`)
@@ -336,6 +411,7 @@ export class LLVMEmitter {
     this.lines.push(`  br label %${conditionLabel}`)
 
     this.lines.push(`${endLabel}:`)
+    this.loopStack.pop()
   }
 
   emitFilteredForOf(node) {
@@ -356,6 +432,10 @@ export class LLVMEmitter {
     const bodyLabel = this.nextLabel('filter.body')
     const updateLabel = this.nextLabel('filter.update')
     const endLabel = this.nextLabel('filter.end')
+    this.loopStack.push({
+      breakLabel: endLabel,
+      continueLabel: updateLabel
+    })
 
     this.lines.push(`  store i32 0, ptr ${indexPointer}`)
     this.lines.push(`  br label %${conditionLabel}`)
@@ -390,6 +470,7 @@ export class LLVMEmitter {
     this.lines.push(`  br label %${conditionLabel}`)
 
     this.lines.push(`${endLabel}:`)
+    this.loopStack.pop()
   }
 
   emitExpression(expression) {
@@ -404,6 +485,19 @@ export class LLVMEmitter {
     if (this.isCall(expression.tokens, SystemFunctions.Env)) return this.emitEnv(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.Encrypt)) return this.emitEncrypt(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.Decrypt)) return this.emitDecrypt(expression.tokens)
+    if (this.isCall(expression.tokens, SystemFunctions.Arg)) return this.emitArg(expression.tokens)
+    if (this.isCall(expression.tokens, SystemFunctions.ArgCount)) return this.emitArgCount(expression.tokens)
+    if (this.isCall(expression.tokens, SystemFunctions.Map)) return this.emitMap(expression.tokens)
+    if (this.isCall(expression.tokens, SystemFunctions.MapGet)) return this.emitRuntimeCall(expression.tokens, 'lumen_map_get', LumenTypes.String, 2, 'mapGet')
+    if (this.isCall(expression.tokens, SystemFunctions.MapHas)) return this.emitRuntimeCall(expression.tokens, 'lumen_map_has', LumenTypes.Bool, 2, 'mapHas')
+    if (this.isCall(expression.tokens, SystemFunctions.Ok)) return this.emitRuntimeCall(expression.tokens, 'lumen_ok', LumenTypes.String, 1, 'ok')
+    if (this.isCall(expression.tokens, SystemFunctions.Err)) return this.emitRuntimeCall(expression.tokens, 'lumen_err', LumenTypes.String, 1, 'err')
+    if (this.isCall(expression.tokens, SystemFunctions.IsOk)) return this.emitRuntimeCall(expression.tokens, 'lumen_is_ok', LumenTypes.Bool, 1, 'isOk')
+    if (this.isCall(expression.tokens, SystemFunctions.ErrorMessage)) return this.emitRuntimeCall(expression.tokens, 'lumen_error_message', LumenTypes.String, 1, 'errorMessage')
+    if (this.isCall(expression.tokens, SystemFunctions.Some)) return this.emitRuntimeCall(expression.tokens, 'lumen_some', LumenTypes.String, 1, 'some')
+    if (this.isCall(expression.tokens, SystemFunctions.None)) return this.emitNone(expression.tokens)
+    if (this.isCall(expression.tokens, SystemFunctions.HasValue)) return this.emitRuntimeCall(expression.tokens, 'lumen_has_value', LumenTypes.Bool, 1, 'hasValue')
+    if (this.isCall(expression.tokens, SystemFunctions.ValueOr)) return this.emitRuntimeCall(expression.tokens, 'lumen_value_or', LumenTypes.String, 2, 'valueOr')
     if (this.isCall(expression.tokens, FsFunctions.ReadFile)) return this.emitReadFile(expression.tokens)
     if (this.isCall(expression.tokens, HttpFunctions.ServeFiles)) return this.emitServeFiles(expression.tokens)
     if (this.isCall(expression.tokens, HttpFunctions.ServeApi)) return this.emitServeApi(expression.tokens)
@@ -414,11 +508,18 @@ export class LLVMEmitter {
     if (this.isCall(expression.tokens, ThreadFunctions.StartThread)) return this.emitStartThread(expression.tokens)
     if (this.isCall(expression.tokens, ThreadFunctions.JoinThread)) return this.emitJoinThread(expression.tokens)
     if (this.isCall(expression.tokens, ThreadFunctions.AppendFile)) return this.emitAppendFile(expression.tokens)
+    if (this.isUserCall(expression.tokens)) return this.emitUserCall(expression.tokens)
     if (this.isFieldAccess(expression.tokens)) return this.emitFieldLoad(expression.tokens)
     if (this.isArrayAccess(expression.tokens)) return this.emitArrayLoad(expression.tokens)
 
     const assignmentIndex = this.findTopLevelOperator(expression.tokens, '=')
     if (assignmentIndex > 0) return this.emitAssignment(expression.tokens, assignmentIndex)
+
+    if (expression.tokens.length === 1 &&
+      expression.tokens[0].type === TokenType.String &&
+      expression.tokens[0].literal.includes('${')) {
+      return this.emitInterpolatedString(expression.tokens[0])
+    }
 
     if (expression.tokens.length === 2 &&
       expression.tokens[0].type === TokenType.Identifier &&
@@ -430,18 +531,57 @@ export class LLVMEmitter {
   }
 
   emitAssignment(tokens, index) {
-    const target = tokens[index - 1]
+    const targetTokens = tokens.slice(0, index)
+    const target = targetTokens[0]
     if (target.type !== TokenType.Identifier) {
       throw new Diagnostic('Assignment target must be an identifier', target.location, 'backend')
     }
 
-    const symbol = this.resolve(target.lexeme)
-    const value = this.emitRpn(this.toRpn(tokens.slice(index + 1)), target.location)
+    const targetPointer = this.emitAssignmentTargetPointer(targetTokens)
+    const value = this.emitExpression({
+      tokens: tokens.slice(index + 1),
+      location: target.location
+    })
 
-    this.lines.push(`  store ${this.llvmType(symbol.type)} ${this.cast(value, symbol.type)}, ptr ${symbol.pointer}`)
+    this.lines.push(`  store ${this.llvmType(targetPointer.type)} ${this.cast(value, targetPointer.type)}, ptr ${targetPointer.pointer}`)
     return {
-      type: symbol.type,
-      value: this.cast(value, symbol.type)
+      type: targetPointer.type,
+      value: this.cast(value, targetPointer.type)
+    }
+  }
+
+  emitAssignmentTargetPointer(tokens) {
+    if (this.isFieldAccess(tokens)) {
+      const base = this.resolve(tokens[0].lexeme)
+      const field = this.typeSystem.getField(base.type, tokens[2].lexeme)
+      const fieldIndex = this.typeSystem.getStruct(base.type).fields.indexOf(field)
+      const pointer = this.nextTemp()
+      this.lines.push(`  ${pointer} = getelementptr inbounds ${this.llvmType(base.type)}, ptr ${base.pointer}, i32 0, i32 ${fieldIndex}`)
+      return {
+        pointer,
+        type: field.type
+      }
+    }
+
+    if (this.isArrayAccess(tokens)) {
+      const base = this.resolve(tokens[0].lexeme)
+      const closeIndex = this.findMatching(tokens, 1, '[', ']')
+      const index = this.emitExpression({
+        tokens: tokens.slice(2, closeIndex),
+        location: tokens[0].location
+      })
+      const pointer = this.nextTemp()
+      this.lines.push(`  ${pointer} = getelementptr inbounds ${this.typeSystem.llvmArray(base.type, base.length)}, ptr ${base.pointer}, i32 0, i32 ${this.cast(index, LumenTypes.I32)}`)
+      return {
+        pointer,
+        type: this.typeSystem.elementType(base.type)
+      }
+    }
+
+    const symbol = this.resolve(tokens[0].lexeme)
+    return {
+      pointer: symbol.pointer,
+      type: symbol.type
     }
   }
 
@@ -506,6 +646,8 @@ export class LLVMEmitter {
     const arg = args[0]
 
     if (arg.length === 1 && arg[0].type === TokenType.String) {
+      if (arg[0].literal.includes('${')) return this.emitInterpolatedPrintln(arg[0])
+
       const format = this.globalCString('%s\n')
       const value = this.globalCString(arg[0].literal)
       this.lines.push(`  call i32 (ptr, ...) @printf(ptr ${format.pointer}, ptr ${value.pointer})`)
@@ -529,6 +671,81 @@ export class LLVMEmitter {
       type: LumenTypes.Void,
       value: ''
     }
+  }
+
+  emitInterpolatedPrintln(token) {
+    const parts = []
+    const values = []
+    let cursor = 0
+    const pattern = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g
+    let match = pattern.exec(token.literal)
+
+    while (match) {
+      parts.push(token.literal.slice(cursor, match.index))
+      const symbol = this.resolve(match[1])
+      values.push(symbol)
+      parts.push(this.printlnInterpolationFormat(symbol.type))
+      cursor = match.index + match[0].length
+      match = pattern.exec(token.literal)
+    }
+
+    parts.push(token.literal.slice(cursor))
+    const format = this.globalCString(`${parts.join('')}\n`)
+    const args = values.map(symbol => {
+      const value = this.nextTemp()
+      this.lines.push(`  ${value} = load ${this.llvmType(symbol.type)}, ptr ${symbol.pointer}`)
+      return `${this.printlnArgumentType(symbol.type)} ${this.printlnArgumentValue({
+        type: symbol.type,
+        value
+      })}`
+    })
+
+    this.lines.push(`  call i32 (ptr, ...) @printf(ptr ${format.pointer}${args.length ? `, ${args.join(', ')}` : ''})`)
+
+    return {
+      type: LumenTypes.Void,
+      value: ''
+    }
+  }
+
+  emitInterpolatedString(token) {
+    const variables = [...token.literal.matchAll(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g)]
+    if (variables.length === 0) {
+      const value = this.globalCString(token.literal)
+      return {
+        type: LumenTypes.String,
+        value: value.pointer
+      }
+    }
+
+    let cursor = 0
+    let current = null
+
+    for (const match of variables) {
+      const prefix = token.literal.slice(cursor, match.index)
+      if (prefix) {
+        const literal = this.globalCString(prefix)
+        current = current
+          ? this.emitStringConcat(current, { type: LumenTypes.String, value: literal.pointer })
+          : { type: LumenTypes.String, value: literal.pointer }
+      }
+
+      const symbol = this.resolve(match[1])
+      const value = this.nextTemp()
+      this.lines.push(`  ${value} = load ${this.llvmType(symbol.type)}, ptr ${symbol.pointer}`)
+      current = current
+        ? this.emitStringConcat(current, { type: symbol.type, value })
+        : { type: symbol.type, value }
+      cursor = match.index + match[0].length
+    }
+
+    const suffix = token.literal.slice(cursor)
+    if (suffix) {
+      const literal = this.globalCString(suffix)
+      current = this.emitStringConcat(current, { type: LumenTypes.String, value: literal.pointer })
+    }
+
+    return current
   }
 
   emitLen(tokens) {
@@ -593,6 +810,142 @@ export class LLVMEmitter {
     return {
       type: LumenTypes.String,
       value: result
+    }
+  }
+
+  emitArg(tokens) {
+    this.usesArgs = true
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 1) {
+      throw new Diagnostic('arg expects index', tokens[0].location, 'backend')
+    }
+
+    const index = this.emitExpression({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+    const result = this.nextTemp()
+    this.lines.push(`  ${result} = call ptr @lumen_arg(i32 ${this.cast(index, LumenTypes.I32)})`)
+
+    return {
+      type: LumenTypes.String,
+      value: result
+    }
+  }
+
+  emitArgCount(tokens) {
+    this.usesArgs = true
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 0) {
+      throw new Diagnostic('argCount expects no arguments', tokens[0].location, 'backend')
+    }
+
+    const result = this.nextTemp()
+    this.lines.push(`  ${result} = call i32 @lumen_arg_count()`)
+
+    return {
+      type: LumenTypes.I32,
+      value: result
+    }
+  }
+
+  emitMap(tokens) {
+    this.usesMaps = true
+    const args = this.callArguments(tokens)
+
+    if (args.length === 0 || args.length % 2 !== 0) {
+      throw new Diagnostic('map expects key/value string pairs', tokens[0].location, 'backend')
+    }
+
+    const values = args.map(arg => this.emitExpression({
+      tokens: arg,
+      location: tokens[0].location
+    }))
+
+    if (values.some(value => value.type !== LumenTypes.String)) {
+      throw new Diagnostic('map expects string keys and values', tokens[0].location, 'backend')
+    }
+
+    const result = this.nextTemp()
+    const pairs = values.map(value => `ptr ${value.value}`).join(', ')
+    this.lines.push(`  ${result} = call ptr (i32, ...) @lumen_map(i32 ${args.length / 2}, ${pairs})`)
+
+    return {
+      type: LumenTypes.String,
+      value: result
+    }
+  }
+
+  emitNone(tokens) {
+    this.usesOptions = true
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 0) {
+      throw new Diagnostic('none expects no arguments', tokens[0].location, 'backend')
+    }
+
+    const result = this.nextTemp()
+    this.lines.push(`  ${result} = call ptr @lumen_none()`)
+
+    return {
+      type: LumenTypes.String,
+      value: result
+    }
+  }
+
+  emitRuntimeCall(tokens, runtimeName, returnType, expectedCount, displayName) {
+    if (['lumen_map_get', 'lumen_map_has'].includes(runtimeName)) this.usesMaps = true
+    if (['lumen_ok', 'lumen_err', 'lumen_is_ok', 'lumen_error_message'].includes(runtimeName)) this.usesResults = true
+    if (['lumen_some', 'lumen_has_value', 'lumen_value_or'].includes(runtimeName)) this.usesOptions = true
+
+    const args = this.callArguments(tokens)
+    if (args.length !== expectedCount) {
+      throw new Diagnostic(`${displayName} expects ${expectedCount} argument(s)`, tokens[0].location, 'backend')
+    }
+
+    const values = args.map(arg => this.emitExpression({
+      tokens: arg,
+      location: tokens[0].location
+    }))
+    const result = this.nextTemp()
+    const signature = values.map(() => 'ptr').join(', ')
+    const callArgs = values.map(value => `ptr ${value.value}`).join(', ')
+    const llvmReturnType = this.llvmType(returnType)
+
+    this.lines.push(`  ${result} = call ${llvmReturnType} @${runtimeName}(${signature ? `${callArgs}` : ''})`)
+
+    return {
+      type: returnType,
+      value: result
+    }
+  }
+
+  emitUserCall(tokens) {
+    const signature = this.functionSignatures.get(tokens[0].lexeme)
+    const args = this.callArguments(tokens)
+
+    if (!signature || args.length !== signature.params.length) {
+      throw new Diagnostic(`Invalid call to ${tokens[0].lexeme}`, tokens[0].location, 'backend')
+    }
+
+    const values = args.map(arg => this.emitExpression({
+      tokens: arg,
+      location: tokens[0].location
+    }))
+    const result = signature.returnType === LumenTypes.Void ? null : this.nextTemp()
+    const callArgs = values.map((value, index) => {
+      const paramType = signature.params[index].type
+      return `${this.llvmType(paramType)} ${this.cast(value, paramType)}`
+    }).join(', ')
+    const prefix = result ? `${result} = ` : ''
+
+    this.lines.push(`  ${prefix}call ${this.llvmType(signature.returnType)} @${tokens[0].lexeme}(${callArgs})`)
+
+    return {
+      type: signature.returnType,
+      value: result ?? ''
     }
   }
 
@@ -1191,6 +1544,10 @@ export class LLVMEmitter {
     const op = token.lexeme
     const temp = this.nextTemp()
 
+    if (op === '+' && left.type === LumenTypes.String && right.type === LumenTypes.String) {
+      return this.emitStringConcat(left, right)
+    }
+
     if (['+', '-', '*', '/', '%'].includes(op)) {
       const type = this.typeSystem.widest(left.type, right.type)
       const instruction = this.arithmeticInstruction(op, type)
@@ -1214,6 +1571,16 @@ export class LLVMEmitter {
     return {
       type: LumenTypes.Bool,
       value: temp
+    }
+  }
+
+  emitStringConcat(left, right) {
+    this.usesStringRuntime = true
+    const result = this.nextTemp()
+    this.lines.push(`  ${result} = call ptr @lumen_string_concat(ptr ${left.value}, ptr ${right.value})`)
+    return {
+      type: LumenTypes.String,
+      value: result
     }
   }
 
@@ -1288,6 +1655,13 @@ export class LLVMEmitter {
     return tokens[0]?.lexeme === name &&
       tokens[1]?.lexeme === '(' &&
       tokens.at(-1)?.lexeme === ')'
+  }
+
+  isUserCall(tokens) {
+    return tokens[0]?.type === TokenType.Identifier &&
+      tokens[1]?.lexeme === '(' &&
+      tokens.at(-1)?.lexeme === ')' &&
+      this.functionSignatures.has(tokens[0].lexeme)
   }
 
   isStructLiteral(tokens) {
@@ -1557,6 +1931,13 @@ export class LLVMEmitter {
     if (type === LumenTypes.I64) return this.globalCString('%lld\n')
     if (type === LumenTypes.F32) return this.globalCString('%f\n')
     return this.globalCString('%d\n')
+  }
+
+  printlnInterpolationFormat(type) {
+    if (type === LumenTypes.String) return '%s'
+    if (type === LumenTypes.I64) return '%lld'
+    if (type === LumenTypes.F32) return '%f'
+    return '%d'
   }
 
   printlnArgumentType(type) {

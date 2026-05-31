@@ -1,7 +1,12 @@
 import { Diagnostic } from '../diagnostics/Diagnostic.js'
 import { Scope } from './Scope.js'
+import { ModuleRegistry } from './ModuleRegistry.js'
 
 export class SemanticAnalyzer {
+  constructor({ moduleRegistry = new ModuleRegistry() } = {}) {
+    this.moduleRegistry = moduleRegistry
+  }
+
   analyze(program) {
     const scope = new Scope()
 
@@ -42,6 +47,7 @@ export class SemanticAnalyzer {
   visit(node, scope) {
     if (!node) return
 
+    if (node.kind === 'ImportDeclaration') return this.visitImport(node, scope)
     if (node.kind === 'StructDeclaration') return
     if (node.kind === 'FunctionDeclaration') return this.visitFunction(node, scope)
     if (node.kind === 'BlockStatement') return this.visitBlock(node, scope)
@@ -50,6 +56,9 @@ export class SemanticAnalyzer {
     if (node.kind === 'ForOfStatement') return this.visitForOf(node, scope)
     if (node.kind === 'WhileStatement') return this.visitLoop(node, scope)
     if (node.kind === 'DoUntilStatement') return this.visitLoop(node, scope)
+    if (node.kind === 'IfStatement') return this.visitIf(node, scope)
+    if (node.kind === 'BreakStatement') return
+    if (node.kind === 'ContinueStatement') return
     if (node.kind === 'TryCatchStatement') return this.visitTryCatch(node, scope)
   }
 
@@ -67,6 +76,25 @@ export class SemanticAnalyzer {
     }
 
     this.visit(node.body, functionScope)
+  }
+
+  visitImport(node, scope) {
+    if (!this.moduleRegistry.hasModule(node.source)) {
+      throw new Diagnostic(`Unknown module "${node.source}"`, node.location, 'semantic')
+    }
+
+    for (const name of node.names) {
+      if (!this.moduleRegistry.has(node.source, name.name)) {
+        throw new Diagnostic(`Module "${node.source}" has no export "${name.name}"`, name.location, 'semantic')
+      }
+
+      scope.define(name.name, {
+        kind: 'import',
+        node: name,
+        module: node.source,
+        mutable: false
+      })
+    }
   }
 
   visitBlock(node, scope) {
@@ -110,6 +138,11 @@ export class SemanticAnalyzer {
 
   visitLoop(node, scope) {
     this.visit(node.body, new Scope(scope))
+  }
+
+  visitIf(node, scope) {
+    this.visit(node.consequent, new Scope(scope))
+    if (node.alternate) this.visit(node.alternate, new Scope(scope))
   }
 
   visitTryCatch(node, scope) {

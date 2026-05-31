@@ -26,6 +26,19 @@ export class ExpressionInspector {
     if (this.isCall(rawExpression, SystemFunctions.Env)) return LumenTypes.String
     if (this.isCall(rawExpression, SystemFunctions.Encrypt)) return LumenTypes.String
     if (this.isCall(rawExpression, SystemFunctions.Decrypt)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.Arg)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.ArgCount)) return LumenTypes.I32
+    if (this.isCall(rawExpression, SystemFunctions.Map)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.MapGet)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.MapHas)) return LumenTypes.Bool
+    if (this.isCall(rawExpression, SystemFunctions.Ok)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.Err)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.IsOk)) return LumenTypes.Bool
+    if (this.isCall(rawExpression, SystemFunctions.ErrorMessage)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.Some)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.None)) return LumenTypes.Unknown
+    if (this.isCall(rawExpression, SystemFunctions.HasValue)) return LumenTypes.Bool
+    if (this.isCall(rawExpression, SystemFunctions.ValueOr)) return LumenTypes.String
     if (this.isCall(rawExpression, FsFunctions.ReadFile)) return LumenTypes.String
     if (this.isCall(rawExpression, HttpFunctions.ServeFiles)) return LumenTypes.I32
     if (this.isCall(rawExpression, HttpFunctions.ServeApi)) return LumenTypes.I32
@@ -40,6 +53,7 @@ export class ExpressionInspector {
     if (this.isFieldAccess(rawExpression.tokens)) return this.fieldAccessType(rawExpression.tokens)
     if (this.isArrayLiteral(rawExpression.tokens)) return this.arrayLiteralType(rawExpression.tokens)
     if (this.isArrayAccess(rawExpression.tokens)) return this.arrayAccessType(rawExpression.tokens)
+    if (this.isUserCall(rawExpression.tokens)) return this.userCallType(rawExpression.tokens)
     if (this.isSingleIdentifier(rawExpression.tokens)) {
       return this.scope.resolve(rawExpression.tokens[0].lexeme)?.type ?? LumenTypes.Unknown
     }
@@ -83,6 +97,7 @@ export class ExpressionInspector {
       if (this.isFsCallName(rawExpression.tokens, token)) continue
       if (this.isHttpCallName(rawExpression.tokens, token)) continue
       if (this.isThreadCallName(rawExpression.tokens, token)) continue
+      if (this.isUserCallName(rawExpression.tokens, token)) continue
       if (this.isFilterParameter(rawExpression.tokens, token)) continue
       if (this.isStructLiteralName(rawExpression.tokens, token)) continue
       if (this.isKnownStructName(rawExpression.tokens, token)) continue
@@ -235,6 +250,22 @@ export class ExpressionInspector {
   isThreadCallName(tokens, token) {
     const index = tokens.indexOf(token)
     return this.threadLibrary.has(token.lexeme) && tokens[index + 1]?.lexeme === '('
+  }
+
+  isUserCall(tokens) {
+    return tokens[0]?.type === TokenType.Identifier &&
+      tokens[1]?.lexeme === '(' &&
+      tokens.at(-1)?.lexeme === ')' &&
+      this.scope.resolve(tokens[0].lexeme)?.kind === 'function'
+  }
+
+  userCallType(tokens) {
+    return this.scope.resolve(tokens[0].lexeme)?.type ?? LumenTypes.Unknown
+  }
+
+  isUserCallName(tokens, token) {
+    const index = tokens.indexOf(token)
+    return this.scope.resolve(token.lexeme)?.kind === 'function' && tokens[index + 1]?.lexeme === '('
   }
 
   isFilterParameter(tokens, token) {

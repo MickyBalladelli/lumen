@@ -1,0 +1,25 @@
+import { println } from "system"
+
+struct Point {
+  x: i32
+  y: i32
+}
+
+function main(): i32 {
+  let point = Point { x: 1, y: 2 }
+  let values: i32[] = [1, 2, 3]
+  let label = "hello " + "lumen"
+  let name = "compiler"
+  let greeting = "hi ${name}"
+  let result: Result<string> = ok("fine")
+
+  point.x = 4
+  values[0] = 8
+
+  println(point.x + values[0])
+  println(label)
+  println(greeting)
+  println(isOk(result))
+
+  return point.x + values[0]
+}

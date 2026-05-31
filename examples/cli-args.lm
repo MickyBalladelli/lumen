@@ -1,0 +1,8 @@
+function main(): i32 {
+  let first = arg(1)
+
+  println(includes(first, "first"))
+  println(argCount())
+
+  return 0
+}

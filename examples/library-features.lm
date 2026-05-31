@@ -1,0 +1,18 @@
+function main(): i32 {
+  let data = map("name", "lumen", "kind", "language")
+  let result = ok("worked")
+  let failure = err("broken")
+  let value: string? = some("present")
+  let empty: string? = none()
+
+  println(mapGet(data, "name"))
+  println(mapHas(data, "kind"))
+  println(isOk(result))
+  println(errorMessage(failure))
+  println(hasValue(value))
+  println(valueOr(value, "fallback"))
+  println(hasValue(empty))
+  println(valueOr(empty, "fallback"))
+
+  return 0
+}

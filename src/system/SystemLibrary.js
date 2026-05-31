@@ -6,7 +6,20 @@ export const SystemFunctions = Object.freeze({
   Uuid: 'uuid',
   Env: 'env',
   Encrypt: 'encrypt',
-  Decrypt: 'decrypt'
+  Decrypt: 'decrypt',
+  Arg: 'arg',
+  ArgCount: 'argCount',
+  Map: 'map',
+  MapGet: 'mapGet',
+  MapHas: 'mapHas',
+  Ok: 'ok',
+  Err: 'err',
+  IsOk: 'isOk',
+  ErrorMessage: 'errorMessage',
+  Some: 'some',
+  None: 'none',
+  HasValue: 'hasValue',
+  ValueOr: 'valueOr'
 })
 
 export class SystemLibrary {

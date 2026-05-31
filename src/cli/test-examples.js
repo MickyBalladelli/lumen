@@ -14,6 +14,10 @@ const compileOnly = new Set([
 ])
 
 const expectations = new Map([
+  ['advanced-foundation', {
+    stdout: '12\nhello lumen\nhi compiler\n1\n',
+    code: 12
+  }],
   ['array', {
     stdout: '16\n',
     code: 16
@@ -30,6 +34,14 @@ const expectations = new Map([
     stdout: '1\nhello lumen\nhello lumen\n',
     code: 0
   }],
+  ['cli-args', {
+    stdout: '1\n3\n',
+    code: 0
+  }],
+  ['control-flow', {
+    stdout: 'sum 23\n',
+    code: 23
+  }],
   ['do-until', {
     stdout: '10\n',
     code: 10
@@ -41,6 +53,10 @@ const expectations = new Map([
   ['for-of', {
     stdout: '26\n',
     code: 26
+  }],
+  ['library-features', {
+    stdout: 'lumen\n1\n1\nbroken\n1\npresent\n0\nfallback\n',
+    code: 0
   }],
   ['fs', {
     stdout: `${dataText}\n1\n`,
@@ -111,7 +127,8 @@ for (const file of files) {
     continue
   }
 
-  const result = await runExecutable(executablePath, {
+  const args = name === 'cli-args' ? ['first', 'second'] : []
+  const result = await runExecutable(executablePath, args, {
     LUMEN_DOTENV_PATH: join(examplesDir, '.env.test'),
     LUMEN_TEST_ENV: 'from-env'
   })
@@ -141,9 +158,9 @@ if (failures > 0) {
 
 console.log(`${files.length} example tests passed`)
 
-function runExecutable(path, env = {}) {
+function runExecutable(path, args = [], env = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(`./${path}`, {
+    const child = spawn(`./${path}`, args, {
       env: {
         ...process.env,
         ...env

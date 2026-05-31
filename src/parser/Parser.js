@@ -1,13 +1,18 @@
 import { TokenType } from '../lexer/TokenType.js'
 import { AstNodeRegistry } from '../ast/AstNodeRegistry.js'
+import { ExpressionParser } from './ExpressionParser.js'
 import {
   BlockStatementNode,
+  BreakStatementNode,
+  ContinueStatementNode,
   DoUntilStatementNode,
   ExpressionStatementNode,
   ForOfStatementNode,
   ForStatementNode,
   FunctionDeclarationNode,
   IdentifierNode,
+  IfStatementNode,
+  ImportDeclarationNode,
   ProgramNode,
   RawExpressionNode,
   ReturnStatementNode,
@@ -23,11 +28,13 @@ import {
 
 export class Parser {
   constructor(tokens, {
-    nodeRegistry = AstNodeRegistry.withDefaults()
+    nodeRegistry = AstNodeRegistry.withDefaults(),
+    expressionParser = new ExpressionParser()
   } = {}) {
     this.tokens = tokens
     this.current = 0
     this.nodeRegistry = nodeRegistry
+    this.expressionParser = expressionParser
   }
 
   parseProgram() {
@@ -47,10 +54,27 @@ export class Parser {
   declaration() {
     // This is the main extension point for future syntax families:
     // imports, structs, traits, modules, extern blocks, etc.
+    if (this.matchKeyword('import')) return this.importDeclaration()
     if (this.matchKeyword('struct')) return this.structDeclaration()
     if (this.matchKeyword('function')) return this.functionDeclaration()
     if (this.checkKeyword('let') || this.checkKeyword('const')) return this.variableDeclaration()
     return this.statement()
+  }
+
+  importDeclaration() {
+    const keyword = this.previous()
+    const names = []
+
+    this.consumePunctuation('{', 'Expected "{" after import')
+    do {
+      names.push(this.identifier())
+    } while (this.matchPunctuation(','))
+    this.consumePunctuation('}', 'Expected "}" after import names')
+    this.consumeKeyword('from', 'Expected from after import names')
+    const source = this.consume(TokenType.String, 'Expected module string')
+    this.consumeOptionalTopLevelTerminator()
+
+    return new ImportDeclarationNode(names, source.literal, keyword.location)
   }
 
   structDeclaration() {
@@ -133,6 +157,9 @@ export class Parser {
     // Statements stay separate from declarations so block grammar can evolve
     // without turning the parser into one giant switch.
     if (this.matchKeyword('for')) return this.forStatement()
+    if (this.matchKeyword('if')) return this.ifStatement()
+    if (this.matchKeyword('break')) return this.breakStatement()
+    if (this.matchKeyword('continue')) return this.continueStatement()
     if (this.matchKeyword('while')) return this.whileStatement()
     if (this.matchKeyword('do')) return this.doUntilStatement()
     if (this.matchKeyword('try')) return this.tryCatchStatement()
@@ -225,6 +252,32 @@ export class Parser {
     return new DoUntilStatementNode(body, test, keyword.location)
   }
 
+  ifStatement() {
+    const keyword = this.previous()
+    const test = this.rawExpressionUntil(['do', '{'])
+
+    this.matchKeyword('do')
+    const consequent = this.statement()
+    this.skipTerminators()
+    const alternate = this.matchKeyword('else')
+      ? this.statement()
+      : null
+
+    return new IfStatementNode(test, consequent, alternate, keyword.location)
+  }
+
+  breakStatement() {
+    const keyword = this.previous()
+    this.consumeOptionalTerminator()
+    return new BreakStatementNode(keyword.location)
+  }
+
+  continueStatement() {
+    const keyword = this.previous()
+    this.consumeOptionalTerminator()
+    return new ContinueStatementNode(keyword.location)
+  }
+
   returnStatement() {
     const keyword = this.previous()
     const argument = this.checkTerminator()
@@ -272,7 +325,9 @@ export class Parser {
       tokens.push(this.advance())
     }
 
-    return new RawExpressionNode(tokens, tokens[0]?.location ?? this.peek().location)
+    const expression = new RawExpressionNode(tokens, tokens[0]?.location ?? this.peek().location)
+    expression.parsed = this.expressionParser.parse(tokens)
+    return expression
   }
 
   identifier() {
@@ -287,6 +342,19 @@ export class Parser {
     if (this.matchPunctuation('[')) {
       this.consumePunctuation(']', 'Expected "]" after array type')
       name = `${name}[]`
+    }
+
+    if (this.matchOperator('?')) {
+      name = `${name}?`
+    }
+
+    if (this.matchOperator('<')) {
+      const args = []
+      do {
+        args.push(this.typeAnnotation().name)
+      } while (this.matchPunctuation(','))
+      this.consumeOperator('>', 'Expected ">" after generic type arguments')
+      name = `${name}<${args.join(',')}>`
     }
 
     return new TypeAnnotationNode(name, token.location)

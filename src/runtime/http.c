@@ -1,18 +1,29 @@
 #include <arpa/inet.h>
+#ifdef __APPLE__
 #include <CommonCrypto/CommonCryptor.h>
 #include <CommonCrypto/CommonDigest.h>
 #include <CommonCrypto/CommonHMAC.h>
 #include <CommonCrypto/CommonKeyDerivation.h>
 #include <CommonCrypto/CommonRandom.h>
+#include <crt_externs.h>
+#endif
 #include <errno.h>
 #include <netinet/in.h>
 #include <pthread.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <time.h>
 #include <unistd.h>
+
+#ifndef __APPLE__
+#define CC_SHA256_DIGEST_LENGTH 32
+typedef int CCOperation;
+#define kCCEncrypt 0
+#define kCCDecrypt 1
+#endif
 
 char *lumen_uuid(void) {
   static int seeded = 0;
@@ -104,6 +115,148 @@ char *lumen_env(const char *name) {
 
   fclose(file);
   return "";
+}
+
+char *lumen_arg(int index) {
+#ifdef __APPLE__
+  int argc = *_NSGetArgc();
+  char **argv = *_NSGetArgv();
+
+  if (index < 0 || index >= argc) return "";
+  return argv[index];
+#else
+  (void)index;
+  return "";
+#endif
+}
+
+int lumen_arg_count(void) {
+#ifdef __APPLE__
+  return *_NSGetArgc();
+#else
+  return 0;
+#endif
+}
+
+char *lumen_string_concat(const char *left, const char *right) {
+  size_t left_length = strlen(left);
+  size_t right_length = strlen(right);
+  char *out = malloc(left_length + right_length + 1);
+  if (!out) return "";
+
+  memcpy(out, left, left_length);
+  memcpy(out + left_length, right, right_length + 1);
+  return out;
+}
+
+static char *lumen_prefixed(const char *prefix, const char *value) {
+  size_t prefix_length = strlen(prefix);
+  size_t value_length = strlen(value);
+  char *out = malloc(prefix_length + value_length + 1);
+  if (!out) return "";
+
+  memcpy(out, prefix, prefix_length);
+  memcpy(out + prefix_length, value, value_length + 1);
+  return out;
+}
+
+char *lumen_ok(const char *value) {
+  return lumen_prefixed("ok:", value);
+}
+
+char *lumen_err(const char *message) {
+  return lumen_prefixed("err:", message);
+}
+
+int lumen_is_ok(const char *result) {
+  return strncmp(result, "ok:", 3) == 0;
+}
+
+char *lumen_error_message(const char *result) {
+  if (strncmp(result, "err:", 4) != 0) return "";
+  return (char *)result + 4;
+}
+
+char *lumen_some(const char *value) {
+  return lumen_prefixed("some:", value);
+}
+
+char *lumen_none(void) {
+  return "";
+}
+
+int lumen_has_value(const char *option) {
+  return strncmp(option, "some:", 5) == 0;
+}
+
+char *lumen_value_or(const char *option, const char *fallback) {
+  if (strncmp(option, "some:", 5) == 0) return (char *)option + 5;
+  return (char *)fallback;
+}
+
+char *lumen_map(int count, ...) {
+  va_list args;
+  size_t total = 1;
+
+  va_start(args, count);
+  for (int index = 0; index < count; index += 1) {
+    const char *key = va_arg(args, const char *);
+    const char *value = va_arg(args, const char *);
+    total += strlen(key) + strlen(value) + 3;
+  }
+  va_end(args);
+
+  char *out = malloc(total + 1);
+  if (!out) return "";
+
+  size_t offset = 0;
+  out[offset++] = '\n';
+  va_start(args, count);
+  for (int index = 0; index < count; index += 1) {
+    const char *key = va_arg(args, const char *);
+    const char *value = va_arg(args, const char *);
+    size_t key_length = strlen(key);
+    size_t value_length = strlen(value);
+
+    memcpy(out + offset, key, key_length);
+    offset += key_length;
+    out[offset++] = '=';
+    memcpy(out + offset, value, value_length);
+    offset += value_length;
+    out[offset++] = '\n';
+  }
+  va_end(args);
+
+  out[offset] = '\0';
+  return out;
+}
+
+char *lumen_map_get(const char *map, const char *key) {
+  size_t key_length = strlen(key);
+  const char *cursor = map;
+
+  while ((cursor = strchr(cursor, '\n'))) {
+    cursor += 1;
+    if (strncmp(cursor, key, key_length) == 0 && cursor[key_length] == '=') {
+      const char *value_start = cursor + key_length + 1;
+      const char *value_end = strchr(value_start, '\n');
+      if (!value_end) value_end = value_start + strlen(value_start);
+
+      size_t value_length = (size_t)(value_end - value_start);
+      char *out = malloc(value_length + 1);
+      if (!out) return "";
+
+      memcpy(out, value_start, value_length);
+      out[value_length] = '\0';
+      return out;
+    }
+  }
+
+  return "";
+}
+
+int lumen_map_has(const char *map, const char *key) {
+  return strlen(lumen_map_get(map, key)) > 0;
 }
 
 static const char lumen_base64_table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -206,6 +359,7 @@ static int lumen_protocol_is_aes256(const char *protocol) {
 }
 
 static int lumen_derive_crypto_keys(const char *password, const unsigned char *salt, unsigned char *keys) {
+#ifdef __APPLE__
   return CCKeyDerivationPBKDF(
     kCCPBKDF2,
     password,
@@ -217,9 +371,16 @@ static int lumen_derive_crypto_keys(const char *password, const unsigned char *s
     keys,
     64
   ) == kCCSuccess;
+#else
+  (void)password;
+  (void)salt;
+  (void)keys;
+  return 0;
+#endif
 }
 
 static int lumen_aes_ctr_crypt(const unsigned char *input, size_t length, const unsigned char *key, const unsigned char *iv, unsigned char *output, CCOperation operation) {
+#ifdef __APPLE__
   CCCryptorRef cryptor = NULL;
   CCCryptorStatus status = CCCryptorCreateWithMode(
     operation,
@@ -243,18 +404,42 @@ static int lumen_aes_ctr_crypt(const unsigned char *input, size_t length, const 
   CCCryptorRelease(cryptor);
 
   return status == kCCSuccess && moved == length;
+#else
+  (void)input;
+  (void)length;
+  (void)key;
+  (void)iv;
+  (void)output;
+  (void)operation;
+  return 0;
+#endif
 }
 
 static void lumen_crypto_tag(const unsigned char *key, const unsigned char *salt, const unsigned char *iv, const unsigned char *cipher, size_t cipher_length, unsigned char *tag) {
+#ifdef __APPLE__
   CCHmacContext context;
   CCHmacInit(&context, kCCHmacAlgSHA256, key, 32);
   CCHmacUpdate(&context, salt, 16);
   CCHmacUpdate(&context, iv, 16);
   CCHmacUpdate(&context, cipher, cipher_length);
   CCHmacFinal(&context, tag);
+#else
+  (void)key;
+  (void)salt;
+  (void)iv;
+  (void)cipher;
+  (void)cipher_length;
+  memset(tag, 0, CC_SHA256_DIGEST_LENGTH);
+#endif
 }
 
 char *lumen_encrypt(const char *value, const char *password, const char *protocol) {
+#ifndef __APPLE__
+  (void)value;
+  (void)password;
+  (void)protocol;
+  return "";
+#else
   if (!lumen_protocol_is_aes256(protocol)) return "";
 
   unsigned char salt[16];
@@ -319,9 +504,16 @@ char *lumen_encrypt(const char *value, const char *password, const char *protoco
   free(cipher_text);
   free(tag_text);
   return out;
+#endif
 }
 
 char *lumen_decrypt(const char *value, const char *password, const char *protocol) {
+#ifndef __APPLE__
+  (void)value;
+  (void)password;
+  (void)protocol;
+  return "";
+#else
   if (!lumen_protocol_is_aes256(protocol)) return "";
 
   char *copy = lumen_strdup(value);
@@ -413,6 +605,7 @@ char *lumen_decrypt(const char *value, const char *password, const char *protoco
   free(cipher);
   free(tag);
   return (char *)plain;
+#endif
 }
 
 typedef struct {

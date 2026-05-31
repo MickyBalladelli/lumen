@@ -32,7 +32,9 @@ export class TypeSystem {
 
   assertKnown(typeName) {
     const normalized = this.normalize(typeName)
+    if (this.isNullable(normalized)) return this.assertKnown(this.nonNullable(normalized))
     if (this.isArray(normalized)) return this.assertKnown(this.elementType(normalized))
+    if (this.isGeneric(normalized)) return this.genericArgs(normalized).every(arg => this.assertKnown(arg))
     return this.known.has(normalized)
   }
 
@@ -46,6 +48,8 @@ export class TypeSystem {
     if (normalized === LumenTypes.Semaphore) return 'ptr'
     if (normalized === LumenTypes.Thread) return 'ptr'
     if (normalized === LumenTypes.Void) return 'void'
+    if (this.isNullable(normalized)) return this.llvm(this.nonNullable(normalized))
+    if (this.isGeneric(normalized)) return 'ptr'
     if (this.structs.has(normalized)) return `%${normalized}`
 
     return 'ptr'
@@ -60,11 +64,15 @@ export class TypeSystem {
     const to = this.normalize(toType)
 
     if (from === to) return true
+    if (this.isNullable(to) && this.canAssign(from, this.nonNullable(to))) return true
+    if (from === LumenTypes.Unknown && this.isNullable(to)) return true
     if (this.isArray(from) || this.isArray(to)) {
       return this.isArray(from) &&
         this.isArray(to) &&
         this.canAssign(this.elementType(from), this.elementType(to))
     }
+    if (this.isGeneric(to) && from === LumenTypes.String) return true
+    if (this.isGeneric(from) || this.isGeneric(to)) return from === to
     if (from === LumenTypes.I32 && [LumenTypes.I64, LumenTypes.F32].includes(to)) return true
     if (from === LumenTypes.Bool && this.isNumeric(to)) return true
 
@@ -90,6 +98,23 @@ export class TypeSystem {
 
   isArray(typeName) {
     return typeof typeName === 'string' && typeName.endsWith('[]')
+  }
+
+  isNullable(typeName) {
+    return typeof typeName === 'string' && typeName.endsWith('?')
+  }
+
+  isGeneric(typeName) {
+    return typeof typeName === 'string' && typeName.includes('<') && typeName.endsWith('>')
+  }
+
+  genericArgs(typeName) {
+    if (!this.isGeneric(typeName)) return []
+    return typeName.slice(typeName.indexOf('<') + 1, -1).split(',').map(type => type.trim())
+  }
+
+  nonNullable(typeName) {
+    return this.isNullable(typeName) ? typeName.slice(0, -1) : typeName
   }
 
   elementType(typeName) {

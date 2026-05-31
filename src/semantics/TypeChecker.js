@@ -6,6 +6,7 @@ import { LumenTypes, TypeSystem } from './TypeSystem.js'
 export class TypeChecker {
   constructor({ typeSystem = new TypeSystem() } = {}) {
     this.typeSystem = typeSystem
+    this.loopDepth = 0
   }
 
   check(program) {
@@ -49,6 +50,7 @@ export class TypeChecker {
   checkNode(node, scope, currentFunction) {
     if (!node) return LumenTypes.Void
 
+    if (node.kind === 'ImportDeclaration') return LumenTypes.Void
     if (node.kind === 'StructDeclaration') return LumenTypes.Void
     if (node.kind === 'FunctionDeclaration') return this.checkFunction(node, scope)
     if (node.kind === 'BlockStatement') return this.checkBlock(node, scope, currentFunction)
@@ -57,6 +59,9 @@ export class TypeChecker {
     if (node.kind === 'ForOfStatement') return this.checkForOf(node, scope, currentFunction)
     if (node.kind === 'WhileStatement') return this.checkWhile(node, scope, currentFunction)
     if (node.kind === 'DoUntilStatement') return this.checkDoUntil(node, scope, currentFunction)
+    if (node.kind === 'IfStatement') return this.checkIf(node, scope, currentFunction)
+    if (node.kind === 'BreakStatement') return this.checkLoopControl(node, 'break')
+    if (node.kind === 'ContinueStatement') return this.checkLoopControl(node, 'continue')
     if (node.kind === 'TryCatchStatement') return this.checkTryCatch(node, scope, currentFunction)
     if (node.kind === 'ThrowStatement') return this.checkThrow(node, scope)
     if (node.kind === 'ReturnStatement') return this.checkReturn(node, scope, currentFunction)
@@ -139,7 +144,7 @@ export class TypeChecker {
 
     if (node.test) this.checkExpression(node.test, scope)
     if (node.update) this.checkExpression(node.update, scope)
-    this.checkNode(node.body, scope, currentFunction)
+    this.withLoop(() => this.checkNode(node.body, scope, currentFunction))
     return LumenTypes.Void
   }
 
@@ -163,19 +168,40 @@ export class TypeChecker {
       mutable: false
     })
 
-    this.checkNode(node.body, scope, currentFunction)
+    this.withLoop(() => this.checkNode(node.body, scope, currentFunction))
     return LumenTypes.Void
   }
 
   checkWhile(node, parentScope, currentFunction) {
     this.checkExpression(node.test, parentScope)
-    this.checkNode(node.body, new Scope(parentScope), currentFunction)
+    this.withLoop(() => this.checkNode(node.body, new Scope(parentScope), currentFunction))
     return LumenTypes.Void
   }
 
   checkDoUntil(node, parentScope, currentFunction) {
-    this.checkNode(node.body, new Scope(parentScope), currentFunction)
+    this.withLoop(() => this.checkNode(node.body, new Scope(parentScope), currentFunction))
     this.checkExpression(node.test, parentScope)
+    return LumenTypes.Void
+  }
+
+  withLoop(callback) {
+    this.loopDepth += 1
+    callback()
+    this.loopDepth -= 1
+  }
+
+  checkLoopControl(node, name) {
+    if (this.loopDepth === 0) {
+      throw new Diagnostic(`${name} can only be used inside a loop`, node.location, 'type')
+    }
+
+    return LumenTypes.Void
+  }
+
+  checkIf(node, parentScope, currentFunction) {
+    this.checkExpression(node.test, parentScope)
+    this.checkNode(node.consequent, new Scope(parentScope), currentFunction)
+    if (node.alternate) this.checkNode(node.alternate, new Scope(parentScope), currentFunction)
     return LumenTypes.Void
   }
 

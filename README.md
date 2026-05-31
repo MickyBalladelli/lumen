@@ -57,6 +57,30 @@ function main(): i32 {
 
 The native linker expects an executable program to provide `main`.
 
+User-defined functions can call other user-defined functions.
+
+```lumen
+function add(left: i32, right: i32): i32 {
+  return left + right
+}
+
+function main(): i32 {
+  return add(1, 2)
+}
+```
+
+### Imports
+
+Import declarations reserve module boundaries for the standard library split.
+The semantic pass validates module names and exported symbols. Helpers remain
+available globally for old examples while imports become the preferred style.
+
+```lumen
+import { println } from "system"
+```
+
+Available modules today: `system`, `fs`, `http`, and `thread`.
+
 ### Variables
 
 Use `let` for mutable values and `const` for fixed values.
@@ -78,12 +102,16 @@ Current built-in types:
 - `f32`: 32-bit floating point number
 - `bool`: boolean value
 - `string`: string value for printing
+- `T?`: nullable option-shaped value, currently used with string helpers
+- `Result<T>` and `Map<K,V>`: generic runtime-backed helper types
 - `void`: no value
 
 ```lumen
 let count: i32 = 3
 let big: i64 = 10000000000
 let ratio: f32 = 1.5 + 2.25
+let maybeName: string? = none()
+let result: Result<string> = ok("ready")
 ```
 
 ### Object Types
@@ -166,6 +194,32 @@ do {
 } until total == 10
 ```
 
+Use `break` and `continue` inside loops.
+
+```lumen
+for (let i: i32 = 0; i < 10; i++) {
+  if i == 2 {
+    continue
+  }
+
+  if i == 8 {
+    break
+  }
+}
+```
+
+### Branches
+
+`if / else` branches compile to native control flow.
+
+```lumen
+if total > 10 {
+  println("large")
+} else {
+  println("small")
+}
+```
+
 ### Expressions
 
 Current compiled expressions support:
@@ -174,6 +228,7 @@ Current compiled expressions support:
 - arithmetic: `+`, `-`, `*`, `/`, `%`
 - comparisons: `<`, `<=`, `>`, `>=`, `==`, `!=`
 - increment: `i++`
+- user function calls: `add(1, 2)`
 
 ### Helper functions
 
@@ -189,6 +244,20 @@ println(total < 10)
 ```
 
 It lowers to native `printf` in the LLVM backend.
+
+String literals in `println` support simple interpolation.
+
+```lumen
+let name = "lumen"
+println("hello ${name}")
+```
+
+String concatenation and interpolation also work in string expressions.
+
+```lumen
+let label = "hello " + "lumen"
+let greeting = "hello ${name}"
+```
 
 `len(...)` returns the fixed length of an array.
 
@@ -228,6 +297,47 @@ export API_KEY="dev-key"
 ```
 
 Real process environment values win over `.env` values.
+
+`arg(index)` reads a CLI argument and `argCount()` returns the argument count.
+
+```lumen
+println(arg(1))
+println(argCount())
+```
+
+`map(...)`, `mapGet(...)`, and `mapHas(...)` provide a simple string-keyed map.
+
+```lumen
+let headers = map("content-type", "application/json", "x-lumen", "yes")
+println(mapGet(headers, "content-type"))
+println(mapHas(headers, "x-lumen"))
+```
+
+`ok(...)`, `err(...)`, `isOk(...)`, and `errorMessage(...)` provide a small
+Result-style helper set.
+
+```lumen
+let result = err("missing file")
+println(isOk(result))
+println(errorMessage(result))
+```
+
+`some(...)`, `none()`, `hasValue(...)`, and `valueOr(...)` provide option-style
+nullable helpers.
+
+```lumen
+let name: string? = some("lumen")
+println(valueOr(name, "fallback"))
+```
+
+### Assignment
+
+Variables, struct fields, and array elements can be assigned.
+
+```lumen
+point.x = 4
+values[0] = 8
+```
 
 `encrypt(value, key, protocol?)` encrypts a string and returns a portable
 encoded string. `decrypt(value, key, protocol?)` reverses it.
@@ -401,6 +511,9 @@ The first backend supports numeric programs: `i32`, `i64`, `f32`, `bool`, variab
 assignment, arithmetic, comparisons, returns, classic `for` loops, and
 `println(...)` for strings, integers, floats, and booleans.
 
+Diagnostics include a source line and caret when compilation fails through the
+compiler pipeline.
+
 ## Use as library
 
 ```js
@@ -422,6 +535,9 @@ console.log(ast)
 ## Examples
 
 - `examples/basic.lm`: variables, function, return
+- `examples/advanced-foundation.lm`: field assignment, array assignment, string concat, interpolation, generic helper type
+- `examples/cli-args.lm`: CLI arguments
+- `examples/control-flow.lm`: `if`, `else`, `break`, `continue`, user function calls, interpolation, imports
 - `examples/crypto.lm`: `encrypt` and `decrypt`
 - `examples/do-until.lm`: do-until loop
 - `examples/env.lm`: read environment variables with `env`
@@ -432,6 +548,7 @@ console.log(ast)
 - `examples/http-api.lm`: API server example
 - `examples/http-files.lm`: static file server example
 - `examples/http-server.lm`: static files plus API routes
+- `examples/library-features.lm`: maps, Result helpers, nullable option helpers
 - `examples/newline-continuation.lm`: newline after incomplete expression
 - `examples/native-main.lm`: compiles to LLVM IR and native code
 - `examples/numbers.lm`: `i64` and `f32` numbers
@@ -473,8 +590,23 @@ src/
   compiler/
     Compiler.js          end-to-end pipeline and clang driver
   runtime/
-    CompilerOptions.js   future runtime/compiler toggles
+    CompilerOptions.js   runtime/compiler toggles including ownership mode
+    system.c             system runtime split point
+    fs.c                 fs runtime split point
+    http_runtime.c       http runtime split point
+    thread.c             thread runtime split point
+    crypto.c             crypto runtime split point
+    string.c             string runtime split point
 ```
+
+The C runtime is still built as one translation unit for easy linking, but it is
+organized internally by system, fs, http, thread, crypto, string, map, result,
+option, and CLI helper sections. Platform-specific bits use macOS guards and
+Linux-safe fallbacks where a native provider is not wired yet.
+
+Ownership settings are exposed through `CompilerOptions` with `ownership` values
+such as `manual`, `arc`, `borrow`, `gc`, and `hybrid` reserved for future runtime
+strategies.
 
 ## Extension path
 

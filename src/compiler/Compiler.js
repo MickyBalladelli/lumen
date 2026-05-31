@@ -8,6 +8,7 @@ import { TypeChecker } from '../semantics/TypeChecker.js'
 import { TypeSystem } from '../semantics/TypeSystem.js'
 import { IRBuilder } from '../ir/IRBuilder.js'
 import { LLVMEmitter } from '../backend/LLVMEmitter.js'
+import { Diagnostic } from '../diagnostics/Diagnostic.js'
 
 export class Compiler {
   constructor({
@@ -28,20 +29,25 @@ export class Compiler {
   }
 
   compileSource(source) {
-    const tokens = new this.tokenizer(source).tokenize()
-    const ast = new this.parser(tokens).parseProgram()
+    try {
+      const tokens = new this.tokenizer(source).tokenize()
+      const ast = new this.parser(tokens).parseProgram()
 
-    this.semanticAnalyzer.analyze(ast)
-    this.typeChecker.check(ast)
+      this.semanticAnalyzer.analyze(ast)
+      this.typeChecker.check(ast)
 
-    const ir = this.irBuilder.build(ast)
-    const llvm = this.backend.emit(ir)
+      const ir = this.irBuilder.build(ast)
+      const llvm = this.backend.emit(ir)
 
-    return {
-      tokens,
-      ast,
-      ir,
-      llvm
+      return {
+        tokens,
+        ast,
+        ir,
+        llvm
+      }
+    } catch (error) {
+      if (error instanceof Diagnostic) throw error.withSource(source)
+      throw error
     }
   }
 
