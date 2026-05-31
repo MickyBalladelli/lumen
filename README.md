@@ -195,6 +195,21 @@ let id = uuid()
 println(id)
 ```
 
+`encrypt(value, key, protocol?)` encrypts a string and returns a portable
+encoded string. `decrypt(value, key, protocol?)` reverses it.
+
+```lumen
+let encrypted = encrypt("hello lumen", "correct horse battery staple")
+let decrypted = decrypt(encrypted, "correct horse battery staple")
+
+println(includes(encrypted, "lumen:v1"))
+println(decrypted)
+```
+
+The default protocol is `AES-256`, currently implemented as
+`AES-256-CTR-HMAC-SHA256` with PBKDF2 key derivation, random salt, random nonce,
+and authentication before decrypt.
+
 `filter(...)` can be used in a for-of loop with a JS-like arrow predicate.
 
 ```lumen
@@ -373,6 +388,7 @@ console.log(ast)
 ## Examples
 
 - `examples/basic.lm`: variables, function, return
+- `examples/crypto.lm`: `encrypt` and `decrypt`
 - `examples/array.lm`: arrays of numbers and structs
 - `examples/for-loop.lm`: classic for loop semicolon rule
 - `examples/for-of.lm`: for-of loop over arrays

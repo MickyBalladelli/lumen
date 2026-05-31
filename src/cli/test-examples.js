@@ -26,6 +26,10 @@ const expectations = new Map([
     stdout: '10\n',
     code: 10
   }],
+  ['crypto', {
+    stdout: '1\nhello lumen\nhello lumen\n',
+    code: 0
+  }],
   ['for-of', {
     stdout: '26\n',
     code: 26

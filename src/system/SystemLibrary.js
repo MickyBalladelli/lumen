@@ -3,7 +3,9 @@ export const SystemFunctions = Object.freeze({
   Len: 'len',
   Filter: 'filter',
   Includes: 'includes',
-  Uuid: 'uuid'
+  Uuid: 'uuid',
+  Encrypt: 'encrypt',
+  Decrypt: 'decrypt'
 })
 
 export class SystemLibrary {

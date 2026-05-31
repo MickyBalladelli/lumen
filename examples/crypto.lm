@@ -1,0 +1,14 @@
+function main(): i32 {
+  let secret = "hello lumen"
+  let key = "correct horse battery staple"
+  let encrypted = encrypt(secret, key)
+  let decrypted = decrypt(encrypted, key)
+  let encryptedCustom = encrypt(secret, key, "AES-256-CTR-HMAC-SHA256")
+  let decryptedCustom = decrypt(encryptedCustom, key, "AES-256-CTR-HMAC-SHA256")
+
+  println(includes(encrypted, "lumen:v1"))
+  println(decrypted)
+  println(decryptedCustom)
+
+  return 0
+}

@@ -33,6 +33,7 @@ export class LLVMEmitter {
     this.usesFileIO = false
     this.usesHttp = false
     this.usesUuid = false
+    this.usesCrypto = false
     this.usesThread = false
     const typeDefinitions = irModule.structs.map(struct => this.emitStructType(struct))
     const functions = irModule.functions.flatMap(func => this.emitFunction(func))
@@ -50,6 +51,8 @@ export class LLVMEmitter {
       this.usesFileIO ? 'declare ptr @malloc(i64)' : '',
       this.usesFileIO ? 'declare i32 @fclose(ptr)' : '',
       this.usesUuid ? 'declare ptr @lumen_uuid()' : '',
+      this.usesCrypto ? 'declare ptr @lumen_encrypt(ptr, ptr, ptr)' : '',
+      this.usesCrypto ? 'declare ptr @lumen_decrypt(ptr, ptr, ptr)' : '',
       this.usesHttp ? 'declare i32 @lumen_http_serve_files(i32, ptr)' : '',
       this.usesHttp ? 'declare i32 @lumen_http_serve_api(i32, ptr, ptr, ptr, ptr)' : '',
       this.usesHttp ? 'declare i32 @lumen_http_serve_http(i32, ptr, ptr, ptr, ptr, ptr, i32)' : '',
@@ -358,6 +361,8 @@ export class LLVMEmitter {
     if (this.isCall(expression.tokens, SystemFunctions.Len)) return this.emitLen(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.Includes)) return this.emitIncludes(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.Uuid)) return this.emitUuid(expression.tokens)
+    if (this.isCall(expression.tokens, SystemFunctions.Encrypt)) return this.emitEncrypt(expression.tokens)
+    if (this.isCall(expression.tokens, SystemFunctions.Decrypt)) return this.emitDecrypt(expression.tokens)
     if (this.isCall(expression.tokens, FsFunctions.ReadFile)) return this.emitReadFile(expression.tokens)
     if (this.isCall(expression.tokens, HttpFunctions.ServeFiles)) return this.emitServeFiles(expression.tokens)
     if (this.isCall(expression.tokens, HttpFunctions.ServeApi)) return this.emitServeApi(expression.tokens)
@@ -521,6 +526,84 @@ export class LLVMEmitter {
     return {
       type: LumenTypes.String,
       value
+    }
+  }
+
+  emitEncrypt(tokens) {
+    this.usesCrypto = true
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 2 && args.length !== 3) {
+      throw new Diagnostic('encrypt expects value, key, and optional protocol', tokens[0].location, 'backend')
+    }
+
+    const value = this.emitExpression({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+    const key = this.emitExpression({
+      tokens: args[1],
+      location: tokens[0].location
+    })
+    const protocol = args[2]
+      ? this.emitExpression({
+          tokens: args[2],
+          location: tokens[0].location
+        })
+      : {
+          type: LumenTypes.String,
+          value: this.globalCString('AES-256').pointer
+        }
+
+    if (value.type !== LumenTypes.String || key.type !== LumenTypes.String || protocol.type !== LumenTypes.String) {
+      throw new Diagnostic('encrypt expects string arguments', tokens[0].location, 'backend')
+    }
+
+    const result = this.nextTemp()
+    this.lines.push(`  ${result} = call ptr @lumen_encrypt(ptr ${value.value}, ptr ${key.value}, ptr ${protocol.value})`)
+
+    return {
+      type: LumenTypes.String,
+      value: result
+    }
+  }
+
+  emitDecrypt(tokens) {
+    this.usesCrypto = true
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 2 && args.length !== 3) {
+      throw new Diagnostic('decrypt expects value, key, and optional protocol', tokens[0].location, 'backend')
+    }
+
+    const value = this.emitExpression({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+    const key = this.emitExpression({
+      tokens: args[1],
+      location: tokens[0].location
+    })
+    const protocol = args[2]
+      ? this.emitExpression({
+          tokens: args[2],
+          location: tokens[0].location
+        })
+      : {
+          type: LumenTypes.String,
+          value: this.globalCString('AES-256').pointer
+        }
+
+    if (value.type !== LumenTypes.String || key.type !== LumenTypes.String || protocol.type !== LumenTypes.String) {
+      throw new Diagnostic('decrypt expects string arguments', tokens[0].location, 'backend')
+    }
+
+    const result = this.nextTemp()
+    this.lines.push(`  ${result} = call ptr @lumen_decrypt(ptr ${value.value}, ptr ${key.value}, ptr ${protocol.value})`)
+
+    return {
+      type: LumenTypes.String,
+      value: result
     }
   }
 

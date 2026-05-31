@@ -23,6 +23,8 @@ export class ExpressionInspector {
     if (this.isCall(rawExpression, SystemFunctions.Filter)) return this.filterType(rawExpression.tokens)
     if (this.isCall(rawExpression, SystemFunctions.Includes)) return this.includesType(rawExpression.tokens)
     if (this.isCall(rawExpression, SystemFunctions.Uuid)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.Encrypt)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.Decrypt)) return LumenTypes.String
     if (this.isCall(rawExpression, FsFunctions.ReadFile)) return LumenTypes.String
     if (this.isCall(rawExpression, HttpFunctions.ServeFiles)) return LumenTypes.I32
     if (this.isCall(rawExpression, HttpFunctions.ServeApi)) return LumenTypes.I32
