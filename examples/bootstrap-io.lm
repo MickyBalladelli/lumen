@@ -1,0 +1,11 @@
+function main(): i32 {
+  let path = "build/bootstrap-io.txt"
+  let content = "lumen can write files"
+  let code = writeFile(path, content)
+  let read = readFile(path)
+
+  println(code)
+  println(read)
+
+  return code
+}

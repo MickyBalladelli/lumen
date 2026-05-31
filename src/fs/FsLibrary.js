@@ -1,5 +1,6 @@
 export const FsFunctions = Object.freeze({
-  ReadFile: 'readFile'
+  ReadFile: 'readFile',
+  WriteFile: 'writeFile'
 })
 
 export class FsLibrary {

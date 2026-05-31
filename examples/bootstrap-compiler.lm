@@ -1,0 +1,16 @@
+function main(): i32 {
+  let source = 'function main(): i32 {
+  let value = 1
+  return value
+}'
+  let tokens = tokenizeSource(source)
+  let summary = parseSummary(source)
+  let snippet = sourceSnippet(source, 2, 7)
+
+  println(listLen(tokens))
+  println(listGet(tokens, 0))
+  println(summary)
+  println(snippet)
+
+  return 0
+}

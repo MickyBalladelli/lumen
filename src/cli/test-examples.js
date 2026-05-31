@@ -36,6 +36,22 @@ const expectations = new Map([
     stdout: 'hello\n3\n',
     code: 3
   }],
+  ['bootstrap-compiler', {
+    stdout: '14\nfunction\nfunctions=1 lets=1\n  let value = 1\n      ^\n',
+    code: 0
+  }],
+  ['bootstrap-containers', {
+    stdout: 'hello compiler\n2\nparser\ni32\n1\n',
+    code: 2
+  }],
+  ['bootstrap-exec', {
+    stdout: '0\n',
+    code: 0
+  }],
+  ['bootstrap-io', {
+    stdout: '0\nlumen can write files\n',
+    code: 0
+  }],
   ['for-loop', {
     stdout: '10\n',
     code: 10

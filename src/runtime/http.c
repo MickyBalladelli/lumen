@@ -141,6 +141,20 @@ int lumen_arg_count(void) {
 #endif
 }
 
+int lumen_write_file(const char *path, const char *content) {
+  FILE *file = fopen(path, "wb");
+  if (!file) return 1;
+
+  size_t length = strlen(content);
+  size_t written = fwrite(content, 1, length, file);
+  fclose(file);
+  return written == length ? 0 : 1;
+}
+
+int lumen_exec(const char *command) {
+  return system(command);
+}
+
 char *lumen_string_concat(const char *left, const char *right) {
   size_t left_length = strlen(left);
   size_t right_length = strlen(right);
@@ -149,6 +163,153 @@ char *lumen_string_concat(const char *left, const char *right) {
 
   memcpy(out, left, left_length);
   memcpy(out + left_length, right, right_length + 1);
+  return out;
+}
+
+char *lumen_string_builder(void) {
+  return lumen_strdup("");
+}
+
+char *lumen_string_builder_append(const char *builder, const char *value) {
+  return lumen_string_concat(builder, value);
+}
+
+char *lumen_list(void) {
+  return lumen_strdup("\n");
+}
+
+char *lumen_list_push(const char *list, const char *value) {
+  size_t list_length = strlen(list);
+  size_t value_length = strlen(value);
+  char *out = malloc(list_length + value_length + 2);
+  if (!out) return "";
+
+  memcpy(out, list, list_length);
+  memcpy(out + list_length, value, value_length);
+  out[list_length + value_length] = '\n';
+  out[list_length + value_length + 1] = '\0';
+  return out;
+}
+
+char *lumen_list_get(const char *list, int index) {
+  int current = 0;
+  const char *cursor = list;
+
+  while ((cursor = strchr(cursor, '\n'))) {
+    cursor += 1;
+    if (*cursor == '\0') break;
+
+    const char *end = strchr(cursor, '\n');
+    if (!end) end = cursor + strlen(cursor);
+
+    if (current == index) {
+      size_t length = (size_t)(end - cursor);
+      char *out = malloc(length + 1);
+      if (!out) return "";
+      memcpy(out, cursor, length);
+      out[length] = '\0';
+      return out;
+    }
+
+    current += 1;
+    cursor = end;
+  }
+
+  return "";
+}
+
+int lumen_list_len(const char *list) {
+  int count = 0;
+  const char *cursor = list;
+
+  while ((cursor = strchr(cursor, '\n'))) {
+    cursor += 1;
+    if (*cursor == '\0') break;
+    count += 1;
+  }
+
+  return count;
+}
+
+char *lumen_source_snippet(const char *source, int line, int column) {
+  int current_line = 1;
+  const char *start = source;
+
+  while (*start && current_line < line) {
+    if (*start == '\n') current_line += 1;
+    start += 1;
+  }
+
+  const char *end = start;
+  while (*end && *end != '\n') end += 1;
+
+  size_t line_length = (size_t)(end - start);
+  size_t marker = column > 0 ? (size_t)(column - 1) : 0;
+  char *out = malloc(line_length + marker + 4);
+  if (!out) return "";
+
+  memcpy(out, start, line_length);
+  out[line_length] = '\n';
+  memset(out + line_length + 1, ' ', marker);
+  out[line_length + 1 + marker] = '^';
+  out[line_length + 2 + marker] = '\0';
+  return out;
+}
+
+char *lumen_tokenize_source(const char *source) {
+  char *tokens = lumen_list();
+  const char *cursor = source;
+
+  while (*cursor) {
+    while (*cursor == ' ' || *cursor == '\t' || *cursor == '\n' || *cursor == '\r') cursor += 1;
+    if (!*cursor) break;
+
+    const char *start = cursor;
+    if ((*cursor >= 'A' && *cursor <= 'Z') || (*cursor >= 'a' && *cursor <= 'z') || *cursor == '_') {
+      cursor += 1;
+      while ((*cursor >= 'A' && *cursor <= 'Z') ||
+        (*cursor >= 'a' && *cursor <= 'z') ||
+        (*cursor >= '0' && *cursor <= '9') ||
+        *cursor == '_') {
+        cursor += 1;
+      }
+    } else if (*cursor >= '0' && *cursor <= '9') {
+      cursor += 1;
+      while (*cursor >= '0' && *cursor <= '9') cursor += 1;
+    } else {
+      cursor += 1;
+    }
+
+    size_t length = (size_t)(cursor - start);
+    char *token = malloc(length + 1);
+    if (!token) return tokens;
+    memcpy(token, start, length);
+    token[length] = '\0';
+    tokens = lumen_list_push(tokens, token);
+  }
+
+  return tokens;
+}
+
+char *lumen_parse_summary(const char *source) {
+  int functions = 0;
+  int lets = 0;
+  const char *cursor = source;
+
+  while ((cursor = strstr(cursor, "function"))) {
+    functions += 1;
+    cursor += 8;
+  }
+
+  cursor = source;
+  while ((cursor = strstr(cursor, "let"))) {
+    lets += 1;
+    cursor += 3;
+  }
+
+  char *out = malloc(64);
+  if (!out) return "";
+  snprintf(out, 64, "functions=%d lets=%d", functions, lets);
   return out;
 }
 
@@ -386,6 +547,107 @@ char *lumen_map(int count, ...) {
     out[offset++] = '\n';
   }
   va_end(args);
+
+  out[offset] = '\0';
+  return out;
+}
+
+char *lumen_map_set(const char *map, const char *key, const char *value) {
+  char *without = NULL;
+  size_t total = strlen(map) + strlen(key) + strlen(value) + 4;
+  without = malloc(total);
+  if (!without) return "";
+
+  size_t offset = 0;
+  without[offset++] = '\n';
+  size_t key_length = strlen(key);
+  const char *cursor = map;
+
+  while ((cursor = strchr(cursor, '\n'))) {
+    cursor += 1;
+    if (*cursor == '\0') break;
+
+    const char *end = strchr(cursor, '\n');
+    if (!end) end = cursor + strlen(cursor);
+
+    if (!(strncmp(cursor, key, key_length) == 0 && cursor[key_length] == '=')) {
+      size_t line_length = (size_t)(end - cursor);
+      memcpy(without + offset, cursor, line_length);
+      offset += line_length;
+      without[offset++] = '\n';
+    }
+
+    cursor = end;
+  }
+
+  memcpy(without + offset, key, key_length);
+  offset += key_length;
+  without[offset++] = '=';
+  size_t value_length = strlen(value);
+  memcpy(without + offset, value, value_length);
+  offset += value_length;
+  without[offset++] = '\n';
+  without[offset] = '\0';
+  return without;
+}
+
+char *lumen_map_delete(const char *map, const char *key) {
+  size_t total = strlen(map) + 1;
+  char *out = malloc(total);
+  if (!out) return "";
+
+  size_t offset = 0;
+  out[offset++] = '\n';
+  size_t key_length = strlen(key);
+  const char *cursor = map;
+
+  while ((cursor = strchr(cursor, '\n'))) {
+    cursor += 1;
+    if (*cursor == '\0') break;
+
+    const char *end = strchr(cursor, '\n');
+    if (!end) end = cursor + strlen(cursor);
+
+    if (!(strncmp(cursor, key, key_length) == 0 && cursor[key_length] == '=')) {
+      size_t line_length = (size_t)(end - cursor);
+      memcpy(out + offset, cursor, line_length);
+      offset += line_length;
+      out[offset++] = '\n';
+    }
+
+    cursor = end;
+  }
+
+  out[offset] = '\0';
+  return out;
+}
+
+char *lumen_map_keys(const char *map) {
+  size_t total = strlen(map) + 1;
+  char *out = malloc(total);
+  if (!out) return "";
+
+  size_t offset = 0;
+  out[offset++] = '\n';
+  const char *cursor = map;
+
+  while ((cursor = strchr(cursor, '\n'))) {
+    cursor += 1;
+    if (*cursor == '\0') break;
+
+    const char *equals = strchr(cursor, '=');
+    const char *end = strchr(cursor, '\n');
+    if (!end) end = cursor + strlen(cursor);
+
+    if (equals && equals < end) {
+      size_t key_length = (size_t)(equals - cursor);
+      memcpy(out + offset, cursor, key_length);
+      offset += key_length;
+      out[offset++] = '\n';
+    }
+
+    cursor = end;
+  }
 
   out[offset] = '\0';
   return out;

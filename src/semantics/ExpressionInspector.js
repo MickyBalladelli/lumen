@@ -58,7 +58,21 @@ export class ExpressionInspector {
     if (this.isCall(rawExpression, SystemFunctions.ArrayFirst)) return this.arrayElementCallType(rawExpression.tokens)
     if (this.isCall(rawExpression, SystemFunctions.ArrayLast)) return this.arrayElementCallType(rawExpression.tokens)
     if (this.isCall(rawExpression, SystemFunctions.ArrayJoin)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.Exec)) return LumenTypes.I32
+    if (this.isCall(rawExpression, SystemFunctions.SourceSnippet)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.StringBuilder)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.StringBuilderAppend)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.List)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.ListPush)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.ListGet)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.ListLen)) return LumenTypes.I32
+    if (this.isCall(rawExpression, SystemFunctions.MapSet)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.MapDelete)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.MapKeys)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.TokenizeSource)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.ParseSummary)) return LumenTypes.String
     if (this.isCall(rawExpression, FsFunctions.ReadFile)) return LumenTypes.String
+    if (this.isCall(rawExpression, FsFunctions.WriteFile)) return LumenTypes.I32
     if (this.isCall(rawExpression, HttpFunctions.ServeFiles)) return LumenTypes.I32
     if (this.isCall(rawExpression, HttpFunctions.ServeApi)) return LumenTypes.I32
     if (this.isCall(rawExpression, HttpFunctions.ServeHttp)) return LumenTypes.I32

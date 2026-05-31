@@ -1,0 +1,7 @@
+function main(): i32 {
+  let code = exec("true")
+
+  println(code)
+
+  return code
+}

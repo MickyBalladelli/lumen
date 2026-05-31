@@ -402,6 +402,32 @@ println(mapGet(headers, "content-type"))
 println(mapHas(headers, "x-lumen"))
 ```
 
+Bootstrap map helpers add mutation-style operations for compiler symbol tables:
+`mapSet(...)`, `mapDelete(...)`, and `mapKeys(...)`.
+
+```lumen
+let symbols = map("main", "function")
+symbols = mapSet(symbols, "total", "i32")
+println(mapGet(symbols, "total"))
+```
+
+Dynamic list helpers are string-backed today: `list()`, `listPush(...)`,
+`listGet(...)`, and `listLen(...)`.
+
+```lumen
+let tokens = list()
+tokens = listPush(tokens, "function")
+println(listGet(tokens, 0))
+```
+
+`stringBuilder()` and `stringBuilderAppend(...)` provide the first compiler text
+emission helper.
+
+```lumen
+let out = stringBuilder()
+out = stringBuilderAppend(out, "define ")
+```
+
 `channel()`, `send(channel, value)`, and `receive(channel)` provide a small
 message-passing foundation for higher-level thread communication.
 
@@ -490,6 +516,30 @@ println(content)
 
 `readFile(...)` returns a string. Missing files currently return an empty
 string.
+
+`writeFile(path, content)` writes text and returns `0` on success.
+
+```lumen
+writeFile("build/out.ll", content)
+```
+
+`exec(command)` runs a shell command and returns its process code. This is the
+bootstrap hook used later to call `clang`.
+
+```lumen
+let code = exec("clang build/out.ll -o build/app")
+```
+
+`tokenizeSource(source)` and `parseSummary(source)` are Lumen-callable compiler
+bootstrap helpers. They are intentionally small foundations before the full
+compiler is rewritten in Lumen.
+
+```lumen
+let tokens = tokenizeSource(source)
+let summary = parseSummary(source)
+```
+
+`sourceSnippet(source, line, column)` creates a diagnostic line plus caret.
 
 ### HTTP
 
@@ -696,6 +746,10 @@ console.log(ast)
 ## Examples
 
 - `examples/basic.lm`: variables, function, return
+- `examples/bootstrap-compiler.lm`: Lumen-callable tokenizer/parser/diagnostic foundation
+- `examples/bootstrap-containers.lm`: dynamic list, map mutation, string builder
+- `examples/bootstrap-exec.lm`: process execution hook
+- `examples/bootstrap-io.lm`: write and read file
 - `examples/advanced-foundation.lm`: field assignment, array assignment, string concat, interpolation, generic helper type
 - `examples/array-helpers.lm`: array helper functions
 - `examples/async-foundation.lm`: async/await syntax markers

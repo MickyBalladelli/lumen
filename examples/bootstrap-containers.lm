@@ -1,0 +1,21 @@
+function main(): i32 {
+  let builder = stringBuilder()
+  builder = stringBuilderAppend(builder, "hello ")
+  builder = stringBuilderAppend(builder, "compiler")
+
+  let items = list()
+  items = listPush(items, "token")
+  items = listPush(items, "parser")
+
+  let symbols = map("main", "function")
+  symbols = mapSet(symbols, "total", "i32")
+  symbols = mapDelete(symbols, "main")
+
+  println(builder)
+  println(listLen(items))
+  println(listGet(items, 1))
+  println(mapGet(symbols, "total"))
+  println(includes(mapKeys(symbols), "total"))
+
+  return listLen(items)
+}

@@ -33,7 +33,20 @@ export const SystemFunctions = Object.freeze({
   ArraySum: 'arraySum',
   ArrayFirst: 'arrayFirst',
   ArrayLast: 'arrayLast',
-  ArrayJoin: 'arrayJoin'
+  ArrayJoin: 'arrayJoin',
+  Exec: 'exec',
+  SourceSnippet: 'sourceSnippet',
+  StringBuilder: 'stringBuilder',
+  StringBuilderAppend: 'stringBuilderAppend',
+  List: 'list',
+  ListPush: 'listPush',
+  ListGet: 'listGet',
+  ListLen: 'listLen',
+  MapSet: 'mapSet',
+  MapDelete: 'mapDelete',
+  MapKeys: 'mapKeys',
+  TokenizeSource: 'tokenizeSource',
+  ParseSummary: 'parseSummary'
 })
 
 export class SystemLibrary {

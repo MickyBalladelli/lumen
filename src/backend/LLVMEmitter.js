@@ -72,8 +72,10 @@ export class LLVMEmitter {
       this.usesFileIO ? 'declare i32 @fseek(ptr, i64, i32)' : '',
       this.usesFileIO ? 'declare i64 @ftell(ptr)' : '',
       this.usesFileIO ? 'declare i64 @fread(ptr, i64, i64, ptr)' : '',
+      this.usesFileIO ? 'declare i64 @fwrite(ptr, i64, i64, ptr)' : '',
       this.usesFileIO ? 'declare ptr @malloc(i64)' : '',
       this.usesFileIO ? 'declare i32 @fclose(ptr)' : '',
+      this.usesFileIO ? 'declare i32 @lumen_write_file(ptr, ptr)' : '',
       this.usesAssert ? 'declare void @lumen_assert(i1, ptr)' : '',
       this.usesSlice ? 'declare ptr @lumen_string_slice(ptr, i32, i32)' : '',
       this.usesChannel ? 'declare ptr @lumen_channel()' : '',
@@ -104,6 +106,19 @@ export class LLVMEmitter {
       this.usesErrorRuntime ? 'declare i32 @lumen_error_code(ptr)' : '',
       this.usesErrorRuntime ? 'declare ptr @lumen_error_text(ptr)' : '',
       this.usesArrayRuntime ? 'declare ptr @lumen_array_join(i32, ptr, ptr)' : '',
+      this.usesStringRuntime ? 'declare i32 @lumen_exec(ptr)' : '',
+      this.usesStringRuntime ? 'declare ptr @lumen_source_snippet(ptr, i32, i32)' : '',
+      this.usesStringRuntime ? 'declare ptr @lumen_string_builder()' : '',
+      this.usesStringRuntime ? 'declare ptr @lumen_string_builder_append(ptr, ptr)' : '',
+      this.usesStringRuntime ? 'declare ptr @lumen_list()' : '',
+      this.usesStringRuntime ? 'declare ptr @lumen_list_push(ptr, ptr)' : '',
+      this.usesStringRuntime ? 'declare ptr @lumen_list_get(ptr, i32)' : '',
+      this.usesStringRuntime ? 'declare i32 @lumen_list_len(ptr)' : '',
+      this.usesStringRuntime ? 'declare ptr @lumen_map_set(ptr, ptr, ptr)' : '',
+      this.usesStringRuntime ? 'declare ptr @lumen_map_delete(ptr, ptr)' : '',
+      this.usesStringRuntime ? 'declare ptr @lumen_map_keys(ptr)' : '',
+      this.usesStringRuntime ? 'declare ptr @lumen_tokenize_source(ptr)' : '',
+      this.usesStringRuntime ? 'declare ptr @lumen_parse_summary(ptr)' : '',
       this.usesHttp ? 'declare i32 @lumen_http_serve_files(i32, ptr)' : '',
       this.usesHttp ? 'declare i32 @lumen_http_serve_api(i32, ptr, ptr, ptr, ptr)' : '',
       this.usesHttp ? 'declare i32 @lumen_http_serve_http(i32, ptr, ptr, ptr, ptr, ptr, i32)' : '',
@@ -658,7 +673,21 @@ export class LLVMEmitter {
     if (this.isCall(expression.tokens, SystemFunctions.ArrayFirst)) return this.emitArrayEdge(expression.tokens, 'first')
     if (this.isCall(expression.tokens, SystemFunctions.ArrayLast)) return this.emitArrayEdge(expression.tokens, 'last')
     if (this.isCall(expression.tokens, SystemFunctions.ArrayJoin)) return this.emitArrayJoin(expression.tokens)
+    if (this.isCall(expression.tokens, SystemFunctions.Exec)) return this.emitRuntimeCall(expression.tokens, 'lumen_exec', LumenTypes.I32, 1, 'exec')
+    if (this.isCall(expression.tokens, SystemFunctions.SourceSnippet)) return this.emitSourceSnippet(expression.tokens)
+    if (this.isCall(expression.tokens, SystemFunctions.StringBuilder)) return this.emitRuntimeCall(expression.tokens, 'lumen_string_builder', LumenTypes.String, 0, 'stringBuilder')
+    if (this.isCall(expression.tokens, SystemFunctions.StringBuilderAppend)) return this.emitRuntimeCall(expression.tokens, 'lumen_string_builder_append', LumenTypes.String, 2, 'stringBuilderAppend')
+    if (this.isCall(expression.tokens, SystemFunctions.List)) return this.emitRuntimeCall(expression.tokens, 'lumen_list', LumenTypes.String, 0, 'list')
+    if (this.isCall(expression.tokens, SystemFunctions.ListPush)) return this.emitRuntimeCall(expression.tokens, 'lumen_list_push', LumenTypes.String, 2, 'listPush')
+    if (this.isCall(expression.tokens, SystemFunctions.ListGet)) return this.emitListGet(expression.tokens)
+    if (this.isCall(expression.tokens, SystemFunctions.ListLen)) return this.emitRuntimeCall(expression.tokens, 'lumen_list_len', LumenTypes.I32, 1, 'listLen')
+    if (this.isCall(expression.tokens, SystemFunctions.MapSet)) return this.emitRuntimeCall(expression.tokens, 'lumen_map_set', LumenTypes.String, 3, 'mapSet')
+    if (this.isCall(expression.tokens, SystemFunctions.MapDelete)) return this.emitRuntimeCall(expression.tokens, 'lumen_map_delete', LumenTypes.String, 2, 'mapDelete')
+    if (this.isCall(expression.tokens, SystemFunctions.MapKeys)) return this.emitRuntimeCall(expression.tokens, 'lumen_map_keys', LumenTypes.String, 1, 'mapKeys')
+    if (this.isCall(expression.tokens, SystemFunctions.TokenizeSource)) return this.emitRuntimeCall(expression.tokens, 'lumen_tokenize_source', LumenTypes.String, 1, 'tokenizeSource')
+    if (this.isCall(expression.tokens, SystemFunctions.ParseSummary)) return this.emitRuntimeCall(expression.tokens, 'lumen_parse_summary', LumenTypes.String, 1, 'parseSummary')
     if (this.isCall(expression.tokens, FsFunctions.ReadFile)) return this.emitReadFile(expression.tokens)
+    if (this.isCall(expression.tokens, FsFunctions.WriteFile)) return this.emitWriteFile(expression.tokens)
     if (this.isCall(expression.tokens, HttpFunctions.ServeFiles)) return this.emitServeFiles(expression.tokens)
     if (this.isCall(expression.tokens, HttpFunctions.ServeApi)) return this.emitServeApi(expression.tokens)
     if (this.isCall(expression.tokens, HttpFunctions.ServeHttp)) return this.emitServeHttp(expression.tokens)
@@ -1135,6 +1164,12 @@ export class LLVMEmitter {
     if (['lumen_some', 'lumen_has_value', 'lumen_value_or'].includes(runtimeName)) this.usesOptions = true
     if (['lumen_json', 'lumen_json_get', 'lumen_json_set'].includes(runtimeName)) this.usesJsonRuntime = true
     if (['lumen_error_code', 'lumen_error_text'].includes(runtimeName)) this.usesErrorRuntime = true
+    if (runtimeName.startsWith('lumen_string') ||
+      runtimeName.startsWith('lumen_list') ||
+      runtimeName.startsWith('lumen_map_') ||
+      ['lumen_exec', 'lumen_source_snippet', 'lumen_tokenize_source', 'lumen_parse_summary'].includes(runtimeName)) {
+      this.usesStringRuntime = true
+    }
 
     const args = this.callArguments(tokens)
     if (args.length !== expectedCount) {
@@ -1154,6 +1189,39 @@ export class LLVMEmitter {
 
     return {
       type: returnType,
+      value: result
+    }
+  }
+
+  emitSourceSnippet(tokens) {
+    this.usesStringRuntime = true
+    const args = this.callArguments(tokens)
+    if (args.length !== 3) throw new Diagnostic('sourceSnippet expects source, line, and column', tokens[0].location, 'backend')
+
+    const source = this.emitExpression({ tokens: args[0], location: tokens[0].location })
+    const line = this.emitExpression({ tokens: args[1], location: tokens[0].location })
+    const column = this.emitExpression({ tokens: args[2], location: tokens[0].location })
+    const result = this.nextTemp()
+    this.lines.push(`  ${result} = call ptr @lumen_source_snippet(ptr ${source.value}, i32 ${this.cast(line, LumenTypes.I32)}, i32 ${this.cast(column, LumenTypes.I32)})`)
+
+    return {
+      type: LumenTypes.String,
+      value: result
+    }
+  }
+
+  emitListGet(tokens) {
+    this.usesStringRuntime = true
+    const args = this.callArguments(tokens)
+    if (args.length !== 2) throw new Diagnostic('listGet expects list and index', tokens[0].location, 'backend')
+
+    const list = this.emitExpression({ tokens: args[0], location: tokens[0].location })
+    const index = this.emitExpression({ tokens: args[1], location: tokens[0].location })
+    const result = this.nextTemp()
+    this.lines.push(`  ${result} = call ptr @lumen_list_get(ptr ${list.value}, i32 ${this.cast(index, LumenTypes.I32)})`)
+
+    return {
+      type: LumenTypes.String,
       value: result
     }
   }
@@ -1464,6 +1532,31 @@ export class LLVMEmitter {
 
     return {
       type: LumenTypes.String,
+      value: result
+    }
+  }
+
+  emitWriteFile(tokens) {
+    this.usesFileIO = true
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 2) {
+      throw new Diagnostic('writeFile expects path and content', tokens[0].location, 'backend')
+    }
+
+    const path = this.emitExpression({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+    const content = this.emitExpression({
+      tokens: args[1],
+      location: tokens[0].location
+    })
+    const result = this.nextTemp()
+    this.lines.push(`  ${result} = call i32 @lumen_write_file(ptr ${path.value}, ptr ${content.value})`)
+
+    return {
+      type: LumenTypes.I32,
       value: result
     }
   }
