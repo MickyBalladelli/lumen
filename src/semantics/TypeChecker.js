@@ -7,6 +7,7 @@ export class TypeChecker {
   constructor({ typeSystem = new TypeSystem() } = {}) {
     this.typeSystem = typeSystem
     this.loopDepth = 0
+    this.switchDepth = 0
   }
 
   check(program) {
@@ -60,6 +61,7 @@ export class TypeChecker {
     if (node.kind === 'WhileStatement') return this.checkWhile(node, scope, currentFunction)
     if (node.kind === 'DoUntilStatement') return this.checkDoUntil(node, scope, currentFunction)
     if (node.kind === 'IfStatement') return this.checkIf(node, scope, currentFunction)
+    if (node.kind === 'SwitchStatement') return this.checkSwitch(node, scope, currentFunction)
     if (node.kind === 'BreakStatement') return this.checkLoopControl(node, 'break')
     if (node.kind === 'ContinueStatement') return this.checkLoopControl(node, 'continue')
     if (node.kind === 'TryCatchStatement') return this.checkTryCatch(node, scope, currentFunction)
@@ -191,6 +193,8 @@ export class TypeChecker {
   }
 
   checkLoopControl(node, name) {
+    if (name === 'break' && this.switchDepth > 0) return LumenTypes.Void
+
     if (this.loopDepth === 0) {
       throw new Diagnostic(`${name} can only be used inside a loop`, node.location, 'type')
     }
@@ -202,6 +206,24 @@ export class TypeChecker {
     this.checkExpression(node.test, parentScope)
     this.checkNode(node.consequent, new Scope(parentScope), currentFunction)
     if (node.alternate) this.checkNode(node.alternate, new Scope(parentScope), currentFunction)
+    return LumenTypes.Void
+  }
+
+  checkSwitch(node, parentScope, currentFunction) {
+    const discriminantType = this.checkExpression(node.discriminant, parentScope)
+
+    this.switchDepth += 1
+    for (const switchCase of node.cases) {
+      const caseType = this.checkExpression(switchCase.test, parentScope)
+      if (!this.typeSystem.canAssign(caseType, discriminantType) && !this.typeSystem.canAssign(discriminantType, caseType)) {
+        throw new Diagnostic(`Cannot compare switch ${discriminantType} with case ${caseType}`, switchCase.location, 'type')
+      }
+
+      this.checkNode(switchCase.body, new Scope(parentScope), currentFunction)
+    }
+
+    if (node.defaultCase) this.checkNode(node.defaultCase, new Scope(parentScope), currentFunction)
+    this.switchDepth -= 1
     return LumenTypes.Void
   }
 

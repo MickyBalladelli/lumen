@@ -86,6 +86,10 @@ const expectations = new Map([
     stdout: '5\n1\n0\n1\n0\n1\n3\n4\n5\n12\n',
     code: 12
   }],
+  ['switch', {
+    stdout: '23\n',
+    code: 23
+  }],
   ['thread', {
     stdout: '1\n1\n1\n',
     code: 0

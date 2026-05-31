@@ -220,6 +220,24 @@ if total > 10 {
 }
 ```
 
+`switch` matches numeric, boolean, or string values. Cases use block bodies.
+`break` exits the switch.
+
+```lumen
+switch value {
+  case 1 {
+    println("one")
+  }
+  case 2 {
+    println("two")
+    break
+  }
+  default {
+    println("many")
+  }
+}
+```
+
 ### Expressions
 
 Current compiled expressions support:
@@ -555,6 +573,7 @@ console.log(ast)
 - `examples/println.lm`: native print through `printf`
 - `examples/struct.lm`: object type with fields
 - `examples/system.lm`: `println`, `len`, and `filter`
+- `examples/switch.lm`: switch with numeric and string cases
 - `examples/thread.lm`: native threads with semaphore-protected file writes
 - `examples/try-catch.lm`: Lumen `try/catch` and `throw`
 - `examples/while-do.lm`: while-do loop

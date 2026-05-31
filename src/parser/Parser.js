@@ -18,6 +18,8 @@ import {
   ReturnStatementNode,
   StructDeclarationNode,
   StructFieldNode,
+  SwitchCaseNode,
+  SwitchStatementNode,
   ThrowStatementNode,
   TryCatchStatementNode,
   TypeAnnotationNode,
@@ -158,6 +160,7 @@ export class Parser {
     // without turning the parser into one giant switch.
     if (this.matchKeyword('for')) return this.forStatement()
     if (this.matchKeyword('if')) return this.ifStatement()
+    if (this.matchKeyword('switch')) return this.switchStatement()
     if (this.matchKeyword('break')) return this.breakStatement()
     if (this.matchKeyword('continue')) return this.continueStatement()
     if (this.matchKeyword('while')) return this.whileStatement()
@@ -264,6 +267,40 @@ export class Parser {
       : null
 
     return new IfStatementNode(test, consequent, alternate, keyword.location)
+  }
+
+  switchStatement() {
+    const keyword = this.previous()
+    const discriminant = this.rawExpressionUntil(['{'])
+    const cases = []
+    let defaultCase = null
+
+    this.consumePunctuation('{', 'Expected "{" after switch value')
+
+    while (!this.isAtEnd() && !this.checkPunctuation('}')) {
+      this.skipTerminators()
+      if (this.checkPunctuation('}')) break
+
+      if (this.matchKeyword('case')) {
+        const caseToken = this.previous()
+        const test = this.rawExpressionUntil(['{'])
+        const body = this.blockStatement()
+        cases.push(new SwitchCaseNode(test, body, caseToken.location))
+        continue
+      }
+
+      if (this.matchKeyword('default')) {
+        const defaultToken = this.previous()
+        defaultCase = this.blockStatement()
+        defaultCase.location = defaultToken.location
+        continue
+      }
+
+      throw this.error(this.peek(), 'Expected case or default in switch')
+    }
+
+    this.consumePunctuation('}', 'Expected "}" after switch')
+    return new SwitchStatementNode(discriminant, cases, defaultCase, keyword.location)
   }
 
   breakStatement() {

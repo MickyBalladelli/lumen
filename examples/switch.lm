@@ -1,0 +1,33 @@
+function main(): i32 {
+  let value: i32 = 2
+  let word = "green"
+  let total: i32 = 0
+
+  switch value {
+    case 1 {
+      total = total + 10
+    }
+    case 2 {
+      total = total + 20
+      break
+    }
+    default {
+      total = total + 30
+    }
+  }
+
+  switch word {
+    case "red" {
+      total = total + 1
+    }
+    case "green" {
+      total = total + 3
+    }
+    default {
+      total = total + 5
+    }
+  }
+
+  println(total)
+  return total
+}

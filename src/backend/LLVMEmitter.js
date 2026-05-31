@@ -30,6 +30,7 @@ export class LLVMEmitter {
     this.stringId = 0
     this.usesPrintf = false
     this.usesStrstr = false
+    this.usesStrcmp = false
     this.usesFileIO = false
     this.usesHttp = false
     this.usesUuid = false
@@ -51,6 +52,7 @@ export class LLVMEmitter {
       ...this.globals,
       this.usesPrintf ? 'declare i32 @printf(ptr, ...)' : '',
       this.usesStrstr ? 'declare ptr @strstr(ptr, ptr)' : '',
+      this.usesStrcmp ? 'declare i32 @strcmp(ptr, ptr)' : '',
       this.usesFileIO ? 'declare ptr @fopen(ptr, ptr)' : '',
       this.usesFileIO ? 'declare i32 @fseek(ptr, i64, i32)' : '',
       this.usesFileIO ? 'declare i64 @ftell(ptr)' : '',
@@ -102,6 +104,7 @@ export class LLVMEmitter {
     this.scopes = [new Map()]
     this.tryStack = []
     this.loopStack = []
+    this.breakStack = []
     this.returnType = func.returnType
 
     const params = func.params
@@ -135,6 +138,7 @@ export class LLVMEmitter {
     if (node.kind === 'ThrowStatement') return this.emitThrow(node)
     if (node.kind === 'TryCatchStatement') return this.emitTryCatch(node)
     if (node.kind === 'IfStatement') return this.emitIf(node)
+    if (node.kind === 'SwitchStatement') return this.emitSwitch(node)
     if (node.kind === 'BlockStatement') return this.emitBlock(node)
     if (node.kind === 'ForOfStatement') return this.emitForOf(node)
     if (node.kind === 'ForStatement') return this.emitFor(node)
@@ -240,9 +244,9 @@ export class LLVMEmitter {
   }
 
   emitBreak(node) {
-    const loop = this.loopStack.at(-1)
-    if (!loop) throw new Diagnostic('break needs active loop', node.location, 'backend')
-    this.lines.push(`  br label %${loop.breakLabel}`)
+    const breakLabel = this.breakStack.at(-1)
+    if (!breakLabel) throw new Diagnostic('break needs active loop or switch', node.location, 'backend')
+    this.lines.push(`  br label %${breakLabel}`)
   }
 
   emitContinue(node) {
@@ -271,6 +275,40 @@ export class LLVMEmitter {
     this.lines.push(`${endLabel}:`)
   }
 
+  emitSwitch(node) {
+    const endLabel = this.nextLabel('switch.end')
+    const defaultLabel = node.defaultCase ? this.nextLabel('switch.default') : endLabel
+    const testLabels = node.cases.map(() => this.nextLabel('switch.test'))
+    const caseLabels = node.cases.map(() => this.nextLabel('switch.case'))
+    const discriminant = this.emitExpression(node.discriminant)
+
+    this.lines.push(`  br label %${testLabels[0] ?? defaultLabel}`)
+
+    for (let index = 0; index < node.cases.length; index += 1) {
+      const switchCase = node.cases[index]
+      this.lines.push(`${testLabels[index]}:`)
+      const caseValue = this.emitExpression(switchCase.test)
+      const matches = this.emitEqualityComparison(discriminant, caseValue)
+      const nextLabel = testLabels[index + 1] ?? defaultLabel
+      this.lines.push(`  br i1 ${matches.value}, label %${caseLabels[index]}, label %${nextLabel}`)
+      this.lines.push(`${caseLabels[index]}:`)
+      this.breakStack.push(endLabel)
+      this.emitStatement(switchCase.body)
+      this.breakStack.pop()
+      if (!this.hasTerminator()) this.lines.push(`  br label %${endLabel}`)
+    }
+
+    if (node.defaultCase) {
+      this.lines.push(`${defaultLabel}:`)
+      this.breakStack.push(endLabel)
+      this.emitStatement(node.defaultCase)
+      this.breakStack.pop()
+      if (!this.hasTerminator()) this.lines.push(`  br label %${endLabel}`)
+    }
+
+    this.lines.push(`${endLabel}:`)
+  }
+
   emitFor(node) {
     this.pushScope()
 
@@ -284,6 +322,7 @@ export class LLVMEmitter {
     const bodyLabel = this.nextLabel('for.body')
     const updateLabel = this.nextLabel('for.update')
     const endLabel = this.nextLabel('for.end')
+    this.breakStack.push(endLabel)
     this.loopStack.push({
       breakLabel: endLabel,
       continueLabel: updateLabel
@@ -309,6 +348,7 @@ export class LLVMEmitter {
 
     this.lines.push(`${endLabel}:`)
     this.loopStack.pop()
+    this.breakStack.pop()
     this.popScope()
   }
 
@@ -316,6 +356,7 @@ export class LLVMEmitter {
     const conditionLabel = this.nextLabel('while.cond')
     const bodyLabel = this.nextLabel('while.body')
     const endLabel = this.nextLabel('while.end')
+    this.breakStack.push(endLabel)
     this.loopStack.push({
       breakLabel: endLabel,
       continueLabel: conditionLabel
@@ -333,12 +374,14 @@ export class LLVMEmitter {
 
     this.lines.push(`${endLabel}:`)
     this.loopStack.pop()
+    this.breakStack.pop()
   }
 
   emitDoUntil(node) {
     const bodyLabel = this.nextLabel('do.body')
     const conditionLabel = this.nextLabel('do.cond')
     const endLabel = this.nextLabel('do.end')
+    this.breakStack.push(endLabel)
     this.loopStack.push({
       breakLabel: endLabel,
       continueLabel: conditionLabel
@@ -356,6 +399,7 @@ export class LLVMEmitter {
 
     this.lines.push(`${endLabel}:`)
     this.loopStack.pop()
+    this.breakStack.pop()
   }
 
   emitForOf(node) {
@@ -377,6 +421,7 @@ export class LLVMEmitter {
     const bodyLabel = this.nextLabel('forof.body')
     const updateLabel = this.nextLabel('forof.update')
     const endLabel = this.nextLabel('forof.end')
+    this.breakStack.push(endLabel)
     this.loopStack.push({
       breakLabel: endLabel,
       continueLabel: updateLabel
@@ -412,6 +457,7 @@ export class LLVMEmitter {
 
     this.lines.push(`${endLabel}:`)
     this.loopStack.pop()
+    this.breakStack.pop()
   }
 
   emitFilteredForOf(node) {
@@ -432,6 +478,7 @@ export class LLVMEmitter {
     const bodyLabel = this.nextLabel('filter.body')
     const updateLabel = this.nextLabel('filter.update')
     const endLabel = this.nextLabel('filter.end')
+    this.breakStack.push(endLabel)
     this.loopStack.push({
       breakLabel: endLabel,
       continueLabel: updateLabel
@@ -471,6 +518,7 @@ export class LLVMEmitter {
 
     this.lines.push(`${endLabel}:`)
     this.loopStack.pop()
+    this.breakStack.pop()
   }
 
   emitExpression(expression) {
@@ -1588,7 +1636,12 @@ export class LLVMEmitter {
     const type = this.typeSystem.widest(left.type, right.type)
     const temp = this.nextTemp()
 
-    if (type === LumenTypes.F32) {
+    if (left.type === LumenTypes.String && right.type === LumenTypes.String) {
+      this.usesStrcmp = true
+      const comparison = this.nextTemp()
+      this.lines.push(`  ${comparison} = call i32 @strcmp(ptr ${left.value}, ptr ${right.value})`)
+      this.lines.push(`  ${temp} = icmp eq i32 ${comparison}, 0`)
+    } else if (type === LumenTypes.F32) {
       this.lines.push(`  ${temp} = fcmp oeq float ${this.cast(left, type)}, ${this.cast(right, type)}`)
     } else {
       this.lines.push(`  ${temp} = icmp eq ${this.llvmType(type)} ${this.cast(left, type)}, ${this.cast(right, type)}`)

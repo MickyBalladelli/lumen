@@ -57,6 +57,7 @@ export class SemanticAnalyzer {
     if (node.kind === 'WhileStatement') return this.visitLoop(node, scope)
     if (node.kind === 'DoUntilStatement') return this.visitLoop(node, scope)
     if (node.kind === 'IfStatement') return this.visitIf(node, scope)
+    if (node.kind === 'SwitchStatement') return this.visitSwitch(node, scope)
     if (node.kind === 'BreakStatement') return
     if (node.kind === 'ContinueStatement') return
     if (node.kind === 'TryCatchStatement') return this.visitTryCatch(node, scope)
@@ -143,6 +144,11 @@ export class SemanticAnalyzer {
   visitIf(node, scope) {
     this.visit(node.consequent, new Scope(scope))
     if (node.alternate) this.visit(node.alternate, new Scope(scope))
+  }
+
+  visitSwitch(node, scope) {
+    for (const switchCase of node.cases) this.visit(switchCase.body, new Scope(scope))
+    if (node.defaultCase) this.visit(node.defaultCase, new Scope(scope))
   }
 
   visitTryCatch(node, scope) {

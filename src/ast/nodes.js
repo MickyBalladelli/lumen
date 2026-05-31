@@ -133,6 +133,23 @@ export class IfStatementNode extends AstNode {
   }
 }
 
+export class SwitchCaseNode extends AstNode {
+  constructor(test, body, location = null) {
+    super('SwitchCase', location)
+    this.test = test
+    this.body = body
+  }
+}
+
+export class SwitchStatementNode extends AstNode {
+  constructor(discriminant, cases, defaultCase = null, location = null) {
+    super('SwitchStatement', location)
+    this.discriminant = discriminant
+    this.cases = cases
+    this.defaultCase = defaultCase
+  }
+}
+
 export class BreakStatementNode extends AstNode {
   constructor(location = null) {
     super('BreakStatement', location)

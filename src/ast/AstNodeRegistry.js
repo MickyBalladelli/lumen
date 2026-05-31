@@ -16,6 +16,8 @@ import {
   ReturnStatementNode,
   StructDeclarationNode,
   StructFieldNode,
+  SwitchCaseNode,
+  SwitchStatementNode,
   ThrowStatementNode,
   TryCatchStatementNode,
   TypeAnnotationNode,
@@ -66,6 +68,8 @@ export class AstNodeRegistry {
       .register('WhileStatement', WhileStatementNode)
       .register('DoUntilStatement', DoUntilStatementNode)
       .register('IfStatement', IfStatementNode)
+      .register('SwitchCase', SwitchCaseNode)
+      .register('SwitchStatement', SwitchStatementNode)
       .register('BreakStatement', BreakStatementNode)
       .register('ContinueStatement', ContinueStatementNode)
       .register('ReturnStatement', ReturnStatementNode)
