@@ -111,7 +111,9 @@ export class LLVMEmitter {
       this.usesStringRuntime ? 'declare ptr @lumen_string_builder()' : '',
       this.usesStringRuntime ? 'declare ptr @lumen_string_builder_append(ptr, ptr)' : '',
       this.usesStringRuntime ? 'declare i32 @lumen_string_len(ptr)' : '',
+      this.usesStringRuntime ? 'declare i1 @lumen_string_equals(ptr, ptr)' : '',
       this.usesStringRuntime ? 'declare ptr @lumen_int_to_string(i32)' : '',
+      this.usesStringRuntime ? 'declare i32 @lumen_string_to_int(ptr)' : '',
       this.usesStringRuntime ? 'declare ptr @lumen_list()' : '',
       this.usesStringRuntime ? 'declare ptr @lumen_list_push(ptr, ptr)' : '',
       this.usesStringRuntime ? 'declare ptr @lumen_list_get(ptr, i32)' : '',
@@ -680,7 +682,9 @@ export class LLVMEmitter {
     if (this.isCall(expression.tokens, SystemFunctions.StringBuilder)) return this.emitRuntimeCall(expression.tokens, 'lumen_string_builder', LumenTypes.String, 0, 'stringBuilder')
     if (this.isCall(expression.tokens, SystemFunctions.StringBuilderAppend)) return this.emitRuntimeCall(expression.tokens, 'lumen_string_builder_append', LumenTypes.String, 2, 'stringBuilderAppend')
     if (this.isCall(expression.tokens, SystemFunctions.StringLen)) return this.emitRuntimeCall(expression.tokens, 'lumen_string_len', LumenTypes.I32, 1, 'stringLen')
+    if (this.isCall(expression.tokens, SystemFunctions.StringEquals)) return this.emitRuntimeCall(expression.tokens, 'lumen_string_equals', LumenTypes.Bool, 2, 'stringEquals')
     if (this.isCall(expression.tokens, SystemFunctions.IntToString)) return this.emitIntToString(expression.tokens)
+    if (this.isCall(expression.tokens, SystemFunctions.StringToInt)) return this.emitRuntimeCall(expression.tokens, 'lumen_string_to_int', LumenTypes.I32, 1, 'stringToInt')
     if (this.isCall(expression.tokens, SystemFunctions.List)) return this.emitRuntimeCall(expression.tokens, 'lumen_list', LumenTypes.String, 0, 'list')
     if (this.isCall(expression.tokens, SystemFunctions.ListPush)) return this.emitRuntimeCall(expression.tokens, 'lumen_list_push', LumenTypes.String, 2, 'listPush')
     if (this.isCall(expression.tokens, SystemFunctions.ListGet)) return this.emitListGet(expression.tokens)

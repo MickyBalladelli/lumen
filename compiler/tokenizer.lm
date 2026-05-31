@@ -86,6 +86,24 @@ function tokenize(source: string): string {
       continue
     }
 
+    if includes('"', ch) {
+      let start = index + 1
+      index = index + 1
+
+      while index < length do {
+        if includes('"', charAt(source, index)) {
+          break
+        }
+
+        index = index + 1
+      }
+
+      let value = source[start..index]
+      tokens = addToken(tokens, "string", value)
+      index = index + 1
+      continue
+    }
+
     tokens = addToken(tokens, "symbol", ch)
     index = index + 1
   }

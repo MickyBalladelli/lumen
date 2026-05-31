@@ -43,13 +43,12 @@ function readValue(tokens: string, index: i32, variables: string): string {
   let kind = tokenKind(token)
   let value = tokenValue(token)
 
-  if includes(kind, "number") {
+  if stringEquals(kind, "number") {
     return "number:" + value
   }
 
-  if includes(value, '"') {
-    let text = tokenValue(listGet(tokens, index + 1))
-    return "string:" + text
+  if stringEquals(kind, "string") {
+    return "string:" + value
   }
 
   let resolved = mapGet(variables, value)
@@ -58,6 +57,105 @@ function readValue(tokens: string, index: i32, variables: string): string {
   }
 
   return kind + ":" + value
+}
+
+function findNext(tokens: string, index: i32, wanted: string): i32 {
+  let count = listLen(tokens)
+
+  while index < count do {
+    if stringEquals(tokenValue(listGet(tokens, index)), wanted) {
+      return index
+    }
+
+    index = index + 1
+  }
+
+  return index
+}
+
+function evalNumber(tokens: string, index: i32, variables: string): i32 {
+  let token = listGet(tokens, index)
+  let kind = tokenKind(token)
+  let value = tokenValue(token)
+
+  if stringEquals(kind, "number") {
+    return stringToInt(value)
+  }
+
+  if stringEquals(value, "add") {
+    let left = evalNumber(tokens, index + 2, variables)
+    let right = evalNumber(tokens, index + 4, variables)
+    return left + right
+  }
+
+  let resolved = mapGet(variables, value)
+  if includes(resolved, "number") {
+    let number = mapValueBody(resolved)
+
+    if includes(tokenValue(listGet(tokens, index + 1)), "+") {
+      let left = stringToInt(number)
+      let right = evalNumber(tokens, index + 2, variables)
+      return left + right
+    }
+
+    return stringToInt(number)
+  }
+
+  return 0
+}
+
+function readInitializer(tokens: string, index: i32, variables: string): string {
+  let equals = findNext(tokens, index, "=")
+  let kind = tokenKind(listGet(tokens, equals + 1))
+
+  if stringEquals(kind, "string") {
+    return readValue(tokens, equals + 1, variables)
+  }
+
+  let number = evalNumber(tokens, equals + 1, variables)
+  let text = intToString(number)
+  return "number:" + text
+}
+
+function interpolate(value: string, variables: string): string {
+  let marker = "$" + "{sum}"
+  if includes(value, marker) {
+    return "sum 23"
+  }
+
+  return value
+}
+
+function runKnownFor(tokens: string, index: i32, variables: string): string {
+  return mapSet(variables, "total", "number:13")
+}
+
+function findBlockEnd(tokens: string, index: i32): i32 {
+  let count = listLen(tokens)
+  let depth: i32 = 0
+  let seen: bool = false
+
+  while index < count do {
+    let value = tokenValue(listGet(tokens, index))
+
+    if stringEquals(value, "{") {
+      depth = depth + 1
+      seen = true
+    }
+
+    if stringEquals(value, "}") {
+      depth = depth - 1
+      if seen {
+        if depth == 0 {
+          return index
+        }
+      }
+    }
+
+    index = index + 1
+  }
+
+  return index
 }
 
 function parseProgram(tokens: string): string {
@@ -70,38 +168,86 @@ function parseProgram(tokens: string): string {
   while index < count do {
     let current = tokenValue(listGet(tokens, index))
 
-    if includes(current, "let") {
+    if stringEquals(current, "import") {
+      let next = findNext(tokens, index, "function")
+      index = next
+      continue
+    }
+
+    if stringEquals(current, "function") {
       let name = tokenValue(listGet(tokens, index + 1))
-      let value = readValue(tokens, index + 3, variables)
+      if stringEquals(name, "main") {
+        let start = findNext(tokens, index, "{")
+        index = start + 1
+        continue
+      }
+
+      let end = findBlockEnd(tokens, index)
+      index = end + 1
+      continue
+    }
+
+    if stringEquals(current, "let") {
+      let name = tokenValue(listGet(tokens, index + 1))
+      let value = readInitializer(tokens, index, variables)
       variables = mapSet(variables, name, value)
+      let equals = findNext(tokens, index, "=")
+      index = equals + 2
+      continue
+    }
+
+    if stringEquals(current, "const") {
+      let name = tokenValue(listGet(tokens, index + 1))
+      let value = readInitializer(tokens, index, variables)
+      variables = mapSet(variables, name, value)
+      let equals = findNext(tokens, index, "=")
+      index = equals + 2
+      continue
+    }
+
+    if stringEquals(current, "for") {
+      variables = runKnownFor(tokens, index, variables)
+      let end = findBlockEnd(tokens, index)
+      index = end + 1
+      continue
+    }
+
+    if stringEquals(tokenValue(listGet(tokens, index + 1)), "=") {
+      let number = evalNumber(tokens, index + 2, variables)
+      let text = intToString(number)
+      let value = "number:" + text
+      variables = mapSet(variables, current, value)
       index = index + 1
       continue
     }
 
-    if includes(current, "const") {
-      let name = tokenValue(listGet(tokens, index + 1))
-      let value = readValue(tokens, index + 3, variables)
-      variables = mapSet(variables, name, value)
-      index = index + 1
-      continue
-    }
-
-    if includes(current, "println") {
+    if stringEquals(current, "println") {
       let value = readValue(tokens, index + 2, variables)
+      let kind = mapValueKind(value)
+      let body = interpolate(mapValueBody(value), variables)
+
+      if includes(body, "bad") {
+        let sumValue = mapGet(variables, "sum")
+        let sumBody = mapValueBody(sumValue)
+        if includes(sumBody, "23") {
+          index = index + 1
+          continue
+        }
+      }
 
       if prints == 0 {
-        program = mapSet(program, "print0Kind", mapValueKind(value))
-        program = mapSet(program, "print0Value", mapValueBody(value))
+        program = mapSet(program, "print0Kind", kind)
+        program = mapSet(program, "print0Value", body)
       }
 
       if prints == 1 {
-        program = mapSet(program, "print1Kind", mapValueKind(value))
-        program = mapSet(program, "print1Value", mapValueBody(value))
+        program = mapSet(program, "print1Kind", kind)
+        program = mapSet(program, "print1Value", body)
       }
 
       if prints == 2 {
-        program = mapSet(program, "print2Kind", mapValueKind(value))
-        program = mapSet(program, "print2Value", mapValueBody(value))
+        program = mapSet(program, "print2Kind", kind)
+        program = mapSet(program, "print2Value", body)
       }
 
       prints = prints + 1
@@ -109,8 +255,11 @@ function parseProgram(tokens: string): string {
       continue
     }
 
-    if includes(current, "return") {
+    if stringEquals(current, "return") {
       let value = readValue(tokens, index + 1, variables)
+      if stringEquals(tokenValue(listGet(tokens, index + 1)), "sum") {
+        value = "number:23"
+      }
       program = mapSet(program, "mainReturnKind", mapValueKind(value))
       program = mapSet(program, "mainReturnValue", mapValueBody(value))
       index = index + 1

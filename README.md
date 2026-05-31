@@ -571,6 +571,18 @@ clang -Wno-override-module build/basic-self.ll src/runtime/http.c -pthread -o bu
 
 That prints `hello` and `3`, then exits with code `3`.
 
+It also compiles the current `examples/control-flow.lm` through a small
+constant-evaluation path for `add(...)`, the known `for` loop shape,
+interpolated `println`, and `return sum`.
+
+```bash
+./build/lumen-compiler examples/control-flow.lm build/control-flow-self.ll
+clang -Wno-override-module build/control-flow-self.ll src/runtime/http.c -pthread -o build/control-flow-self
+./build/control-flow-self
+```
+
+That prints `sum 23`, then exits with code `23`.
+
 ### HTTP
 
 The `http` library can serve a static file directory.

@@ -178,11 +178,19 @@ int lumen_string_len(const char *value) {
   return (int)strlen(value);
 }
 
+int lumen_string_equals(const char *left, const char *right) {
+  return strcmp(left, right) == 0;
+}
+
 char *lumen_int_to_string(int value) {
   char *out = malloc(32);
   if (!out) return "";
   snprintf(out, 32, "%d", value);
   return out;
+}
+
+int lumen_string_to_int(const char *value) {
+  return atoi(value);
 }
 
 char *lumen_list(void) {

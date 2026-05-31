@@ -1,0 +1,16 @@
+import { tokenize } from "../compiler/tokenizer.lm"
+import { parseProgram } from "../compiler/parser.lm"
+import { emitMain } from "../compiler/emitter.lm"
+
+function main(): i32 {
+  let source = readFile("examples/control-flow.lm")
+  let tokens = tokenize(source)
+  let program = parseProgram(tokens)
+  let llvm = emitMain(program)
+
+  println(mapGet(program, "mainReturnValue"))
+  println(mapGet(program, "print0Value"))
+  println(includes(llvm, "sum 23"))
+
+  return 0
+}

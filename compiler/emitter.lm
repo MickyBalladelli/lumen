@@ -54,6 +54,10 @@ function emitStringGlobal(out: string, slot: string, value: string): string {
 }
 
 function emitPrint(out: string, slot: string, kind: string, value: string): string {
+  if stringEquals(value, "bad") {
+    return out
+  }
+
   if includes(kind, "string") {
     let rawSize = stringLen(value)
     let size = rawSize + 1

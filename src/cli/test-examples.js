@@ -128,6 +128,10 @@ const expectations = new Map([
     stdout: '7\n1\n',
     code: 0
   }],
+  ['self-host-control', {
+    stdout: '23\nsum 23\n1\n',
+    code: 0
+  }],
   ['self-host-tokenizer', {
     stdout: '10\nidentifier:function\nidentifier:main\nnumber:7\n',
     code: 0
@@ -257,6 +261,26 @@ if (bootstrapCompile.code !== 0) {
       console.error(`failed bootstrap basic executable, got code ${basic.code} stdout ${JSON.stringify(basic.stdout)}`)
     } else {
       console.log('ok bootstrap self-host basic')
+    }
+  }
+
+  const controlCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
+    join(examplesDir, 'control-flow.lm'),
+    join(outputDir, 'control-flow-self.ll')
+  ])
+
+  if (controlCompile.code !== 0) {
+    failures += 1
+    console.error(`failed bootstrap control compiler with code ${controlCompile.code}`)
+  } else {
+    await compiler.buildExecutable(join(outputDir, 'control-flow-self.ll'), join(outputDir, 'control-flow-self'))
+    const control = await runExecutable(join(outputDir, 'control-flow-self'))
+
+    if (control.stdout !== 'sum 23\n' || control.code !== 23) {
+      failures += 1
+      console.error(`failed bootstrap control executable, got code ${control.code} stdout ${JSON.stringify(control.stdout)}`)
+    } else {
+      console.log('ok bootstrap self-host control-flow')
     }
   }
 }
