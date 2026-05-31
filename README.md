@@ -195,6 +195,24 @@ let id = uuid()
 println(id)
 ```
 
+`env(name)` reads an environment variable. Missing variables return an empty
+string. If the variable is not in the process environment, Lumen also checks a
+`.env` file in the current directory.
+
+```lumen
+let databaseUrl = env("DATABASE_URL")
+println(databaseUrl)
+```
+
+`.env` files support simple dotenv-style entries:
+
+```text
+DATABASE_URL=postgres://localhost/lumen
+export API_KEY="dev-key"
+```
+
+Real process environment values win over `.env` values.
+
 `encrypt(value, key, protocol?)` encrypts a string and returns a portable
 encoded string. `decrypt(value, key, protocol?)` reverses it.
 
@@ -389,6 +407,7 @@ console.log(ast)
 
 - `examples/basic.lm`: variables, function, return
 - `examples/crypto.lm`: `encrypt` and `decrypt`
+- `examples/env.lm`: read environment variables with `env`
 - `examples/array.lm`: arrays of numbers and structs
 - `examples/for-loop.lm`: classic for loop semicolon rule
 - `examples/for-of.lm`: for-of loop over arrays

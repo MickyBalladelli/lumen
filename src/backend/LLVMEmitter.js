@@ -33,6 +33,7 @@ export class LLVMEmitter {
     this.usesFileIO = false
     this.usesHttp = false
     this.usesUuid = false
+    this.usesEnv = false
     this.usesCrypto = false
     this.usesThread = false
     const typeDefinitions = irModule.structs.map(struct => this.emitStructType(struct))
@@ -51,6 +52,7 @@ export class LLVMEmitter {
       this.usesFileIO ? 'declare ptr @malloc(i64)' : '',
       this.usesFileIO ? 'declare i32 @fclose(ptr)' : '',
       this.usesUuid ? 'declare ptr @lumen_uuid()' : '',
+      this.usesEnv ? 'declare ptr @lumen_env(ptr)' : '',
       this.usesCrypto ? 'declare ptr @lumen_encrypt(ptr, ptr, ptr)' : '',
       this.usesCrypto ? 'declare ptr @lumen_decrypt(ptr, ptr, ptr)' : '',
       this.usesHttp ? 'declare i32 @lumen_http_serve_files(i32, ptr)' : '',
@@ -361,6 +363,7 @@ export class LLVMEmitter {
     if (this.isCall(expression.tokens, SystemFunctions.Len)) return this.emitLen(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.Includes)) return this.emitIncludes(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.Uuid)) return this.emitUuid(expression.tokens)
+    if (this.isCall(expression.tokens, SystemFunctions.Env)) return this.emitEnv(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.Encrypt)) return this.emitEncrypt(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.Decrypt)) return this.emitDecrypt(expression.tokens)
     if (this.isCall(expression.tokens, FsFunctions.ReadFile)) return this.emitReadFile(expression.tokens)
@@ -526,6 +529,32 @@ export class LLVMEmitter {
     return {
       type: LumenTypes.String,
       value
+    }
+  }
+
+  emitEnv(tokens) {
+    this.usesEnv = true
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 1) {
+      throw new Diagnostic('env expects one variable name', tokens[0].location, 'backend')
+    }
+
+    const name = this.emitExpression({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+
+    if (name.type !== LumenTypes.String) {
+      throw new Diagnostic('env expects a string variable name', tokens[0].location, 'backend')
+    }
+
+    const result = this.nextTemp()
+    this.lines.push(`  ${result} = call ptr @lumen_env(ptr ${name.value})`)
+
+    return {
+      type: LumenTypes.String,
+      value: result
     }
   }
 

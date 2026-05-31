@@ -30,6 +30,10 @@ const expectations = new Map([
     stdout: '1\nhello lumen\nhello lumen\n',
     code: 0
   }],
+  ['env', {
+    stdout: 'from-env\nfrom-dotenv\n\n1\n1\n',
+    code: 0
+  }],
   ['for-of', {
     stdout: '26\n',
     code: 26
@@ -99,7 +103,10 @@ for (const file of files) {
     continue
   }
 
-  const result = await runExecutable(executablePath)
+  const result = await runExecutable(executablePath, {
+    LUMEN_DOTENV_PATH: join(examplesDir, '.env.test'),
+    LUMEN_TEST_ENV: 'from-env'
+  })
   const expected = expectations.get(name)
 
   if (!expected) {
@@ -126,9 +133,14 @@ if (failures > 0) {
 
 console.log(`${files.length} example tests passed`)
 
-function runExecutable(path) {
+function runExecutable(path, env = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(`./${path}`)
+    const child = spawn(`./${path}`, {
+      env: {
+        ...process.env,
+        ...env
+      }
+    })
     let stdout = ''
     let stderr = ''
 

@@ -44,6 +44,68 @@ char *lumen_uuid(void) {
   return out;
 }
 
+char *lumen_env(const char *name) {
+  char *value = getenv(name);
+  if (value) return value;
+
+  const char *path = getenv("LUMEN_DOTENV_PATH");
+  if (!path) path = ".env";
+
+  FILE *file = fopen(path, "r");
+  if (!file) return "";
+
+  char line[4096];
+  size_t name_length = strlen(name);
+
+  while (fgets(line, sizeof(line), file)) {
+    char *cursor = line;
+
+    while (*cursor == ' ' || *cursor == '\t') cursor += 1;
+    if (*cursor == '\0' || *cursor == '\n' || *cursor == '#') continue;
+
+    if (strncmp(cursor, "export", 6) == 0 && (cursor[6] == ' ' || cursor[6] == '\t')) {
+      cursor += 6;
+      while (*cursor == ' ' || *cursor == '\t') cursor += 1;
+    }
+
+    char *equals = strchr(cursor, '=');
+    if (!equals) continue;
+
+    char *key_end = equals;
+    while (key_end > cursor && (key_end[-1] == ' ' || key_end[-1] == '\t')) key_end -= 1;
+
+    if ((size_t)(key_end - cursor) != name_length || strncmp(cursor, name, name_length) != 0) continue;
+
+    char *value_start = equals + 1;
+    while (*value_start == ' ' || *value_start == '\t') value_start += 1;
+
+    char *value_end = value_start + strlen(value_start);
+    while (value_end > value_start && (value_end[-1] == '\n' || value_end[-1] == '\r')) value_end -= 1;
+    while (value_end > value_start && (value_end[-1] == ' ' || value_end[-1] == '\t')) value_end -= 1;
+
+    if ((*value_start == '"' && value_end > value_start && value_end[-1] == '"') ||
+      (*value_start == '\'' && value_end > value_start && value_end[-1] == '\'')) {
+      value_start += 1;
+      value_end -= 1;
+    }
+
+    size_t value_length = value_end > value_start ? (size_t)(value_end - value_start) : 0;
+    char *out = malloc(value_length + 1);
+    if (!out) {
+      fclose(file);
+      return "";
+    }
+
+    memcpy(out, value_start, value_length);
+    out[value_length] = '\0';
+    fclose(file);
+    return out;
+  }
+
+  fclose(file);
+  return "";
+}
+
 static const char lumen_base64_table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 static char *lumen_strdup(const char *value) {
