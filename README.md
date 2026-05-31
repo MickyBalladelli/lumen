@@ -547,7 +547,7 @@ The first pure-Lumen compiler pieces live in `compiler/`:
 
 - `compiler/tokenizer.lm`: tokenizes a small Lumen subset
 - `compiler/parser.lm`: extracts a tiny `main` return program model
-- `compiler/emitter.lm`: emits LLVM for `main(): i32 { return N }`
+- `compiler/emitter.lm`: emits LLVM for tiny `main`, `let`/`const`, `println`, and return
 - `compiler/main.lm`: CLI-shaped tiny compiler
 
 The bootstrap flow is now tested:
@@ -560,6 +560,16 @@ clang -Wno-override-module build/tiny-self.ll src/runtime/http.c -pthread -o bui
 ```
 
 `build/tiny-self` exits with code `7`.
+
+The Lumen compiler also compiles `examples/basic.lm` now:
+
+```bash
+./build/lumen-compiler examples/basic.lm build/basic-self.ll
+clang -Wno-override-module build/basic-self.ll src/runtime/http.c -pthread -o build/basic-self
+./build/basic-self
+```
+
+That prints `hello` and `3`, then exits with code `3`.
 
 ### HTTP
 

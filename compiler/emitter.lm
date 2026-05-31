@@ -1,18 +1,77 @@
 function emitMain(program: string): string {
-  let value = mapGet(program, "mainReturn")
+  let returnValue = mapGet(program, "mainReturnValue")
   let out = stringBuilder()
 
-  out = stringBuilderAppend(out, "; Lumen self-host tiny LLVM IR
+  out = stringBuilderAppend(out, "; Lumen self-host LLVM IR
+")
+  out = stringBuilderAppend(out, '@.fmt.str = private unnamed_addr constant [4 x i8] c"%s\0A\00"
+')
+  out = stringBuilderAppend(out, '@.fmt.int = private unnamed_addr constant [4 x i8] c"%d\0A\00"
+')
+
+  if includes(mapGet(program, "print0Kind"), "string") {
+    out = emitStringGlobal(out, "0", mapGet(program, "print0Value"))
+  }
+
+  if includes(mapGet(program, "print1Kind"), "string") {
+    out = emitStringGlobal(out, "1", mapGet(program, "print1Value"))
+  }
+
+  if includes(mapGet(program, "print2Kind"), "string") {
+    out = emitStringGlobal(out, "2", mapGet(program, "print2Value"))
+  }
+
+  out = stringBuilderAppend(out, "declare i32 @printf(ptr, ...)
 ")
   out = stringBuilderAppend(out, "define i32 @main() {
 ")
   out = stringBuilderAppend(out, "entry:
 ")
+  out = emitPrint(out, "0", mapGet(program, "print0Kind"), mapGet(program, "print0Value"))
+  out = emitPrint(out, "1", mapGet(program, "print1Kind"), mapGet(program, "print1Value"))
+  out = emitPrint(out, "2", mapGet(program, "print2Kind"), mapGet(program, "print2Value"))
   out = stringBuilderAppend(out, "  ret i32 ")
-  out = stringBuilderAppend(out, value)
+  out = stringBuilderAppend(out, returnValue)
   out = stringBuilderAppend(out, "
 }
 ")
+
+  return out
+}
+
+function emitStringGlobal(out: string, slot: string, value: string): string {
+  let rawSize = stringLen(value)
+  let size = rawSize + 1
+  out = stringBuilderAppend(out, "@.str.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, " = private unnamed_addr constant [")
+  out = stringBuilderAppend(out, intToString(size))
+  out = stringBuilderAppend(out, ' x i8] c"')
+  out = stringBuilderAppend(out, value)
+  out = stringBuilderAppend(out, '\00"
+')
+  return out
+}
+
+function emitPrint(out: string, slot: string, kind: string, value: string): string {
+  if includes(kind, "string") {
+    let rawSize = stringLen(value)
+    let size = rawSize + 1
+    out = stringBuilderAppend(out, "  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([")
+    out = stringBuilderAppend(out, intToString(size))
+    out = stringBuilderAppend(out, " x i8], ptr @.str.")
+    out = stringBuilderAppend(out, slot)
+    out = stringBuilderAppend(out, ", i64 0, i64 0))
+")
+    return out
+  }
+
+  if includes(kind, "number") {
+    out = stringBuilderAppend(out, "  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.int, i64 0, i64 0), i32 ")
+    out = stringBuilderAppend(out, value)
+    out = stringBuilderAppend(out, ")
+")
+  }
 
   return out
 }

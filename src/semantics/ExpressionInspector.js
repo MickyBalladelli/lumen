@@ -64,6 +64,7 @@ export class ExpressionInspector {
     if (this.isCall(rawExpression, SystemFunctions.StringBuilder)) return LumenTypes.String
     if (this.isCall(rawExpression, SystemFunctions.StringBuilderAppend)) return LumenTypes.String
     if (this.isCall(rawExpression, SystemFunctions.StringLen)) return LumenTypes.I32
+    if (this.isCall(rawExpression, SystemFunctions.IntToString)) return LumenTypes.String
     if (this.isCall(rawExpression, SystemFunctions.List)) return LumenTypes.String
     if (this.isCall(rawExpression, SystemFunctions.ListPush)) return LumenTypes.String
     if (this.isCall(rawExpression, SystemFunctions.ListGet)) return LumenTypes.String

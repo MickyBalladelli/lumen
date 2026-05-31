@@ -14,24 +14,111 @@ function tokenValue(token: string): string {
   return token
 }
 
-function parseReturnValue(tokens: string): string {
+function tokenKind(token: string): string {
   let index: i32 = 0
-  let count = listLen(tokens)
+  let length = stringLen(token)
 
-  while index < count do {
-    let current = tokenValue(listGet(tokens, index))
-    if includes(current, "return") {
-      let next = tokenValue(listGet(tokens, index + 1))
-      return next
+  while index < length do {
+    let ch = token[index..index + 1]
+    if includes(":", ch) {
+      return token[0..index]
     }
 
     index = index + 1
   }
 
-  return "0"
+  return token
+}
+
+function mapValueKind(value: string): string {
+  return tokenKind(value)
+}
+
+function mapValueBody(value: string): string {
+  return tokenValue(value)
+}
+
+function readValue(tokens: string, index: i32, variables: string): string {
+  let token = listGet(tokens, index)
+  let kind = tokenKind(token)
+  let value = tokenValue(token)
+
+  if includes(kind, "number") {
+    return "number:" + value
+  }
+
+  if includes(value, '"') {
+    let text = tokenValue(listGet(tokens, index + 1))
+    return "string:" + text
+  }
+
+  let resolved = mapGet(variables, value)
+  if includes(resolved, ":") {
+    return resolved
+  }
+
+  return kind + ":" + value
 }
 
 function parseProgram(tokens: string): string {
-  let value = parseReturnValue(tokens)
-  return map("kind", "program", "mainReturn", value)
+  let program = map("kind", "program", "mainReturnKind", "number", "mainReturnValue", "0", "printCount", "0")
+  let variables = map("unused", "unused")
+  let index: i32 = 0
+  let count = listLen(tokens)
+  let prints: i32 = 0
+
+  while index < count do {
+    let current = tokenValue(listGet(tokens, index))
+
+    if includes(current, "let") {
+      let name = tokenValue(listGet(tokens, index + 1))
+      let value = readValue(tokens, index + 3, variables)
+      variables = mapSet(variables, name, value)
+      index = index + 1
+      continue
+    }
+
+    if includes(current, "const") {
+      let name = tokenValue(listGet(tokens, index + 1))
+      let value = readValue(tokens, index + 3, variables)
+      variables = mapSet(variables, name, value)
+      index = index + 1
+      continue
+    }
+
+    if includes(current, "println") {
+      let value = readValue(tokens, index + 2, variables)
+
+      if prints == 0 {
+        program = mapSet(program, "print0Kind", mapValueKind(value))
+        program = mapSet(program, "print0Value", mapValueBody(value))
+      }
+
+      if prints == 1 {
+        program = mapSet(program, "print1Kind", mapValueKind(value))
+        program = mapSet(program, "print1Value", mapValueBody(value))
+      }
+
+      if prints == 2 {
+        program = mapSet(program, "print2Kind", mapValueKind(value))
+        program = mapSet(program, "print2Value", mapValueBody(value))
+      }
+
+      prints = prints + 1
+      index = index + 1
+      continue
+    }
+
+    if includes(current, "return") {
+      let value = readValue(tokens, index + 1, variables)
+      program = mapSet(program, "mainReturnKind", mapValueKind(value))
+      program = mapSet(program, "mainReturnValue", mapValueBody(value))
+      index = index + 1
+      continue
+    }
+
+    index = index + 1
+  }
+
+  return program
 }

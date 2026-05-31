@@ -239,6 +239,26 @@ if (bootstrapCompile.code !== 0) {
   } else {
     console.log('ok bootstrap self-host tiny')
   }
+
+  const basicCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
+    join(examplesDir, 'basic.lm'),
+    join(outputDir, 'basic-self.ll')
+  ])
+
+  if (basicCompile.code !== 0) {
+    failures += 1
+    console.error(`failed bootstrap basic compiler with code ${basicCompile.code}`)
+  } else {
+    await compiler.buildExecutable(join(outputDir, 'basic-self.ll'), join(outputDir, 'basic-self'))
+    const basic = await runExecutable(join(outputDir, 'basic-self'))
+
+    if (basic.stdout !== 'hello\n3\n' || basic.code !== 3) {
+      failures += 1
+      console.error(`failed bootstrap basic executable, got code ${basic.code} stdout ${JSON.stringify(basic.stdout)}`)
+    } else {
+      console.log('ok bootstrap self-host basic')
+    }
+  }
 }
 
 const negativeFiles = await readdir(negativeDir).catch(() => [])

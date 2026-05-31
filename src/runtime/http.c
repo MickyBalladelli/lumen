@@ -178,6 +178,13 @@ int lumen_string_len(const char *value) {
   return (int)strlen(value);
 }
 
+char *lumen_int_to_string(int value) {
+  char *out = malloc(32);
+  if (!out) return "";
+  snprintf(out, 32, "%d", value);
+  return out;
+}
+
 char *lumen_list(void) {
   return lumen_strdup("\n");
 }

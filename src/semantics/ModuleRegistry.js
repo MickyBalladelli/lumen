@@ -42,6 +42,7 @@ export class ModuleRegistry {
         'stringBuilder',
         'stringBuilderAppend',
         'stringLen',
+        'intToString',
         'list',
         'listPush',
         'listGet',
