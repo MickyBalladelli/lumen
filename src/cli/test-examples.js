@@ -30,6 +30,10 @@ const expectations = new Map([
     stdout: '1\nhello lumen\nhello lumen\n',
     code: 0
   }],
+  ['do-until', {
+    stdout: '10\n',
+    code: 10
+  }],
   ['env', {
     stdout: 'from-env\nfrom-dotenv\n\n1\n1\n',
     code: 0
@@ -73,6 +77,10 @@ const expectations = new Map([
   ['try-catch', {
     stdout: 'boom\n7\n',
     code: 7
+  }],
+  ['while-do', {
+    stdout: '6\n',
+    code: 6
   }]
 ])
 

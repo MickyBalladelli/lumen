@@ -100,6 +100,22 @@ export class ForOfStatementNode extends AstNode {
   }
 }
 
+export class WhileStatementNode extends AstNode {
+  constructor(test, body, location = null) {
+    super('WhileStatement', location)
+    this.test = test
+    this.body = body
+  }
+}
+
+export class DoUntilStatementNode extends AstNode {
+  constructor(body, test, location = null) {
+    super('DoUntilStatement', location)
+    this.body = body
+    this.test = test
+  }
+}
+
 export class ReturnStatementNode extends AstNode {
   constructor(argument = null, location = null) {
     super('ReturnStatement', location)

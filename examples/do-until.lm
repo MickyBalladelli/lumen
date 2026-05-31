@@ -1,0 +1,12 @@
+function main(): i32 {
+  let i: i32 = 0
+  let total: i32 = 0
+
+  do {
+    i++
+    total = total + i
+  } until i == 4
+
+  println(total)
+  return total
+}

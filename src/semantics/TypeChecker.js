@@ -55,6 +55,8 @@ export class TypeChecker {
     if (node.kind === 'VariableDeclaration') return this.checkVariableDeclaration(node, scope)
     if (node.kind === 'ForStatement') return this.checkFor(node, scope, currentFunction)
     if (node.kind === 'ForOfStatement') return this.checkForOf(node, scope, currentFunction)
+    if (node.kind === 'WhileStatement') return this.checkWhile(node, scope, currentFunction)
+    if (node.kind === 'DoUntilStatement') return this.checkDoUntil(node, scope, currentFunction)
     if (node.kind === 'TryCatchStatement') return this.checkTryCatch(node, scope, currentFunction)
     if (node.kind === 'ThrowStatement') return this.checkThrow(node, scope)
     if (node.kind === 'ReturnStatement') return this.checkReturn(node, scope, currentFunction)
@@ -162,6 +164,18 @@ export class TypeChecker {
     })
 
     this.checkNode(node.body, scope, currentFunction)
+    return LumenTypes.Void
+  }
+
+  checkWhile(node, parentScope, currentFunction) {
+    this.checkExpression(node.test, parentScope)
+    this.checkNode(node.body, new Scope(parentScope), currentFunction)
+    return LumenTypes.Void
+  }
+
+  checkDoUntil(node, parentScope, currentFunction) {
+    this.checkNode(node.body, new Scope(parentScope), currentFunction)
+    this.checkExpression(node.test, parentScope)
     return LumenTypes.Void
   }
 

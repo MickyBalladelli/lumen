@@ -48,6 +48,8 @@ export class SemanticAnalyzer {
     if (node.kind === 'VariableDeclaration') return this.visitVariableDeclaration(node, scope)
     if (node.kind === 'ForStatement') return this.visitFor(node, scope)
     if (node.kind === 'ForOfStatement') return this.visitForOf(node, scope)
+    if (node.kind === 'WhileStatement') return this.visitLoop(node, scope)
+    if (node.kind === 'DoUntilStatement') return this.visitLoop(node, scope)
     if (node.kind === 'TryCatchStatement') return this.visitTryCatch(node, scope)
   }
 
@@ -104,6 +106,10 @@ export class SemanticAnalyzer {
     })
 
     this.visit(node.body, loopScope)
+  }
+
+  visitLoop(node, scope) {
+    this.visit(node.body, new Scope(scope))
   }
 
   visitTryCatch(node, scope) {

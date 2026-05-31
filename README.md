@@ -150,6 +150,22 @@ for (let point of points) {
 }
 ```
 
+While-do loops run while the condition is true.
+
+```lumen
+while total < 10 do {
+  total = total + 1
+}
+```
+
+Do-until loops run the body first, then stop once the condition is true.
+
+```lumen
+do {
+  total = total + 1
+} until total == 10
+```
+
 ### Expressions
 
 Current compiled expressions support:
@@ -407,6 +423,7 @@ console.log(ast)
 
 - `examples/basic.lm`: variables, function, return
 - `examples/crypto.lm`: `encrypt` and `decrypt`
+- `examples/do-until.lm`: do-until loop
 - `examples/env.lm`: read environment variables with `env`
 - `examples/array.lm`: arrays of numbers and structs
 - `examples/for-loop.lm`: classic for loop semicolon rule
@@ -423,6 +440,7 @@ console.log(ast)
 - `examples/system.lm`: `println`, `len`, and `filter`
 - `examples/thread.lm`: native threads with semaphore-protected file writes
 - `examples/try-catch.lm`: Lumen `try/catch` and `throw`
+- `examples/while-do.lm`: while-do loop
 - `examples/use-api.js`: tokenizer and parser from JavaScript
 
 Run the API example:

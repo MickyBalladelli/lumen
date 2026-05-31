@@ -114,6 +114,8 @@ export class LLVMEmitter {
     if (node.kind === 'BlockStatement') return this.emitBlock(node)
     if (node.kind === 'ForOfStatement') return this.emitForOf(node)
     if (node.kind === 'ForStatement') return this.emitFor(node)
+    if (node.kind === 'WhileStatement') return this.emitWhile(node)
+    if (node.kind === 'DoUntilStatement') return this.emitDoUntil(node)
 
     throw new Diagnostic(`LLVM backend does not support ${node.kind}`, node.location, 'backend')
   }
@@ -247,6 +249,42 @@ export class LLVMEmitter {
 
     this.lines.push(`${endLabel}:`)
     this.popScope()
+  }
+
+  emitWhile(node) {
+    const conditionLabel = this.nextLabel('while.cond')
+    const bodyLabel = this.nextLabel('while.body')
+    const endLabel = this.nextLabel('while.end')
+
+    this.lines.push(`  br label %${conditionLabel}`)
+    this.lines.push(`${conditionLabel}:`)
+
+    const condition = this.emitExpression(node.test)
+    this.lines.push(`  br i1 ${this.cast(condition, LumenTypes.Bool)}, label %${bodyLabel}, label %${endLabel}`)
+
+    this.lines.push(`${bodyLabel}:`)
+    this.emitStatement(node.body)
+    if (!this.hasTerminator()) this.lines.push(`  br label %${conditionLabel}`)
+
+    this.lines.push(`${endLabel}:`)
+  }
+
+  emitDoUntil(node) {
+    const bodyLabel = this.nextLabel('do.body')
+    const conditionLabel = this.nextLabel('do.cond')
+    const endLabel = this.nextLabel('do.end')
+
+    this.lines.push(`  br label %${bodyLabel}`)
+    this.lines.push(`${bodyLabel}:`)
+
+    this.emitStatement(node.body)
+    if (!this.hasTerminator()) this.lines.push(`  br label %${conditionLabel}`)
+
+    this.lines.push(`${conditionLabel}:`)
+    const condition = this.emitExpression(node.test)
+    this.lines.push(`  br i1 ${this.cast(condition, LumenTypes.Bool)}, label %${endLabel}, label %${bodyLabel}`)
+
+    this.lines.push(`${endLabel}:`)
   }
 
   emitForOf(node) {

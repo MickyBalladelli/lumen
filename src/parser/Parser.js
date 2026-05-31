@@ -2,6 +2,7 @@ import { TokenType } from '../lexer/TokenType.js'
 import { AstNodeRegistry } from '../ast/AstNodeRegistry.js'
 import {
   BlockStatementNode,
+  DoUntilStatementNode,
   ExpressionStatementNode,
   ForOfStatementNode,
   ForStatementNode,
@@ -16,7 +17,8 @@ import {
   TryCatchStatementNode,
   TypeAnnotationNode,
   VariableDeclarationNode,
-  VariableDeclaratorNode
+  VariableDeclaratorNode,
+  WhileStatementNode
 } from '../ast/nodes.js'
 
 export class Parser {
@@ -131,6 +133,8 @@ export class Parser {
     // Statements stay separate from declarations so block grammar can evolve
     // without turning the parser into one giant switch.
     if (this.matchKeyword('for')) return this.forStatement()
+    if (this.matchKeyword('while')) return this.whileStatement()
+    if (this.matchKeyword('do')) return this.doUntilStatement()
     if (this.matchKeyword('try')) return this.tryCatchStatement()
     if (this.matchKeyword('throw')) return this.throwStatement()
     if (this.matchKeyword('return')) return this.returnStatement()
@@ -197,6 +201,28 @@ export class Parser {
     const body = this.statement()
 
     return new ForStatementNode(init, test, update, body, keyword.location)
+  }
+
+  whileStatement() {
+    const keyword = this.previous()
+    const test = this.rawExpressionUntil(['do', '{'])
+
+    this.matchKeyword('do')
+    const body = this.statement()
+
+    return new WhileStatementNode(test, body, keyword.location)
+  }
+
+  doUntilStatement() {
+    const keyword = this.previous()
+    const body = this.blockStatement()
+
+    this.skipTerminators()
+    this.consumeKeyword('until', 'Expected until after do body')
+    const test = this.rawExpressionUntil([';'])
+
+    this.consumeOptionalTerminator()
+    return new DoUntilStatementNode(body, test, keyword.location)
   }
 
   returnStatement() {

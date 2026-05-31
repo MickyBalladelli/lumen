@@ -1,6 +1,7 @@
 import {
   AstNode,
   BlockStatementNode,
+  DoUntilStatementNode,
   ExpressionStatementNode,
   ForOfStatementNode,
   ForStatementNode,
@@ -15,7 +16,8 @@ import {
   TryCatchStatementNode,
   TypeAnnotationNode,
   VariableDeclarationNode,
-  VariableDeclaratorNode
+  VariableDeclaratorNode,
+  WhileStatementNode
 } from './nodes.js'
 
 export class AstNodeRegistry {
@@ -56,6 +58,8 @@ export class AstNodeRegistry {
       .register('BlockStatement', BlockStatementNode)
       .register('ForOfStatement', ForOfStatementNode)
       .register('ForStatement', ForStatementNode)
+      .register('WhileStatement', WhileStatementNode)
+      .register('DoUntilStatement', DoUntilStatementNode)
       .register('ReturnStatement', ReturnStatementNode)
       .register('ThrowStatement', ThrowStatementNode)
       .register('TryCatchStatement', TryCatchStatementNode)
