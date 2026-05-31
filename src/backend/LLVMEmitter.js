@@ -32,6 +32,9 @@ export class LLVMEmitter {
     this.usesStrstr = false
     this.usesStrcmp = false
     this.usesFileIO = false
+    this.usesAssert = false
+    this.usesSlice = false
+    this.usesChannel = false
     this.usesHttp = false
     this.usesUuid = false
     this.usesEnv = false
@@ -43,6 +46,15 @@ export class LLVMEmitter {
     this.usesStringRuntime = false
     this.usesThread = false
     this.functionSignatures = new Map(irModule.functions.map(func => [func.name, func]))
+    this.enumConstants = new Map()
+    for (const enumType of irModule.enums ?? []) {
+      for (const variant of enumType.variants) {
+        this.enumConstants.set(variant.name, {
+          type: enumType.name,
+          value: String(variant.value)
+        })
+      }
+    }
     const typeDefinitions = irModule.structs.map(struct => this.emitStructType(struct))
     const functions = irModule.functions.flatMap(func => this.emitFunction(func))
 
@@ -59,6 +71,11 @@ export class LLVMEmitter {
       this.usesFileIO ? 'declare i64 @fread(ptr, i64, i64, ptr)' : '',
       this.usesFileIO ? 'declare ptr @malloc(i64)' : '',
       this.usesFileIO ? 'declare i32 @fclose(ptr)' : '',
+      this.usesAssert ? 'declare void @lumen_assert(i1, ptr)' : '',
+      this.usesSlice ? 'declare ptr @lumen_string_slice(ptr, i32, i32)' : '',
+      this.usesChannel ? 'declare ptr @lumen_channel()' : '',
+      this.usesChannel ? 'declare void @lumen_send(ptr, ptr)' : '',
+      this.usesChannel ? 'declare ptr @lumen_receive(ptr)' : '',
       this.usesUuid ? 'declare ptr @lumen_uuid()' : '',
       this.usesEnv ? 'declare ptr @lumen_env(ptr)' : '',
       this.usesCrypto ? 'declare ptr @lumen_encrypt(ptr, ptr, ptr)' : '',
@@ -105,6 +122,7 @@ export class LLVMEmitter {
     this.tryStack = []
     this.loopStack = []
     this.breakStack = []
+    this.deferStack = []
     this.returnType = func.returnType
 
     const params = func.params
@@ -122,6 +140,7 @@ export class LLVMEmitter {
     for (const statement of func.body) this.emitStatement(statement)
 
     if (!this.hasTerminator()) {
+      this.emitDeferred()
       this.lines.push(this.defaultReturn(func.returnType))
     }
 
@@ -132,6 +151,7 @@ export class LLVMEmitter {
   emitStatement(node) {
     if (node.kind === 'VariableDeclaration') return this.emitVariableDeclaration(node)
     if (node.kind === 'ExpressionStatement') return this.emitExpression(node.expression)
+    if (node.kind === 'DeferStatement') return this.emitDefer(node)
     if (node.kind === 'ReturnStatement') return this.emitReturn(node)
     if (node.kind === 'BreakStatement') return this.emitBreak(node)
     if (node.kind === 'ContinueStatement') return this.emitContinue(node)
@@ -141,6 +161,7 @@ export class LLVMEmitter {
     if (node.kind === 'SwitchStatement') return this.emitSwitch(node)
     if (node.kind === 'BlockStatement') return this.emitBlock(node)
     if (node.kind === 'ForOfStatement') return this.emitForOf(node)
+    if (node.kind === 'ForRangeStatement') return this.emitForRange(node)
     if (node.kind === 'ForStatement') return this.emitFor(node)
     if (node.kind === 'WhileStatement') return this.emitWhile(node)
     if (node.kind === 'DoUntilStatement') return this.emitDoUntil(node)
@@ -234,6 +255,8 @@ export class LLVMEmitter {
   }
 
   emitReturn(node) {
+    this.emitDeferred()
+
     if (!node.argument) {
       this.lines.push('  ret void')
       return
@@ -241,6 +264,16 @@ export class LLVMEmitter {
 
     const value = this.emitExpression(node.argument)
     this.lines.push(`  ret ${this.llvmType(this.returnType)} ${this.cast(value, this.returnType)}`)
+  }
+
+  emitDefer(node) {
+    this.deferStack.push(node.expression)
+  }
+
+  emitDeferred() {
+    while (this.deferStack.length > 0) {
+      this.emitExpression(this.deferStack.pop())
+    }
   }
 
   emitBreak(node) {
@@ -307,6 +340,49 @@ export class LLVMEmitter {
     }
 
     this.lines.push(`${endLabel}:`)
+  }
+
+  emitForRange(node) {
+    this.pushScope()
+    const itemPointer = this.alloca(node.item.name, LumenTypes.I32)
+    const start = this.emitExpression(node.start)
+    const end = this.emitExpression(node.end)
+    const conditionLabel = this.nextLabel('range.cond')
+    const bodyLabel = this.nextLabel('range.body')
+    const updateLabel = this.nextLabel('range.update')
+    const endLabel = this.nextLabel('range.end')
+
+    this.lines.push(`  store i32 ${this.cast(start, LumenTypes.I32)}, ptr ${itemPointer}`)
+    this.breakStack.push(endLabel)
+    this.loopStack.push({
+      breakLabel: endLabel,
+      continueLabel: updateLabel
+    })
+
+    this.lines.push(`  br label %${conditionLabel}`)
+    this.lines.push(`${conditionLabel}:`)
+    const current = this.nextTemp()
+    const inRange = this.nextTemp()
+    this.lines.push(`  ${current} = load i32, ptr ${itemPointer}`)
+    this.lines.push(`  ${inRange} = icmp slt i32 ${current}, ${this.cast(end, LumenTypes.I32)}`)
+    this.lines.push(`  br i1 ${inRange}, label %${bodyLabel}, label %${endLabel}`)
+
+    this.lines.push(`${bodyLabel}:`)
+    this.emitStatement(node.body)
+    if (!this.hasTerminator()) this.lines.push(`  br label %${updateLabel}`)
+
+    this.lines.push(`${updateLabel}:`)
+    const updateCurrent = this.nextTemp()
+    const next = this.nextTemp()
+    this.lines.push(`  ${updateCurrent} = load i32, ptr ${itemPointer}`)
+    this.lines.push(`  ${next} = add i32 ${updateCurrent}, 1`)
+    this.lines.push(`  store i32 ${next}, ptr ${itemPointer}`)
+    this.lines.push(`  br label %${conditionLabel}`)
+
+    this.lines.push(`${endLabel}:`)
+    this.loopStack.pop()
+    this.breakStack.pop()
+    this.popScope()
   }
 
   emitFor(node) {
@@ -546,6 +622,10 @@ export class LLVMEmitter {
     if (this.isCall(expression.tokens, SystemFunctions.None)) return this.emitNone(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.HasValue)) return this.emitRuntimeCall(expression.tokens, 'lumen_has_value', LumenTypes.Bool, 1, 'hasValue')
     if (this.isCall(expression.tokens, SystemFunctions.ValueOr)) return this.emitRuntimeCall(expression.tokens, 'lumen_value_or', LumenTypes.String, 2, 'valueOr')
+    if (this.isCall(expression.tokens, SystemFunctions.Assert)) return this.emitAssert(expression.tokens)
+    if (this.isCall(expression.tokens, SystemFunctions.Channel)) return this.emitChannel(expression.tokens)
+    if (this.isCall(expression.tokens, SystemFunctions.Send)) return this.emitSend(expression.tokens)
+    if (this.isCall(expression.tokens, SystemFunctions.Receive)) return this.emitReceive(expression.tokens)
     if (this.isCall(expression.tokens, FsFunctions.ReadFile)) return this.emitReadFile(expression.tokens)
     if (this.isCall(expression.tokens, HttpFunctions.ServeFiles)) return this.emitServeFiles(expression.tokens)
     if (this.isCall(expression.tokens, HttpFunctions.ServeApi)) return this.emitServeApi(expression.tokens)
@@ -557,6 +637,7 @@ export class LLVMEmitter {
     if (this.isCall(expression.tokens, ThreadFunctions.JoinThread)) return this.emitJoinThread(expression.tokens)
     if (this.isCall(expression.tokens, ThreadFunctions.AppendFile)) return this.emitAppendFile(expression.tokens)
     if (this.isUserCall(expression.tokens)) return this.emitUserCall(expression.tokens)
+    if (this.isMatch(expression.tokens)) return this.emitMatch(expression.tokens, expression.location)
     if (this.isFieldAccess(expression.tokens)) return this.emitFieldLoad(expression.tokens)
     if (this.isArrayAccess(expression.tokens)) return this.emitArrayLoad(expression.tokens)
 
@@ -895,6 +976,74 @@ export class LLVMEmitter {
 
     return {
       type: LumenTypes.I32,
+      value: result
+    }
+  }
+
+  emitAssert(tokens) {
+    this.usesAssert = true
+    const args = this.callArguments(tokens)
+
+    if (args.length < 1 || args.length > 2) {
+      throw new Diagnostic('assert expects condition and optional message', tokens[0].location, 'backend')
+    }
+
+    const condition = this.emitExpression({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+    const message = args[1]
+      ? this.emitExpression({
+          tokens: args[1],
+          location: tokens[0].location
+        })
+      : {
+          type: LumenTypes.String,
+          value: this.globalCString('assert failed').pointer
+        }
+
+    this.lines.push(`  call void @lumen_assert(i1 ${this.cast(condition, LumenTypes.Bool)}, ptr ${message.value})`)
+
+    return {
+      type: LumenTypes.Void,
+      value: ''
+    }
+  }
+
+  emitChannel(tokens) {
+    this.usesChannel = true
+    const args = this.callArguments(tokens)
+    if (args.length !== 0) throw new Diagnostic('channel expects no arguments', tokens[0].location, 'backend')
+    const result = this.nextTemp()
+    this.lines.push(`  ${result} = call ptr @lumen_channel()`)
+    return {
+      type: LumenTypes.String,
+      value: result
+    }
+  }
+
+  emitSend(tokens) {
+    this.usesChannel = true
+    const args = this.callArguments(tokens)
+    if (args.length !== 2) throw new Diagnostic('send expects channel and message', tokens[0].location, 'backend')
+    const channel = this.emitExpression({ tokens: args[0], location: tokens[0].location })
+    const message = this.emitExpression({ tokens: args[1], location: tokens[0].location })
+    this.lines.push(`  call void @lumen_send(ptr ${channel.value}, ptr ${message.value})`)
+    return {
+      type: LumenTypes.Void,
+      value: ''
+    }
+  }
+
+  emitReceive(tokens) {
+    this.usesChannel = true
+    const args = this.callArguments(tokens)
+    if (args.length !== 1) throw new Diagnostic('receive expects channel', tokens[0].location, 'backend')
+    const channel = this.emitExpression({ tokens: args[0], location: tokens[0].location })
+    const result = this.nextTemp()
+    this.lines.push(`  ${result} = call ptr @lumen_receive(ptr ${channel.value})`)
+    return {
+      type: LumenTypes.String,
       value: result
     }
   }
@@ -1549,6 +1698,12 @@ export class LLVMEmitter {
       }
 
       if (token.type === TokenType.Identifier) {
+        if (this.enumConstants.has(token.lexeme)) {
+          const enumValue = this.enumConstants.get(token.lexeme)
+          stack.push(enumValue)
+          continue
+        }
+
         if (token.fieldAccess) {
           stack.push(this.emitFieldLoad(token.fieldAccess))
           continue
@@ -1630,6 +1785,98 @@ export class LLVMEmitter {
       type: LumenTypes.String,
       value: result
     }
+  }
+
+  emitMatch(tokens, location) {
+    const open = tokens.findIndex(token => token.lexeme === '{')
+    const close = tokens.length - 1
+    const discriminant = this.emitExpression({
+      tokens: tokens.slice(1, open),
+      location
+    })
+    const arms = this.matchArms(tokens.slice(open + 1, close), location)
+    const resultType = this.emitExpression({ tokens: arms[0].value, location }).type
+    const resultPointer = this.alloca('.match.result', resultType)
+    const endLabel = this.nextLabel('match.end')
+    const defaultArm = arms.find(arm => arm.isDefault)
+    const testArms = arms.filter(arm => !arm.isDefault)
+    const testLabels = testArms.map(() => this.nextLabel('match.test'))
+    const bodyLabels = testArms.map(() => this.nextLabel('match.body'))
+    const defaultLabel = defaultArm ? this.nextLabel('match.default') : endLabel
+
+    this.lines.push(`  br label %${testLabels[0] ?? defaultLabel}`)
+    for (let index = 0; index < testArms.length; index += 1) {
+      this.lines.push(`${testLabels[index]}:`)
+      const arm = testArms[index]
+      const test = this.emitExpression({ tokens: arm.test, location })
+      const matches = this.emitEqualityComparison(discriminant, test)
+      this.lines.push(`  br i1 ${matches.value}, label %${bodyLabels[index]}, label %${testLabels[index + 1] ?? defaultLabel}`)
+      this.lines.push(`${bodyLabels[index]}:`)
+      const value = this.emitExpression({ tokens: arm.value, location })
+      this.lines.push(`  store ${this.llvmType(resultType)} ${this.cast(value, resultType)}, ptr ${resultPointer}`)
+      this.lines.push(`  br label %${endLabel}`)
+    }
+
+    if (defaultArm) {
+      this.lines.push(`${defaultLabel}:`)
+      const value = this.emitExpression({ tokens: defaultArm.value, location })
+      this.lines.push(`  store ${this.llvmType(resultType)} ${this.cast(value, resultType)}, ptr ${resultPointer}`)
+      this.lines.push(`  br label %${endLabel}`)
+    }
+
+    this.lines.push(`${endLabel}:`)
+    const result = this.nextTemp()
+    this.lines.push(`  ${result} = load ${this.llvmType(resultType)}, ptr ${resultPointer}`)
+    return {
+      type: resultType,
+      value: result
+    }
+  }
+
+  matchArms(tokens, location) {
+    const arms = []
+    let index = 0
+
+    while (index < tokens.length) {
+      while (tokens[index]?.lexeme === ';') index += 1
+      const isDefault = tokens[index]?.lexeme === '_'
+      const test = []
+
+      if (isDefault) {
+        index += 1
+      } else {
+        while (index < tokens.length && tokens[index].lexeme !== '=>') {
+          test.push(tokens[index])
+          index += 1
+        }
+      }
+
+      if (tokens[index]?.lexeme !== '=>') throw new Diagnostic('match arm needs =>', location, 'backend')
+      index += 1
+      const value = []
+      let depth = 0
+      while (index < tokens.length) {
+        if (depth === 0 && tokens[index].type === TokenType.Semicolon) break
+        if (depth === 0 && (tokens[index].lexeme === '_' || this.looksLikeMatchArm(tokens, index))) break
+        if (['(', '[', '{'].includes(tokens[index].lexeme)) depth += 1
+        if ([')', ']', '}'].includes(tokens[index].lexeme)) depth -= 1
+        value.push(tokens[index])
+        index += 1
+      }
+
+      arms.push({
+        isDefault,
+        test,
+        value
+      })
+      while (tokens[index]?.type === TokenType.Semicolon) index += 1
+    }
+
+    return arms
+  }
+
+  looksLikeMatchArm(tokens, index) {
+    return tokens[index + 1]?.lexeme === '=>'
   }
 
   emitEqualityComparison(left, right) {
@@ -1717,6 +1964,10 @@ export class LLVMEmitter {
       this.functionSignatures.has(tokens[0].lexeme)
   }
 
+  isMatch(tokens) {
+    return tokens[0]?.lexeme === 'match'
+  }
+
   isStructLiteral(tokens) {
     return tokens[0]?.type === TokenType.Identifier &&
       tokens[1]?.lexeme === '{' &&
@@ -1764,6 +2015,28 @@ export class LLVMEmitter {
     const base = this.resolve(tokens[0].lexeme)
     const closeIndex = this.findMatching(tokens, 1, '[', ']')
     const indexTokens = tokens.slice(2, closeIndex)
+
+    if (base.type === LumenTypes.String && indexTokens.some((token, index) => token.lexeme === '.' && indexTokens[index + 1]?.lexeme === '.')) {
+      this.usesSlice = true
+      const dots = indexTokens.findIndex((token, index) => token.lexeme === '.' && indexTokens[index + 1]?.lexeme === '.')
+      const start = this.emitExpression({
+        tokens: indexTokens.slice(0, dots),
+        location: tokens[0].location
+      })
+      const end = this.emitExpression({
+        tokens: indexTokens.slice(dots + 2),
+        location: tokens[0].location
+      })
+      const result = this.nextTemp()
+      const source = this.nextTemp()
+      this.lines.push(`  ${source} = load ptr, ptr ${base.pointer}`)
+      this.lines.push(`  ${result} = call ptr @lumen_string_slice(ptr ${source}, i32 ${this.cast(start, LumenTypes.I32)}, i32 ${this.cast(end, LumenTypes.I32)})`)
+      return {
+        type: LumenTypes.String,
+        value: result
+      }
+    }
+
     const index = this.emitRpn(this.toRpn(indexTokens), tokens[0].location)
     const elementType = this.typeSystem.elementType(base.type)
     const elementPointer = this.nextTemp()

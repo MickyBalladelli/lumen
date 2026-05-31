@@ -5,9 +5,12 @@ import {
   BlockStatementNode,
   BreakStatementNode,
   ContinueStatementNode,
+  DeferStatementNode,
   DoUntilStatementNode,
+  EnumDeclarationNode,
   ExpressionStatementNode,
   ForOfStatementNode,
+  ForRangeStatementNode,
   ForStatementNode,
   FunctionDeclarationNode,
   IdentifierNode,
@@ -57,6 +60,7 @@ export class Parser {
     // This is the main extension point for future syntax families:
     // imports, structs, traits, modules, extern blocks, etc.
     if (this.matchKeyword('import')) return this.importDeclaration()
+    if (this.matchKeyword('enum')) return this.enumDeclaration()
     if (this.matchKeyword('struct')) return this.structDeclaration()
     if (this.matchKeyword('function')) return this.functionDeclaration()
     if (this.checkKeyword('let') || this.checkKeyword('const')) return this.variableDeclaration()
@@ -99,6 +103,24 @@ export class Parser {
     this.consumePunctuation('}', 'Expected "}" after struct fields')
     this.consumeOptionalTopLevelTerminator()
     return new StructDeclarationNode(name, fields, keyword.location)
+  }
+
+  enumDeclaration() {
+    const keyword = this.previous()
+    const name = this.identifier()
+    const variants = []
+
+    this.consumePunctuation('{', 'Expected "{" after enum name')
+    while (!this.isAtEnd() && !this.checkPunctuation('}')) {
+      this.skipTerminators()
+      if (this.checkPunctuation('}')) break
+      variants.push(this.identifier())
+      this.consumeOptionalFieldTerminator()
+    }
+
+    this.consumePunctuation('}', 'Expected "}" after enum variants')
+    this.consumeOptionalTopLevelTerminator()
+    return new EnumDeclarationNode(name, variants, keyword.location)
   }
 
   functionDeclaration() {
@@ -161,6 +183,7 @@ export class Parser {
     if (this.matchKeyword('for')) return this.forStatement()
     if (this.matchKeyword('if')) return this.ifStatement()
     if (this.matchKeyword('switch')) return this.switchStatement()
+    if (this.matchKeyword('defer')) return this.deferStatement()
     if (this.matchKeyword('break')) return this.breakStatement()
     if (this.matchKeyword('continue')) return this.continueStatement()
     if (this.matchKeyword('while')) return this.whileStatement()
@@ -193,6 +216,21 @@ export class Parser {
 
   forStatement() {
     const keyword = this.previous()
+    if (this.peek()?.type === TokenType.Identifier && this.peekNextToken()?.is(TokenType.Keyword, 'in')) {
+      const item = this.identifier()
+      this.consumeKeyword('in', 'Expected in after range loop variable')
+      const range = this.rawExpressionUntil(['{'])
+      const dots = range.tokens.findIndex((token, index) => token.lexeme === '.' && range.tokens[index + 1]?.lexeme === '.')
+      if (dots < 0) throw this.error(range.tokens[0] ?? this.peek(), 'Expected ".." in range loop')
+
+      const start = new RawExpressionNode(range.tokens.slice(0, dots), range.tokens[0]?.location ?? range.location)
+      start.parsed = this.expressionParser.parse(start.tokens)
+      const end = new RawExpressionNode(range.tokens.slice(dots + 2), range.tokens[dots + 2]?.location ?? range.location)
+      end.parsed = this.expressionParser.parse(end.tokens)
+      const body = this.statement()
+      return new ForRangeStatementNode(item, start, end, body, keyword.location)
+    }
+
     this.consumePunctuation('(', 'Expected "(" after for')
 
     if (this.checkKeyword('let') &&
@@ -313,6 +351,13 @@ export class Parser {
     const keyword = this.previous()
     this.consumeOptionalTerminator()
     return new ContinueStatementNode(keyword.location)
+  }
+
+  deferStatement() {
+    const keyword = this.previous()
+    const expression = this.rawExpressionUntil([';'])
+    this.consumeOptionalTerminator()
+    return new DeferStatementNode(expression, keyword.location)
   }
 
   returnStatement() {

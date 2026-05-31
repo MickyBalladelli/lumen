@@ -1,4 +1,4 @@
-import { readdir, readFile } from 'node:fs/promises'
+import { readdir, readFile, stat } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { Compiler } from '../compiler/Compiler.js'
 
@@ -16,8 +16,24 @@ for (const file of files) {
   const executablePath = join(outputDir, name)
   const source = await readFile(inputPath, 'utf8')
 
+  if (await isFresh(inputPath, executablePath)) {
+    console.log(`${executablePath} cached`)
+    continue
+  }
+
   await compiler.writeLLVM(source, llvmPath)
   await compiler.buildExecutable(llvmPath, executablePath)
 
   console.log(executablePath)
+}
+
+async function isFresh(inputPath, outputPath) {
+  try {
+    const input = await stat(inputPath)
+    const output = await stat(outputPath)
+    const runtime = await stat('src/runtime/http.c')
+    return output.mtimeMs >= input.mtimeMs && output.mtimeMs >= runtime.mtimeMs
+  } catch {
+    return false
+  }
 }

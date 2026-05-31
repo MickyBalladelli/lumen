@@ -14,6 +14,7 @@ export class TypeSystem {
   constructor() {
     this.known = new Set(Object.values(LumenTypes))
     this.structs = new Map()
+    this.enums = new Map()
   }
 
   registerStruct(name, fields) {
@@ -21,6 +22,14 @@ export class TypeSystem {
     this.structs.set(name, {
       name,
       fields
+    })
+  }
+
+  registerEnum(name, variants) {
+    this.known.add(name)
+    this.enums.set(name, {
+      name,
+      variants
     })
   }
 
@@ -50,6 +59,7 @@ export class TypeSystem {
     if (normalized === LumenTypes.Void) return 'void'
     if (this.isNullable(normalized)) return this.llvm(this.nonNullable(normalized))
     if (this.isGeneric(normalized)) return 'ptr'
+    if (this.enums.has(normalized)) return 'i32'
     if (this.structs.has(normalized)) return `%${normalized}`
 
     return 'ptr'
@@ -94,6 +104,22 @@ export class TypeSystem {
 
   getField(structName, fieldName) {
     return this.getStruct(structName)?.fields.find(field => field.name === fieldName) ?? null
+  }
+
+  getEnum(name) {
+    return this.enums.get(name) ?? null
+  }
+
+  enumVariant(name) {
+    for (const enumType of this.enums.values()) {
+      const index = enumType.variants.findIndex(variant => variant.name === name)
+      if (index >= 0) return {
+        enumName: enumType.name,
+        index
+      }
+    }
+
+    return null
   }
 
   isArray(typeName) {

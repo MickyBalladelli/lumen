@@ -25,6 +25,8 @@ typedef int CCOperation;
 #define kCCDecrypt 1
 #endif
 
+static char *lumen_strdup(const char *value);
+
 char *lumen_uuid(void) {
   static int seeded = 0;
   if (!seeded) {
@@ -147,6 +149,50 @@ char *lumen_string_concat(const char *left, const char *right) {
   memcpy(out, left, left_length);
   memcpy(out + left_length, right, right_length + 1);
   return out;
+}
+
+void lumen_assert(int condition, const char *message) {
+  if (condition) return;
+  fprintf(stderr, "assert failed: %s\n", message);
+  exit(1);
+}
+
+char *lumen_string_slice(const char *value, int start, int end) {
+  int length = (int)strlen(value);
+  if (start < 0) start = 0;
+  if (end < start) end = start;
+  if (end > length) end = length;
+
+  int slice_length = end - start;
+  char *out = malloc((size_t)slice_length + 1);
+  if (!out) return "";
+
+  memcpy(out, value + start, (size_t)slice_length);
+  out[slice_length] = '\0';
+  return out;
+}
+
+typedef struct {
+  char *message;
+} LumenChannel;
+
+void *lumen_channel(void) {
+  LumenChannel *channel = malloc(sizeof(LumenChannel));
+  if (!channel) return NULL;
+  channel->message = "";
+  return channel;
+}
+
+void lumen_send(void *raw_channel, const char *message) {
+  LumenChannel *channel = raw_channel;
+  if (!channel) return;
+  channel->message = lumen_strdup(message);
+}
+
+char *lumen_receive(void *raw_channel) {
+  LumenChannel *channel = raw_channel;
+  if (!channel) return "";
+  return channel->message;
 }
 
 static char *lumen_prefixed(const char *prefix, const char *value) {

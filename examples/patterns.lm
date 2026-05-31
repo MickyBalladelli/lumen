@@ -1,0 +1,37 @@
+enum Status {
+  Ok
+  Missing
+  Broken
+}
+
+function cleanup(): void {
+  println("cleanup")
+}
+
+function main(): i32 {
+  defer cleanup()
+
+  let status: Status = Missing
+  let label = match status {
+    Ok => "ok"
+    Missing => "missing"
+    _ => "unknown"
+  }
+
+  let total: i32 = 0
+  for i in 0..4 {
+    total = total + i
+  }
+
+  let text = "lumen"
+  let part = text[1..4]
+  let messages = channel()
+  send(messages, part)
+  assert(total == 6, "range failed")
+
+  println(label)
+  println(receive(messages))
+  println(total)
+
+  return total
+}

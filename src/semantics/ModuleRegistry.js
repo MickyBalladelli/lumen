@@ -22,7 +22,11 @@ export class ModuleRegistry {
         'some',
         'none',
         'hasValue',
-        'valueOr'
+        'valueOr',
+        'assert',
+        'channel',
+        'send',
+        'receive'
       ])],
       ['fs', new Set(['readFile'])],
       ['http', new Set(['serveFiles', 'serveApi', 'serveHttp'])],

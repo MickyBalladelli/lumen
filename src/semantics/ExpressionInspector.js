@@ -39,6 +39,10 @@ export class ExpressionInspector {
     if (this.isCall(rawExpression, SystemFunctions.None)) return LumenTypes.Unknown
     if (this.isCall(rawExpression, SystemFunctions.HasValue)) return LumenTypes.Bool
     if (this.isCall(rawExpression, SystemFunctions.ValueOr)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.Assert)) return LumenTypes.Void
+    if (this.isCall(rawExpression, SystemFunctions.Channel)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.Send)) return LumenTypes.Void
+    if (this.isCall(rawExpression, SystemFunctions.Receive)) return LumenTypes.String
     if (this.isCall(rawExpression, FsFunctions.ReadFile)) return LumenTypes.String
     if (this.isCall(rawExpression, HttpFunctions.ServeFiles)) return LumenTypes.I32
     if (this.isCall(rawExpression, HttpFunctions.ServeApi)) return LumenTypes.I32
@@ -54,8 +58,11 @@ export class ExpressionInspector {
     if (this.isArrayLiteral(rawExpression.tokens)) return this.arrayLiteralType(rawExpression.tokens)
     if (this.isArrayAccess(rawExpression.tokens)) return this.arrayAccessType(rawExpression.tokens)
     if (this.isUserCall(rawExpression.tokens)) return this.userCallType(rawExpression.tokens)
+    if (this.isMatch(rawExpression.tokens)) return this.matchType(rawExpression.tokens)
     if (this.isSingleIdentifier(rawExpression.tokens)) {
-      return this.scope.resolve(rawExpression.tokens[0].lexeme)?.type ?? LumenTypes.Unknown
+      return this.scope.resolve(rawExpression.tokens[0].lexeme)?.type ??
+        this.typeSystem.enumVariant(rawExpression.tokens[0].lexeme)?.enumName ??
+        LumenTypes.Unknown
     }
 
     let numericType = LumenTypes.I32
@@ -98,6 +105,8 @@ export class ExpressionInspector {
       if (this.isHttpCallName(rawExpression.tokens, token)) continue
       if (this.isThreadCallName(rawExpression.tokens, token)) continue
       if (this.isUserCallName(rawExpression.tokens, token)) continue
+      if (this.isMatchKeyword(token)) continue
+      if (this.typeSystem.enumVariant(token.lexeme)) continue
       if (this.isFilterParameter(rawExpression.tokens, token)) continue
       if (this.isStructLiteralName(rawExpression.tokens, token)) continue
       if (this.isKnownStructName(rawExpression.tokens, token)) continue
@@ -159,6 +168,8 @@ export class ExpressionInspector {
 
   arrayAccessTypeAt(tokens, index) {
     const base = this.scope.resolve(tokens[index].lexeme)
+    if (base?.type === LumenTypes.String) return LumenTypes.String
+
     if (!base || !this.typeSystem.isArray(base.type)) {
       throw new Diagnostic(`Expected array "${tokens[index].lexeme}"`, tokens[index].location, 'semantic')
     }
@@ -230,6 +241,36 @@ export class ExpressionInspector {
     return rawExpression.tokens[0]?.lexeme === name &&
       rawExpression.tokens[1]?.lexeme === '(' &&
       rawExpression.tokens.at(-1)?.lexeme === ')'
+  }
+
+  isMatch(tokens) {
+    return tokens[0]?.lexeme === 'match'
+  }
+
+  matchType(tokens) {
+    const arrow = tokens.findIndex(token => token.lexeme === '=>')
+    if (arrow < 0) return LumenTypes.Unknown
+    return this.infer({
+      tokens: this.readMatchArmExpression(tokens, arrow + 1)
+    })
+  }
+
+  readMatchArmExpression(tokens, start) {
+    const value = []
+    let depth = 0
+    for (let index = start; index < tokens.length - 1; index += 1) {
+      const token = tokens[index]
+      if (depth === 0 && token.type === TokenType.Semicolon) break
+      if (depth === 0 && (token.lexeme === '=>' || token.lexeme === '_')) break
+      if (['(', '[', '{'].includes(token.lexeme)) depth += 1
+      if ([')', ']', '}'].includes(token.lexeme)) depth -= 1
+      value.push(token)
+    }
+    return value
+  }
+
+  isMatchKeyword(token) {
+    return ['match', '_'].includes(token.lexeme)
   }
 
   isBuiltinCallName(tokens, token) {

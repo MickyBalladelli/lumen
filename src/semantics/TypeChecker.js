@@ -17,6 +17,9 @@ export class TypeChecker {
       if (node.kind === 'StructDeclaration') {
         this.registerStruct(node)
       }
+      if (node.kind === 'EnumDeclaration') {
+        this.registerEnum(node)
+      }
       if (node.kind === 'FunctionDeclaration') {
         scope.define(node.name.name, {
           kind: 'function',
@@ -48,16 +51,25 @@ export class TypeChecker {
     this.typeSystem.registerStruct(node.name.name, fields)
   }
 
+  registerEnum(node) {
+    this.typeSystem.registerEnum(node.name.name, node.variants.map(variant => ({
+      name: variant.name,
+      location: variant.location
+    })))
+  }
+
   checkNode(node, scope, currentFunction) {
     if (!node) return LumenTypes.Void
 
     if (node.kind === 'ImportDeclaration') return LumenTypes.Void
     if (node.kind === 'StructDeclaration') return LumenTypes.Void
+    if (node.kind === 'EnumDeclaration') return LumenTypes.Void
     if (node.kind === 'FunctionDeclaration') return this.checkFunction(node, scope)
     if (node.kind === 'BlockStatement') return this.checkBlock(node, scope, currentFunction)
     if (node.kind === 'VariableDeclaration') return this.checkVariableDeclaration(node, scope)
     if (node.kind === 'ForStatement') return this.checkFor(node, scope, currentFunction)
     if (node.kind === 'ForOfStatement') return this.checkForOf(node, scope, currentFunction)
+    if (node.kind === 'ForRangeStatement') return this.checkForRange(node, scope, currentFunction)
     if (node.kind === 'WhileStatement') return this.checkWhile(node, scope, currentFunction)
     if (node.kind === 'DoUntilStatement') return this.checkDoUntil(node, scope, currentFunction)
     if (node.kind === 'IfStatement') return this.checkIf(node, scope, currentFunction)
@@ -68,6 +80,7 @@ export class TypeChecker {
     if (node.kind === 'ThrowStatement') return this.checkThrow(node, scope)
     if (node.kind === 'ReturnStatement') return this.checkReturn(node, scope, currentFunction)
     if (node.kind === 'ExpressionStatement') return this.checkExpression(node.expression, scope)
+    if (node.kind === 'DeferStatement') return this.checkExpression(node.expression, scope)
 
     return LumenTypes.Void
   }
@@ -170,6 +183,21 @@ export class TypeChecker {
       mutable: false
     })
 
+    this.withLoop(() => this.checkNode(node.body, scope, currentFunction))
+    return LumenTypes.Void
+  }
+
+  checkForRange(node, parentScope, currentFunction) {
+    this.checkExpression(node.start, parentScope)
+    this.checkExpression(node.end, parentScope)
+    const scope = new Scope(parentScope)
+    node.item.inferredType = LumenTypes.I32
+    scope.define(node.item.name, {
+      kind: 'variable',
+      node: node.item,
+      type: LumenTypes.I32,
+      mutable: false
+    })
     this.withLoop(() => this.checkNode(node.body, scope, currentFunction))
     return LumenTypes.Void
   }

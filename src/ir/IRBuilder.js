@@ -11,11 +11,20 @@ export class IRBuilder {
           type: field.typeAnnotation.name
         }))
       }))
+    const enums = program.body
+      .filter(node => node.kind === 'EnumDeclaration')
+      .map(node => ({
+        name: node.name.name,
+        variants: node.variants.map((variant, index) => ({
+          name: variant.name,
+          value: index
+        }))
+      }))
     const functions = program.body
       .filter(node => node.kind === 'FunctionDeclaration')
       .map(node => this.buildFunction(node))
 
-    return new IRModule(functions, structs)
+    return new IRModule(functions, structs, enums)
   }
 
   buildFunction(node) {

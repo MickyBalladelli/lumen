@@ -47,6 +47,14 @@ export class StructFieldNode extends AstNode {
   }
 }
 
+export class EnumDeclarationNode extends AstNode {
+  constructor(name, variants, location = null) {
+    super('EnumDeclaration', location)
+    this.name = name
+    this.variants = variants
+  }
+}
+
 export class ImportDeclarationNode extends AstNode {
   constructor(names, source, location = null) {
     super('ImportDeclaration', location)
@@ -108,6 +116,16 @@ export class ForOfStatementNode extends AstNode {
   }
 }
 
+export class ForRangeStatementNode extends AstNode {
+  constructor(item, start, end, body, location = null) {
+    super('ForRangeStatement', location)
+    this.item = item
+    this.start = start
+    this.end = end
+    this.body = body
+  }
+}
+
 export class WhileStatementNode extends AstNode {
   constructor(test, body, location = null) {
     super('WhileStatement', location)
@@ -159,6 +177,13 @@ export class BreakStatementNode extends AstNode {
 export class ContinueStatementNode extends AstNode {
   constructor(location = null) {
     super('ContinueStatement', location)
+  }
+}
+
+export class DeferStatementNode extends AstNode {
+  constructor(expression, location = null) {
+    super('DeferStatement', location)
+    this.expression = expression
   }
 }
 

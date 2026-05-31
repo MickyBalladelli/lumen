@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process'
 import { Compiler } from '../compiler/Compiler.js'
 
 const examplesDir = 'examples'
+const negativeDir = 'tests/negative'
 const outputDir = 'build'
 const compiler = new Compiler()
 const dataText = await readFile(join(examplesDir, 'data.txt'), 'utf8')
@@ -73,6 +74,10 @@ const expectations = new Map([
   ['numbers', {
     stdout: '10000000032\n3.750000\n1\n',
     code: 0
+  }],
+  ['patterns', {
+    stdout: 'missing\nume\n6\ncleanup\n',
+    code: 6
   }],
   ['println', {
     stdout: 'total\n10\n',
@@ -161,6 +166,23 @@ if (failures > 0) {
 }
 
 console.log(`${files.length} example tests passed`)
+
+const negativeFiles = await readdir(negativeDir).catch(() => [])
+for (const file of negativeFiles.filter(file => file.endsWith('.lm')).sort()) {
+  const source = await readFile(join(negativeDir, file), 'utf8')
+  try {
+    compiler.compileSource(source)
+    failures += 1
+    console.error(`failed negative ${file}`)
+  } catch {
+    console.log(`ok negative ${file}`)
+  }
+}
+
+if (failures > 0) {
+  console.error(`${failures} test failed`)
+  process.exit(1)
+}
 
 function runExecutable(path, args = [], env = {}) {
   return new Promise((resolve, reject) => {

@@ -14,6 +14,9 @@ export class SemanticAnalyzer {
       if (node.kind === 'StructDeclaration') {
         this.defineStruct(scope, node)
       }
+      if (node.kind === 'EnumDeclaration') {
+        this.defineEnum(scope, node)
+      }
       if (node.kind === 'FunctionDeclaration') {
         this.defineFunction(scope, node)
       }
@@ -44,16 +47,38 @@ export class SemanticAnalyzer {
     }
   }
 
+  defineEnum(scope, node) {
+    if (!scope.define(node.name.name, {
+      kind: 'enum',
+      node
+    })) {
+      throw new Diagnostic(`Duplicate enum "${node.name.name}"`, node.location, 'semantic')
+    }
+
+    for (const variant of node.variants) {
+      if (!scope.define(variant.name, {
+        kind: 'enumVariant',
+        node: variant,
+        enumName: node.name.name,
+        mutable: false
+      })) {
+        throw new Diagnostic(`Duplicate enum variant "${variant.name}"`, variant.location, 'semantic')
+      }
+    }
+  }
+
   visit(node, scope) {
     if (!node) return
 
     if (node.kind === 'ImportDeclaration') return this.visitImport(node, scope)
     if (node.kind === 'StructDeclaration') return
+    if (node.kind === 'EnumDeclaration') return
     if (node.kind === 'FunctionDeclaration') return this.visitFunction(node, scope)
     if (node.kind === 'BlockStatement') return this.visitBlock(node, scope)
     if (node.kind === 'VariableDeclaration') return this.visitVariableDeclaration(node, scope)
     if (node.kind === 'ForStatement') return this.visitFor(node, scope)
     if (node.kind === 'ForOfStatement') return this.visitForOf(node, scope)
+    if (node.kind === 'ForRangeStatement') return this.visitForRange(node, scope)
     if (node.kind === 'WhileStatement') return this.visitLoop(node, scope)
     if (node.kind === 'DoUntilStatement') return this.visitLoop(node, scope)
     if (node.kind === 'IfStatement') return this.visitIf(node, scope)
@@ -126,6 +151,18 @@ export class SemanticAnalyzer {
   }
 
   visitForOf(node, scope) {
+    const loopScope = new Scope(scope)
+
+    loopScope.define(node.item.name, {
+      kind: 'variable',
+      node: node.item,
+      mutable: false
+    })
+
+    this.visit(node.body, loopScope)
+  }
+
+  visitForRange(node, scope) {
     const loopScope = new Scope(scope)
 
     loopScope.define(node.item.name, {

@@ -130,6 +130,20 @@ println(point.x + point.y)
 
 Structs compile to LLVM aggregate types.
 
+### Enums
+
+Enums define named integer-backed variants.
+
+```lumen
+enum Status {
+  Ok
+  Missing
+  Broken
+}
+
+let status: Status = Missing
+```
+
 ### Arrays
 
 Arrays hold a fixed list of values with the same element type.
@@ -148,6 +162,12 @@ let points: Point[] = [
 ]
 
 println(points[1].y)
+```
+
+Strings support slice syntax.
+
+```lumen
+let part = "lumen"[1..4]
 ```
 
 ### Loops
@@ -208,6 +228,14 @@ for (let i: i32 = 0; i < 10; i++) {
 }
 ```
 
+Range loops count upward from start to end, excluding the end.
+
+```lumen
+for i in 0..10 {
+  println(i)
+}
+```
+
 ### Branches
 
 `if / else` branches compile to native control flow.
@@ -217,6 +245,16 @@ if total > 10 {
   println("large")
 } else {
   println("small")
+}
+```
+
+`match` is expression-style branching that returns a value.
+
+```lumen
+let label = match status {
+  Ok => "ok"
+  Missing => "missing"
+  _ => "unknown"
 }
 ```
 
@@ -316,6 +354,12 @@ export API_KEY="dev-key"
 
 Real process environment values win over `.env` values.
 
+`assert(condition, message?)` fails fast when a condition is false.
+
+```lumen
+assert(total == 6, "bad total")
+```
+
 `arg(index)` reads a CLI argument and `argCount()` returns the argument count.
 
 ```lumen
@@ -329,6 +373,15 @@ println(argCount())
 let headers = map("content-type", "application/json", "x-lumen", "yes")
 println(mapGet(headers, "content-type"))
 println(mapHas(headers, "x-lumen"))
+```
+
+`channel()`, `send(channel, value)`, and `receive(channel)` provide a small
+message-passing foundation for higher-level thread communication.
+
+```lumen
+let messages = channel()
+send(messages, "ready")
+println(receive(messages))
 ```
 
 `ok(...)`, `err(...)`, `isOk(...)`, and `errorMessage(...)` provide a small
@@ -512,11 +565,17 @@ Build every Lumen example:
 npm run compile:examples
 ```
 
+This command skips examples whose executable is newer than the source and
+runtime.
+
 Build and verify every example:
 
 ```bash
 npm run test
 ```
+
+The test runner compiles examples, runs expected-output tests, and runs negative
+compile tests from `tests/negative`.
 
 Run it:
 
@@ -570,6 +629,7 @@ console.log(ast)
 - `examples/newline-continuation.lm`: newline after incomplete expression
 - `examples/native-main.lm`: compiles to LLVM IR and native code
 - `examples/numbers.lm`: `i64` and `f32` numbers
+- `examples/patterns.lm`: enum, match, defer, assert, range loop, slice, channel
 - `examples/println.lm`: native print through `printf`
 - `examples/struct.lm`: object type with fields
 - `examples/system.lm`: `println`, `len`, and `filter`

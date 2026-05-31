@@ -19,7 +19,11 @@ export const SystemFunctions = Object.freeze({
   Some: 'some',
   None: 'none',
   HasValue: 'hasValue',
-  ValueOr: 'valueOr'
+  ValueOr: 'valueOr',
+  Assert: 'assert',
+  Channel: 'channel',
+  Send: 'send',
+  Receive: 'receive'
 })
 
 export class SystemLibrary {
