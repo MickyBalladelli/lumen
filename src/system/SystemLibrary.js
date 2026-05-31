@@ -38,6 +38,7 @@ export const SystemFunctions = Object.freeze({
   SourceSnippet: 'sourceSnippet',
   StringBuilder: 'stringBuilder',
   StringBuilderAppend: 'stringBuilderAppend',
+  StringLen: 'stringLen',
   List: 'list',
   ListPush: 'listPush',
   ListGet: 'listGet',

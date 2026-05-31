@@ -1,0 +1,94 @@
+function charAt(source: string, index: i32): string {
+  return source[index..index + 1]
+}
+
+function isWhitespace(ch: string): bool {
+  return includes(' 	
+', ch)
+}
+
+function isDigit(ch: string): bool {
+  return includes("0123456789", ch)
+}
+
+function isAlpha(ch: string): bool {
+  if includes("abcdefghijklmnopqrstuvwxyz", ch) {
+    return true
+  }
+
+  if includes("ABCDEFGHIJKLMNOPQRSTUVWXYZ", ch) {
+    return true
+  }
+
+  return includes("_", ch)
+}
+
+function isAlphaNumeric(ch: string): bool {
+  if isAlpha(ch) {
+    return true
+  }
+
+  return isDigit(ch)
+}
+
+function addToken(tokens: string, kind: string, value: string): string {
+  return listPush(tokens, kind + ":" + value)
+}
+
+function tokenize(source: string): string {
+  let tokens = list()
+  let index: i32 = 0
+  let length = stringLen(source)
+
+  while index < length do {
+    let ch = charAt(source, index)
+
+    if isWhitespace(ch) {
+      index = index + 1
+      continue
+    }
+
+    if isAlpha(ch) {
+      let start = index
+      index = index + 1
+
+      while index < length do {
+        let next = charAt(source, index)
+        if isAlphaNumeric(next) {
+          index = index + 1
+          continue
+        }
+
+        break
+      }
+
+      let value = source[start..index]
+      tokens = addToken(tokens, "identifier", value)
+      continue
+    }
+
+    if isDigit(ch) {
+      let start = index
+      index = index + 1
+
+      while index < length do {
+        let next = charAt(source, index)
+        if isDigit(next) {
+          index = index + 1
+          continue
+        }
+
+        break
+      }
+
+      let value = source[start..index]
+      tokens = addToken(tokens, "number", value)
+      continue
+    }
+
+    tokens = addToken(tokens, "symbol", ch)
+    index = index + 1
+  }
+
+  return tokens
+}

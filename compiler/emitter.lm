@@ -1,0 +1,18 @@
+function emitMain(program: string): string {
+  let value = mapGet(program, "mainReturn")
+  let out = stringBuilder()
+
+  out = stringBuilderAppend(out, "; Lumen self-host tiny LLVM IR
+")
+  out = stringBuilderAppend(out, "define i32 @main() {
+")
+  out = stringBuilderAppend(out, "entry:
+")
+  out = stringBuilderAppend(out, "  ret i32 ")
+  out = stringBuilderAppend(out, value)
+  out = stringBuilderAppend(out, "
+}
+")
+
+  return out
+}

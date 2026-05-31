@@ -41,6 +41,7 @@ export class ModuleRegistry {
         'sourceSnippet',
         'stringBuilder',
         'stringBuilderAppend',
+        'stringLen',
         'list',
         'listPush',
         'listGet',

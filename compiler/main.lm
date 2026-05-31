@@ -1,0 +1,23 @@
+import { tokenize } from "./tokenizer.lm"
+import { parseProgram } from "./parser.lm"
+import { emitMain } from "./emitter.lm"
+
+function compileTiny(input: string, output: string): i32 {
+  let source = readFile(input)
+  let tokens = tokenize(source)
+  let program = parseProgram(tokens)
+  let llvm = emitMain(program)
+
+  return writeFile(output, llvm)
+}
+
+function main(): i32 {
+  let args = argCount()
+
+  if args < 3 {
+    println("usage: lumen-compiler input.lm output.ll")
+    return 1
+  }
+
+  return compileTiny(arg(1), arg(2))
+}

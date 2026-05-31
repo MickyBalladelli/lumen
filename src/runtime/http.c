@@ -174,6 +174,10 @@ char *lumen_string_builder_append(const char *builder, const char *value) {
   return lumen_string_concat(builder, value);
 }
 
+int lumen_string_len(const char *value) {
+  return (int)strlen(value);
+}
+
 char *lumen_list(void) {
   return lumen_strdup("\n");
 }

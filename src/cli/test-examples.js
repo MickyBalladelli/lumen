@@ -124,6 +124,14 @@ const expectations = new Map([
     stdout: 'total\n10\n',
     code: 10
   }],
+  ['self-host-parser', {
+    stdout: '7\n1\n',
+    code: 0
+  }],
+  ['self-host-tokenizer', {
+    stdout: '10\nidentifier:function\nidentifier:main\nnumber:7\n',
+    code: 0
+  }],
   ['struct', {
     stdout: '11\n',
     code: 11
@@ -209,6 +217,29 @@ if (failures > 0) {
 }
 
 console.log(`${files.length} example tests passed`)
+
+await compiler.writeLLVMFile('compiler/main.lm', join(outputDir, 'lumen-compiler.ll'))
+await compiler.buildExecutable(join(outputDir, 'lumen-compiler.ll'), join(outputDir, 'lumen-compiler'))
+
+const bootstrapCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
+  join('tests', 'bootstrap', 'tiny.lm'),
+  join(outputDir, 'tiny-self.ll')
+])
+
+if (bootstrapCompile.code !== 0) {
+  failures += 1
+  console.error(`failed bootstrap compiler with code ${bootstrapCompile.code}`)
+} else {
+  await compiler.buildExecutable(join(outputDir, 'tiny-self.ll'), join(outputDir, 'tiny-self'))
+  const tiny = await runExecutable(join(outputDir, 'tiny-self'))
+
+  if (tiny.code !== 7) {
+    failures += 1
+    console.error(`failed bootstrap tiny executable, got ${tiny.code}`)
+  } else {
+    console.log('ok bootstrap self-host tiny')
+  }
+}
 
 const negativeFiles = await readdir(negativeDir).catch(() => [])
 for (const file of negativeFiles.filter(file => file.endsWith('.lm')).sort()) {

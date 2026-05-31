@@ -541,6 +541,26 @@ let summary = parseSummary(source)
 
 `sourceSnippet(source, line, column)` creates a diagnostic line plus caret.
 
+### Self-Hosting Bootstrap
+
+The first pure-Lumen compiler pieces live in `compiler/`:
+
+- `compiler/tokenizer.lm`: tokenizes a small Lumen subset
+- `compiler/parser.lm`: extracts a tiny `main` return program model
+- `compiler/emitter.lm`: emits LLVM for `main(): i32 { return N }`
+- `compiler/main.lm`: CLI-shaped tiny compiler
+
+The bootstrap flow is now tested:
+
+```bash
+node src/cli/compile.js compiler/main.lm -o build/lumen-compiler
+./build/lumen-compiler tests/bootstrap/tiny.lm build/tiny-self.ll
+clang -Wno-override-module build/tiny-self.ll src/runtime/http.c -pthread -o build/tiny-self
+./build/tiny-self
+```
+
+`build/tiny-self` exits with code `7`.
+
 ### HTTP
 
 The `http` library can serve a static file directory.
@@ -775,6 +795,8 @@ console.log(ast)
 - `examples/numbers.lm`: `i64` and `f32` numbers
 - `examples/patterns.lm`: enum, match, defer, assert, range loop, slice, channel
 - `examples/println.lm`: native print through `printf`
+- `examples/self-host-parser.lm`: pure-Lumen parser and emitter smoke test
+- `examples/self-host-tokenizer.lm`: pure-Lumen tokenizer smoke test
 - `examples/struct.lm`: object type with fields
 - `examples/socket-chat.lm`: Socket.IO-style chat server
 - `examples/socket-helpers.lm`: Socket.IO-style payload helpers

@@ -1,0 +1,12 @@
+import { tokenize } from "../compiler/tokenizer.lm"
+
+function main(): i32 {
+  let tokens = tokenize("function main(): i32 { return 7 }")
+
+  println(listLen(tokens))
+  println(listGet(tokens, 0))
+  println(listGet(tokens, 1))
+  println(listGet(tokens, 8))
+
+  return 0
+}

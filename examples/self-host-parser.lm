@@ -1,0 +1,14 @@
+import { tokenize } from "../compiler/tokenizer.lm"
+import { parseProgram } from "../compiler/parser.lm"
+import { emitMain } from "../compiler/emitter.lm"
+
+function main(): i32 {
+  let tokens = tokenize("function main(): i32 { return 7 }")
+  let program = parseProgram(tokens)
+  let llvm = emitMain(program)
+
+  println(mapGet(program, "mainReturn"))
+  println(includes(llvm, "ret i32 7"))
+
+  return 0
+}

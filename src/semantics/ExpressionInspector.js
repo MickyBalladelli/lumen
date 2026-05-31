@@ -18,6 +18,7 @@ export class ExpressionInspector {
 
   infer(rawExpression) {
     if (!rawExpression || rawExpression.tokens.length === 0) return LumenTypes.Void
+    if (rawExpression.tokens.length === 1 && ['true', 'false'].includes(rawExpression.tokens[0].lexeme)) return LumenTypes.Bool
     if (rawExpression.tokens[0]?.lexeme === 'await') {
       return this.infer({
         tokens: rawExpression.tokens.slice(1)
@@ -62,6 +63,7 @@ export class ExpressionInspector {
     if (this.isCall(rawExpression, SystemFunctions.SourceSnippet)) return LumenTypes.String
     if (this.isCall(rawExpression, SystemFunctions.StringBuilder)) return LumenTypes.String
     if (this.isCall(rawExpression, SystemFunctions.StringBuilderAppend)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.StringLen)) return LumenTypes.I32
     if (this.isCall(rawExpression, SystemFunctions.List)) return LumenTypes.String
     if (this.isCall(rawExpression, SystemFunctions.ListPush)) return LumenTypes.String
     if (this.isCall(rawExpression, SystemFunctions.ListGet)) return LumenTypes.String
