@@ -97,6 +97,9 @@ export class LLVMEmitter {
       this.usesHttp ? 'declare i32 @lumen_http_serve_files(i32, ptr)' : '',
       this.usesHttp ? 'declare i32 @lumen_http_serve_api(i32, ptr, ptr, ptr, ptr)' : '',
       this.usesHttp ? 'declare i32 @lumen_http_serve_http(i32, ptr, ptr, ptr, ptr, ptr, i32)' : '',
+      this.usesHttp ? 'declare i32 @lumen_socketio_serve_chat(i32, ptr)' : '',
+      this.usesHttp ? 'declare ptr @lumen_socketio_event(ptr, ptr)' : '',
+      this.usesHttp ? 'declare ptr @lumen_socketio_emit(ptr, ptr, ptr)' : '',
       this.usesThread ? 'declare ptr @lumen_semaphore_create(i32)' : '',
       this.usesThread ? 'declare void @lumen_semaphore_wait(ptr)' : '',
       this.usesThread ? 'declare void @lumen_semaphore_signal(ptr)' : '',
@@ -630,6 +633,9 @@ export class LLVMEmitter {
     if (this.isCall(expression.tokens, HttpFunctions.ServeFiles)) return this.emitServeFiles(expression.tokens)
     if (this.isCall(expression.tokens, HttpFunctions.ServeApi)) return this.emitServeApi(expression.tokens)
     if (this.isCall(expression.tokens, HttpFunctions.ServeHttp)) return this.emitServeHttp(expression.tokens)
+    if (this.isCall(expression.tokens, HttpFunctions.ServeSocketIoChat)) return this.emitServeSocketIoChat(expression.tokens)
+    if (this.isCall(expression.tokens, HttpFunctions.SocketIoEvent)) return this.emitSocketIoEvent(expression.tokens)
+    if (this.isCall(expression.tokens, HttpFunctions.SocketIoEmit)) return this.emitSocketIoEmit(expression.tokens)
     if (this.isCall(expression.tokens, ThreadFunctions.CreateSemaphore)) return this.emitCreateSemaphore(expression.tokens)
     if (this.isCall(expression.tokens, ThreadFunctions.SemaphoreWait)) return this.emitSemaphoreWait(expression.tokens)
     if (this.isCall(expression.tokens, ThreadFunctions.SemaphoreSignal)) return this.emitSemaphoreSignal(expression.tokens)
@@ -1404,6 +1410,88 @@ export class LLVMEmitter {
 
     return {
       type: LumenTypes.I32,
+      value: result
+    }
+  }
+
+  emitServeSocketIoChat(tokens) {
+    this.usesHttp = true
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 2) {
+      throw new Diagnostic('serveSocketIoChat expects port and root', tokens[0].location, 'backend')
+    }
+
+    const port = this.emitExpression({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+    const root = this.emitExpression({
+      tokens: args[1],
+      location: tokens[0].location
+    })
+    const result = this.nextTemp()
+
+    this.lines.push(`  ${result} = call i32 @lumen_socketio_serve_chat(i32 ${this.cast(port, LumenTypes.I32)}, ptr ${root.value})`)
+
+    return {
+      type: LumenTypes.I32,
+      value: result
+    }
+  }
+
+  emitSocketIoEvent(tokens) {
+    this.usesHttp = true
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 2) {
+      throw new Diagnostic('socketIoEvent expects event and payload', tokens[0].location, 'backend')
+    }
+
+    const event = this.emitExpression({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+    const payload = this.emitExpression({
+      tokens: args[1],
+      location: tokens[0].location
+    })
+    const result = this.nextTemp()
+
+    this.lines.push(`  ${result} = call ptr @lumen_socketio_event(ptr ${event.value}, ptr ${payload.value})`)
+
+    return {
+      type: LumenTypes.String,
+      value: result
+    }
+  }
+
+  emitSocketIoEmit(tokens) {
+    this.usesHttp = true
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 3) {
+      throw new Diagnostic('socketIoEmit expects room, event, and payload', tokens[0].location, 'backend')
+    }
+
+    const room = this.emitExpression({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+    const event = this.emitExpression({
+      tokens: args[1],
+      location: tokens[0].location
+    })
+    const payload = this.emitExpression({
+      tokens: args[2],
+      location: tokens[0].location
+    })
+    const result = this.nextTemp()
+
+    this.lines.push(`  ${result} = call ptr @lumen_socketio_emit(ptr ${room.value}, ptr ${event.value}, ptr ${payload.value})`)
+
+    return {
+      type: LumenTypes.String,
       value: result
     }
   }

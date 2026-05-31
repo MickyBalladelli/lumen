@@ -11,6 +11,7 @@
     "compile": "node ./src/cli/compile.js",
     "compile:examples": "node ./src/cli/compile-examples.js",
     "http": "node ./src/cli/http.js",
+    "chat": "node ./src/cli/chat.js",
     "test": "node ./src/cli/test-examples.js"
   }
 }

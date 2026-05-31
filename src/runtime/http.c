@@ -861,6 +861,199 @@ static void request_method(const char *request, char *out, size_t out_size) {
   out[length] = '\0';
 }
 
+static const char *request_body(const char *request) {
+  const char *body = strstr(request, "\r\n\r\n");
+  if (!body) return "";
+  return body + 4;
+}
+
+static char socketio_messages[65536] = "";
+static pthread_mutex_t socketio_messages_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+static void socketio_append_message(const char *message) {
+  pthread_mutex_lock(&socketio_messages_mutex);
+
+  size_t current = strlen(socketio_messages);
+  size_t incoming = strlen(message);
+  if (incoming == 0) {
+    pthread_mutex_unlock(&socketio_messages_mutex);
+    return;
+  }
+
+  if (current + incoming + 2 < sizeof(socketio_messages)) {
+    if (current > 0) {
+      socketio_messages[current++] = '\n';
+      socketio_messages[current] = '\0';
+    }
+    memcpy(socketio_messages + current, message, incoming + 1);
+  }
+
+  pthread_mutex_unlock(&socketio_messages_mutex);
+}
+
+static char *socketio_messages_json(void) {
+  pthread_mutex_lock(&socketio_messages_mutex);
+
+  size_t needed = strlen(socketio_messages) + 3;
+  for (const char *cursor = socketio_messages; *cursor; cursor += 1) {
+    if (*cursor == '\n') needed += 1;
+  }
+
+  char *out = malloc(needed + 1);
+  if (!out) {
+    pthread_mutex_unlock(&socketio_messages_mutex);
+    return lumen_strdup("[]");
+  }
+
+  size_t offset = 0;
+  out[offset++] = '[';
+  const char *cursor = socketio_messages;
+  int first = 1;
+
+  while (*cursor) {
+    const char *end = strchr(cursor, '\n');
+    if (!end) end = cursor + strlen(cursor);
+
+    if (!first) out[offset++] = ',';
+    first = 0;
+
+    size_t length = (size_t)(end - cursor);
+    memcpy(out + offset, cursor, length);
+    offset += length;
+
+    cursor = *end == '\n' ? end + 1 : end;
+  }
+
+  out[offset++] = ']';
+  out[offset] = '\0';
+
+  pthread_mutex_unlock(&socketio_messages_mutex);
+  return out;
+}
+
+char *lumen_socketio_event(const char *event, const char *payload) {
+  size_t length = strlen(event) + strlen(payload) + 8;
+  char *out = malloc(length);
+  if (!out) return "";
+  snprintf(out, length, "[\"%s\",%s]", event, payload);
+  return out;
+}
+
+char *lumen_socketio_emit(const char *room, const char *event, const char *payload) {
+  size_t length = strlen(room) + strlen(event) + strlen(payload) + 40;
+  char *out = malloc(length);
+  if (!out) return "";
+  snprintf(out, length, "{\"room\":\"%s\",\"event\":\"%s\",\"payload\":%s}", room, event, payload);
+  return out;
+}
+
+int lumen_socketio_serve_chat(int port, const char *root) {
+  int server = make_server(port);
+  if (server < 0) return 1;
+
+  printf("Lumen Socket.IO chat listening on http://localhost:%d\n", port);
+  fflush(stdout);
+
+  const char *json_headers =
+    "Content-Type: application/json\r\n"
+    "Access-Control-Allow-Origin: *\r\n"
+    "Access-Control-Allow-Headers: content-type\r\n"
+    "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n";
+
+  const char *text_headers =
+    "Content-Type: text/plain\r\n"
+    "Access-Control-Allow-Origin: *\r\n"
+    "Access-Control-Allow-Headers: content-type\r\n"
+    "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n";
+
+  for (;;) {
+    int client = accept(server, NULL, NULL);
+    if (client < 0) continue;
+
+    char request[8192];
+    ssize_t read_count = recv(client, request, sizeof(request) - 1, 0);
+    if (read_count <= 0) {
+      close(client);
+      continue;
+    }
+
+    request[read_count] = '\0';
+    char method[32];
+    char path[512];
+    request_method(request, method, sizeof(method));
+    request_path(request, path, sizeof(path));
+
+    if (strcmp(method, "OPTIONS") == 0) {
+      const char *body = "{}";
+      write_response_with_headers(client, 200, json_headers, body, strlen(body));
+      close(client);
+      continue;
+    }
+
+    if (strcmp(method, "GET") == 0 && (strcmp(path, "/socket.io") == 0 || strcmp(path, "/socket.io/") == 0)) {
+      const char *body = "0{\"sid\":\"lumen\",\"upgrades\":[],\"pingInterval\":25000,\"pingTimeout\":20000,\"maxPayload\":1000000}";
+      write_response_with_headers(client, 200, text_headers, body, strlen(body));
+      close(client);
+      continue;
+    }
+
+    if (strcmp(method, "GET") == 0 && strcmp(path, "/socket.io/messages") == 0) {
+      char *body = socketio_messages_json();
+      write_response_with_headers(client, 200, json_headers, body, strlen(body));
+      free(body);
+      close(client);
+      continue;
+    }
+
+    if (strcmp(method, "POST") == 0 && strcmp(path, "/socket.io/emit") == 0) {
+      const char *body = request_body(request);
+      socketio_append_message(body);
+      const char *ok = "{\"ok\":true}";
+      write_response_with_headers(client, 200, json_headers, ok, strlen(ok));
+      close(client);
+      continue;
+    }
+
+    if (strstr(path, "..")) {
+      const char *body = "not found\n";
+      write_response(client, 404, "text/plain", body, strlen(body));
+      close(client);
+      continue;
+    }
+
+    if (strcmp(path, "/") == 0) snprintf(path, sizeof(path), "/index.html");
+
+    char full_path[1024];
+    snprintf(full_path, sizeof(full_path), "%s%s", root, path);
+
+    FILE *file = fopen(full_path, "rb");
+    if (!file) {
+      const char *body = "not found\n";
+      write_response(client, 404, "text/plain", body, strlen(body));
+      close(client);
+      continue;
+    }
+
+    fseek(file, 0, SEEK_END);
+    long size = ftell(file);
+    fseek(file, 0, SEEK_SET);
+
+    char *body = malloc((size_t)size);
+    if (!body) {
+      fclose(file);
+      close(client);
+      continue;
+    }
+
+    fread(body, 1, (size_t)size, file);
+    fclose(file);
+
+    write_response(client, 200, content_type(full_path), body, (size_t)size);
+    free(body);
+    close(client);
+  }
+}
+
 int lumen_http_serve_files(int port, const char *root) {
   int server = make_server(port);
   if (server < 0) return 1;

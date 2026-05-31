@@ -1,0 +1,8 @@
+function main(): i32 {
+  let event = socketIoEvent("message", '{"text":"chat ready"}')
+  let emitted = socketIoEmit("main", "message", event)
+
+  println(includes(emitted, "chat ready"))
+
+  return 0
+}

@@ -47,6 +47,9 @@ export class ExpressionInspector {
     if (this.isCall(rawExpression, HttpFunctions.ServeFiles)) return LumenTypes.I32
     if (this.isCall(rawExpression, HttpFunctions.ServeApi)) return LumenTypes.I32
     if (this.isCall(rawExpression, HttpFunctions.ServeHttp)) return LumenTypes.I32
+    if (this.isCall(rawExpression, HttpFunctions.ServeSocketIoChat)) return LumenTypes.I32
+    if (this.isCall(rawExpression, HttpFunctions.SocketIoEvent)) return LumenTypes.String
+    if (this.isCall(rawExpression, HttpFunctions.SocketIoEmit)) return LumenTypes.String
     if (this.isCall(rawExpression, ThreadFunctions.CreateSemaphore)) return LumenTypes.Semaphore
     if (this.isCall(rawExpression, ThreadFunctions.SemaphoreWait)) return LumenTypes.I32
     if (this.isCall(rawExpression, ThreadFunctions.SemaphoreSignal)) return LumenTypes.I32

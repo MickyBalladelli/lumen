@@ -29,7 +29,7 @@ export class ModuleRegistry {
         'receive'
       ])],
       ['fs', new Set(['readFile'])],
-      ['http', new Set(['serveFiles', 'serveApi', 'serveHttp'])],
+      ['http', new Set(['serveFiles', 'serveApi', 'serveHttp', 'serveSocketIoChat', 'socketIoEvent', 'socketIoEmit'])],
       ['thread', new Set([
         'createSemaphore',
         'semaphoreWait',

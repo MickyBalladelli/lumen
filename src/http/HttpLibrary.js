@@ -1,7 +1,10 @@
 export const HttpFunctions = Object.freeze({
   ServeFiles: 'serveFiles',
   ServeApi: 'serveApi',
-  ServeHttp: 'serveHttp'
+  ServeHttp: 'serveHttp',
+  ServeSocketIoChat: 'serveSocketIoChat',
+  SocketIoEvent: 'socketIoEvent',
+  SocketIoEmit: 'socketIoEmit'
 })
 
 export class HttpLibrary {

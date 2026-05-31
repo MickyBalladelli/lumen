@@ -495,6 +495,27 @@ The full example serves static HTML and API routes from one server:
 serveHttp(8088, "examples/http-public", methods, routes, headers, bodies)
 ```
 
+Socket.IO-style chat helpers are also available:
+
+- `serveSocketIoChat(port, root)`: serves static files plus chat endpoints
+- `socketIoEvent(event, payload)`: builds an event payload string
+- `socketIoEmit(room, event, payload)`: builds a room event payload string
+
+Run the chat browser example:
+
+```bash
+npm run chat
+```
+
+Then open:
+
+```text
+http://localhost:8090
+```
+
+Current chat transport is simple HTTP polling on `/socket.io/messages` and
+`/socket.io/emit`. It is Socket.IO-shaped, not the full Socket.IO wire protocol.
+
 ### Error Handling
 
 `try/catch` catches Lumen `throw` values.
@@ -632,6 +653,8 @@ console.log(ast)
 - `examples/patterns.lm`: enum, match, defer, assert, range loop, slice, channel
 - `examples/println.lm`: native print through `printf`
 - `examples/struct.lm`: object type with fields
+- `examples/socket-chat.lm`: Socket.IO-style chat server
+- `examples/socket-helpers.lm`: Socket.IO-style payload helpers
 - `examples/system.lm`: `println`, `len`, and `filter`
 - `examples/switch.lm`: switch with numeric and string cases
 - `examples/thread.lm`: native threads with semaphore-protected file writes

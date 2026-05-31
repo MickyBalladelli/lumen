@@ -11,7 +11,8 @@ const dataText = await readFile(join(examplesDir, 'data.txt'), 'utf8')
 const compileOnly = new Set([
   'http-api',
   'http-files',
-  'http-server'
+  'http-server',
+  'socket-chat'
 ])
 
 const expectations = new Map([
@@ -94,6 +95,10 @@ const expectations = new Map([
   ['switch', {
     stdout: '23\n',
     code: 23
+  }],
+  ['socket-helpers', {
+    stdout: '1\n',
+    code: 0
   }],
   ['thread', {
     stdout: '1\n1\n1\n',
