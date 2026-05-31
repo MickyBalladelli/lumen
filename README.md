@@ -1,4 +1,4 @@
-# Lumen Compiler Kit
+# Lumen
 
 Foundation for the Lumen systems language.
 
