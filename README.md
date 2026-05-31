@@ -69,6 +69,17 @@ function main(): i32 {
 }
 ```
 
+`async function` and `await` are accepted as source-level markers. Today they
+lower synchronously; the syntax is reserved for the future async runtime.
+
+```lumen
+async function value(): i32 {
+  return 4
+}
+
+let answer = await value()
+```
+
 ### Imports
 
 Import declarations reserve module boundaries for the standard library split.
@@ -80,6 +91,12 @@ import { println } from "system"
 ```
 
 Available modules today: `system`, `fs`, `http`, and `thread`.
+
+Local file imports are concatenated by the CLI before compilation.
+
+```lumen
+import { triple } from "./modules/math.lm"
+```
 
 ### Variables
 
@@ -102,6 +119,8 @@ Current built-in types:
 - `f32`: 32-bit floating point number
 - `bool`: boolean value
 - `string`: string value for printing
+- `json`: runtime JSON text with helper accessors
+- `error`: typed runtime error payload
 - `T?`: nullable option-shaped value, currently used with string helpers
 - `Result<T>` and `Map<K,V>`: generic runtime-backed helper types
 - `void`: no value
@@ -162,6 +181,14 @@ let points: Point[] = [
 ]
 
 println(points[1].y)
+```
+
+Array helpers include `arraySum(...)`, `arrayFirst(...)`, `arrayLast(...)`, and
+`arrayJoin(...)`.
+
+```lumen
+println(arraySum(values))
+println(arrayJoin(names, ","))
 ```
 
 Strings support slice syntax.
@@ -401,6 +428,23 @@ let name: string? = some("lumen")
 println(valueOr(name, "fallback"))
 ```
 
+`json(...)`, `jsonGet(...)`, and `jsonSet(...)` provide a small JSON foundation
+for APIs and socket payloads.
+
+```lumen
+let payload: json = json('{"name":"lumen","count":3}')
+println(jsonGet(payload, "name"))
+```
+
+`newError(code, message)`, `errorCode(...)`, and `errorText(...)` provide typed
+errors. `throw` accepts strings and errors.
+
+```lumen
+let failure: error = newError(7, "disk locked")
+println(errorCode(failure))
+println(errorText(failure))
+```
+
 ### Assignment
 
 Variables, struct fields, and array elements can be assigned.
@@ -514,7 +558,15 @@ http://localhost:8090
 ```
 
 Current chat transport is simple HTTP polling on `/socket.io/messages` and
-`/socket.io/emit`. It is Socket.IO-shaped, not the full Socket.IO wire protocol.
+`/socket.io/emit`, with an experimental WebSocket endpoint at `/socket.io/ws`.
+It is Socket.IO-shaped, not the full Socket.IO wire protocol.
+
+HTTP request/response helper payloads are available for API code:
+
+```lumen
+let request = httpRequest("POST", "/api/hello", '{"name":"lumen"}')
+let response = httpResponse(200, '{"content-type":"application/json"}', '{"message":"hello"}')
+```
 
 ### Error Handling
 
@@ -598,6 +650,14 @@ npm run test
 The test runner compiles examples, runs expected-output tests, and runs negative
 compile tests from `tests/negative`.
 
+Compile from `lumen.json`:
+
+```bash
+npm run compile
+```
+
+Current config keys are `entry` and `output`.
+
 Run it:
 
 ```bash
@@ -608,6 +668,9 @@ echo $?
 The first backend supports numeric programs: `i32`, `i64`, `f32`, `bool`, variables,
 assignment, arithmetic, comparisons, returns, classic `for` loops, and
 `println(...)` for strings, integers, floats, and booleans.
+
+Memory ownership is manual today. `CompilerOptions` already has open hooks for
+future `arc`, `borrow`, `gc`, or hybrid ownership modes.
 
 Diagnostics include a source line and caret when compilation fails through the
 compiler pipeline.
@@ -634,19 +697,25 @@ console.log(ast)
 
 - `examples/basic.lm`: variables, function, return
 - `examples/advanced-foundation.lm`: field assignment, array assignment, string concat, interpolation, generic helper type
+- `examples/array-helpers.lm`: array helper functions
+- `examples/async-foundation.lm`: async/await syntax markers
 - `examples/cli-args.lm`: CLI arguments
 - `examples/control-flow.lm`: `if`, `else`, `break`, `continue`, user function calls, interpolation, imports
 - `examples/crypto.lm`: `encrypt` and `decrypt`
 - `examples/do-until.lm`: do-until loop
 - `examples/env.lm`: read environment variables with `env`
+- `examples/error-type.lm`: typed error helpers
 - `examples/array.lm`: arrays of numbers and structs
 - `examples/for-loop.lm`: classic for loop semicolon rule
 - `examples/for-of.lm`: for-of loop over arrays
 - `examples/fs.lm`: read file content with `readFile`
 - `examples/http-api.lm`: API server example
 - `examples/http-files.lm`: static file server example
+- `examples/http-helpers.lm`: HTTP request/response payload helpers
 - `examples/http-server.lm`: static files plus API routes
+- `examples/json.lm`: JSON helper functions
 - `examples/library-features.lm`: maps, Result helpers, nullable option helpers
+- `examples/module-app.lm`: local file import
 - `examples/newline-continuation.lm`: newline after incomplete expression
 - `examples/native-main.lm`: compiles to LLVM IR and native code
 - `examples/numbers.lm`: `i64` and `f32` numbers

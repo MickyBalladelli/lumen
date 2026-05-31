@@ -269,8 +269,8 @@ export class TypeChecker {
   checkThrow(node, scope) {
     const actual = this.checkExpression(node.argument, scope)
 
-    if (actual !== LumenTypes.String) {
-      throw new Diagnostic(`Throw expects string, got ${actual}`, node.location, 'type')
+    if (actual !== LumenTypes.String && actual !== LumenTypes.Error) {
+      throw new Diagnostic(`Throw expects string or error, got ${actual}`, node.location, 'type')
     }
 
     return LumenTypes.Void

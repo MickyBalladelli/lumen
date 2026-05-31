@@ -9,6 +9,7 @@ import { TypeSystem } from '../semantics/TypeSystem.js'
 import { IRBuilder } from '../ir/IRBuilder.js'
 import { LLVMEmitter } from '../backend/LLVMEmitter.js'
 import { Diagnostic } from '../diagnostics/Diagnostic.js'
+import { ModuleLoader } from '../modules/ModuleLoader.js'
 
 export class Compiler {
   constructor({
@@ -56,6 +57,11 @@ export class Compiler {
     await mkdir(dirname(outputPath), { recursive: true })
     await writeFile(outputPath, result.llvm)
     return result
+  }
+
+  async writeLLVMFile(inputPath, outputPath) {
+    const source = await new ModuleLoader().load(inputPath)
+    return this.writeLLVM(source, outputPath)
   }
 
   async buildExecutable(llvmPath, outputPath, { clang = 'clang' } = {}) {

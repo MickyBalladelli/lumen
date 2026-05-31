@@ -62,6 +62,7 @@ export class Parser {
     if (this.matchKeyword('import')) return this.importDeclaration()
     if (this.matchKeyword('enum')) return this.enumDeclaration()
     if (this.matchKeyword('struct')) return this.structDeclaration()
+    if (this.matchKeyword('async')) return this.asyncFunctionDeclaration()
     if (this.matchKeyword('function')) return this.functionDeclaration()
     if (this.checkKeyword('let') || this.checkKeyword('const')) return this.variableDeclaration()
     return this.statement()
@@ -137,6 +138,15 @@ export class Parser {
 
     const body = this.blockStatement()
     return new FunctionDeclarationNode(name, params, body, keyword.location, returnType)
+  }
+
+  asyncFunctionDeclaration() {
+    const keyword = this.previous()
+    this.consumeKeyword('function', 'Expected function after async')
+    const declaration = this.functionDeclaration()
+    declaration.isAsync = true
+    declaration.location = keyword.location
+    return declaration
   }
 
   parameterList() {

@@ -1,0 +1,9 @@
+import { triple } from "./modules/math.lm"
+
+function main(): i32 {
+  let value = triple(4)
+
+  println(value)
+
+  return value
+}

@@ -27,6 +27,8 @@ const KEYWORDS = new Set([
   'try',
   'catch',
   'throw',
+  'async',
+  'await',
   'return',
   'true',
   'false',

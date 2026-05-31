@@ -1,0 +1,4 @@
+{
+  "entry": "examples/basic.lm",
+  "output": "build/lumen-app"
+}

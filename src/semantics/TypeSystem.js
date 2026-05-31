@@ -4,6 +4,8 @@ export const LumenTypes = Object.freeze({
   F32: 'f32',
   Bool: 'bool',
   String: 'string',
+  Json: 'json',
+  Error: 'error',
   Semaphore: 'semaphore',
   Thread: 'thread',
   Void: 'void',
@@ -54,6 +56,8 @@ export class TypeSystem {
     if (normalized === LumenTypes.I64) return 'i64'
     if (normalized === LumenTypes.F32) return 'float'
     if (normalized === LumenTypes.Bool) return 'i1'
+    if (normalized === LumenTypes.Json) return 'ptr'
+    if (normalized === LumenTypes.Error) return 'ptr'
     if (normalized === LumenTypes.Semaphore) return 'ptr'
     if (normalized === LumenTypes.Thread) return 'ptr'
     if (normalized === LumenTypes.Void) return 'void'
@@ -82,6 +86,8 @@ export class TypeSystem {
         this.canAssign(this.elementType(from), this.elementType(to))
     }
     if (this.isGeneric(to) && from === LumenTypes.String) return true
+    if (to === LumenTypes.Json && from === LumenTypes.String) return true
+    if (to === LumenTypes.Error && from === LumenTypes.String) return true
     if (this.isGeneric(from) || this.isGeneric(to)) return from === to
     if (from === LumenTypes.I32 && [LumenTypes.I64, LumenTypes.F32].includes(to)) return true
     if (from === LumenTypes.Bool && this.isNumeric(to)) return true

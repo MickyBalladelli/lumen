@@ -23,7 +23,17 @@ export const SystemFunctions = Object.freeze({
   Assert: 'assert',
   Channel: 'channel',
   Send: 'send',
-  Receive: 'receive'
+  Receive: 'receive',
+  Json: 'json',
+  JsonGet: 'jsonGet',
+  JsonSet: 'jsonSet',
+  NewError: 'newError',
+  ErrorCode: 'errorCode',
+  ErrorText: 'errorText',
+  ArraySum: 'arraySum',
+  ArrayFirst: 'arrayFirst',
+  ArrayLast: 'arrayLast',
+  ArrayJoin: 'arrayJoin'
 })
 
 export class SystemLibrary {

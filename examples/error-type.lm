@@ -1,0 +1,14 @@
+function main(): i32 {
+  let failure: error = newError(7, "disk locked")
+
+  println(errorCode(failure))
+  println(errorText(failure))
+
+  try {
+    throw failure
+  } catch error {
+    println(errorText(error))
+  }
+
+  return errorCode(failure)
+}

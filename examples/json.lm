@@ -1,0 +1,10 @@
+function main(): i32 {
+  let payload: json = json('{"name":"lumen","count":3}')
+  let next = jsonSet(payload, "ready", "true")
+
+  println(jsonGet(next, "name"))
+  println(jsonGet(next, "count"))
+  println(jsonGet(next, "ready"))
+
+  return 0
+}

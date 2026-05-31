@@ -1,4 +1,4 @@
-import { readdir, readFile, stat } from 'node:fs/promises'
+import { readdir, stat } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { Compiler } from '../compiler/Compiler.js'
 
@@ -14,14 +14,12 @@ for (const file of files) {
   const name = basename(file, '.lm')
   const llvmPath = join(outputDir, `${name}.ll`)
   const executablePath = join(outputDir, name)
-  const source = await readFile(inputPath, 'utf8')
-
   if (await isFresh(inputPath, executablePath)) {
     console.log(`${executablePath} cached`)
     continue
   }
 
-  await compiler.writeLLVM(source, llvmPath)
+  await compiler.writeLLVMFile(inputPath, llvmPath)
   await compiler.buildExecutable(llvmPath, executablePath)
 
   console.log(executablePath)

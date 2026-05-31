@@ -44,6 +44,9 @@ export class LLVMEmitter {
     this.usesResults = false
     this.usesOptions = false
     this.usesStringRuntime = false
+    this.usesJsonRuntime = false
+    this.usesErrorRuntime = false
+    this.usesArrayRuntime = false
     this.usesThread = false
     this.functionSignatures = new Map(irModule.functions.map(func => [func.name, func]))
     this.enumConstants = new Map()
@@ -94,12 +97,21 @@ export class LLVMEmitter {
       this.usesOptions ? 'declare i1 @lumen_has_value(ptr)' : '',
       this.usesOptions ? 'declare ptr @lumen_value_or(ptr, ptr)' : '',
       this.usesStringRuntime ? 'declare ptr @lumen_string_concat(ptr, ptr)' : '',
+      this.usesJsonRuntime ? 'declare ptr @lumen_json(ptr)' : '',
+      this.usesJsonRuntime ? 'declare ptr @lumen_json_get(ptr, ptr)' : '',
+      this.usesJsonRuntime ? 'declare ptr @lumen_json_set(ptr, ptr, ptr)' : '',
+      this.usesErrorRuntime ? 'declare ptr @lumen_error_new(i32, ptr)' : '',
+      this.usesErrorRuntime ? 'declare i32 @lumen_error_code(ptr)' : '',
+      this.usesErrorRuntime ? 'declare ptr @lumen_error_text(ptr)' : '',
+      this.usesArrayRuntime ? 'declare ptr @lumen_array_join(i32, ptr, ptr)' : '',
       this.usesHttp ? 'declare i32 @lumen_http_serve_files(i32, ptr)' : '',
       this.usesHttp ? 'declare i32 @lumen_http_serve_api(i32, ptr, ptr, ptr, ptr)' : '',
       this.usesHttp ? 'declare i32 @lumen_http_serve_http(i32, ptr, ptr, ptr, ptr, ptr, i32)' : '',
       this.usesHttp ? 'declare i32 @lumen_socketio_serve_chat(i32, ptr)' : '',
       this.usesHttp ? 'declare ptr @lumen_socketio_event(ptr, ptr)' : '',
       this.usesHttp ? 'declare ptr @lumen_socketio_emit(ptr, ptr, ptr)' : '',
+      this.usesHttp ? 'declare ptr @lumen_http_request(ptr, ptr, ptr)' : '',
+      this.usesHttp ? 'declare ptr @lumen_http_response(i32, ptr, ptr)' : '',
       this.usesThread ? 'declare ptr @lumen_semaphore_create(i32)' : '',
       this.usesThread ? 'declare void @lumen_semaphore_wait(ptr)' : '',
       this.usesThread ? 'declare void @lumen_semaphore_signal(ptr)' : '',
@@ -225,8 +237,8 @@ export class LLVMEmitter {
 
     const value = this.emitExpression(node.argument)
 
-    if (value.type !== LumenTypes.String) {
-      throw new Diagnostic('throw expects string', node.location, 'backend')
+    if (value.type !== LumenTypes.String && value.type !== LumenTypes.Error) {
+      throw new Diagnostic('throw expects string or error', node.location, 'backend')
     }
 
     this.lines.push(`  store ptr ${value.value}, ptr ${active.errorPointer}`)
@@ -605,6 +617,13 @@ export class LLVMEmitter {
       return { type: LumenTypes.Void, value: '' }
     }
 
+    if (expression.tokens[0]?.lexeme === 'await') {
+      return this.emitExpression({
+        tokens: expression.tokens.slice(1),
+        location: expression.tokens[0].location
+      })
+    }
+
     if (this.isCall(expression.tokens, SystemFunctions.Println)) return this.emitPrintln(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.Len)) return this.emitLen(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.Includes)) return this.emitIncludes(expression.tokens)
@@ -629,6 +648,16 @@ export class LLVMEmitter {
     if (this.isCall(expression.tokens, SystemFunctions.Channel)) return this.emitChannel(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.Send)) return this.emitSend(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.Receive)) return this.emitReceive(expression.tokens)
+    if (this.isCall(expression.tokens, SystemFunctions.Json)) return this.emitRuntimeCall(expression.tokens, 'lumen_json', LumenTypes.Json, 1, 'json')
+    if (this.isCall(expression.tokens, SystemFunctions.JsonGet)) return this.emitRuntimeCall(expression.tokens, 'lumen_json_get', LumenTypes.String, 2, 'jsonGet')
+    if (this.isCall(expression.tokens, SystemFunctions.JsonSet)) return this.emitRuntimeCall(expression.tokens, 'lumen_json_set', LumenTypes.Json, 3, 'jsonSet')
+    if (this.isCall(expression.tokens, SystemFunctions.NewError)) return this.emitNewError(expression.tokens)
+    if (this.isCall(expression.tokens, SystemFunctions.ErrorCode)) return this.emitRuntimeCall(expression.tokens, 'lumen_error_code', LumenTypes.I32, 1, 'errorCode')
+    if (this.isCall(expression.tokens, SystemFunctions.ErrorText)) return this.emitRuntimeCall(expression.tokens, 'lumen_error_text', LumenTypes.String, 1, 'errorText')
+    if (this.isCall(expression.tokens, SystemFunctions.ArraySum)) return this.emitArraySum(expression.tokens)
+    if (this.isCall(expression.tokens, SystemFunctions.ArrayFirst)) return this.emitArrayEdge(expression.tokens, 'first')
+    if (this.isCall(expression.tokens, SystemFunctions.ArrayLast)) return this.emitArrayEdge(expression.tokens, 'last')
+    if (this.isCall(expression.tokens, SystemFunctions.ArrayJoin)) return this.emitArrayJoin(expression.tokens)
     if (this.isCall(expression.tokens, FsFunctions.ReadFile)) return this.emitReadFile(expression.tokens)
     if (this.isCall(expression.tokens, HttpFunctions.ServeFiles)) return this.emitServeFiles(expression.tokens)
     if (this.isCall(expression.tokens, HttpFunctions.ServeApi)) return this.emitServeApi(expression.tokens)
@@ -636,6 +665,8 @@ export class LLVMEmitter {
     if (this.isCall(expression.tokens, HttpFunctions.ServeSocketIoChat)) return this.emitServeSocketIoChat(expression.tokens)
     if (this.isCall(expression.tokens, HttpFunctions.SocketIoEvent)) return this.emitSocketIoEvent(expression.tokens)
     if (this.isCall(expression.tokens, HttpFunctions.SocketIoEmit)) return this.emitSocketIoEmit(expression.tokens)
+    if (this.isCall(expression.tokens, HttpFunctions.HttpRequest)) return this.emitHttpRequest(expression.tokens)
+    if (this.isCall(expression.tokens, HttpFunctions.HttpResponse)) return this.emitHttpResponse(expression.tokens)
     if (this.isCall(expression.tokens, ThreadFunctions.CreateSemaphore)) return this.emitCreateSemaphore(expression.tokens)
     if (this.isCall(expression.tokens, ThreadFunctions.SemaphoreWait)) return this.emitSemaphoreWait(expression.tokens)
     if (this.isCall(expression.tokens, ThreadFunctions.SemaphoreSignal)) return this.emitSemaphoreSignal(expression.tokens)
@@ -1102,6 +1133,8 @@ export class LLVMEmitter {
     if (['lumen_map_get', 'lumen_map_has'].includes(runtimeName)) this.usesMaps = true
     if (['lumen_ok', 'lumen_err', 'lumen_is_ok', 'lumen_error_message'].includes(runtimeName)) this.usesResults = true
     if (['lumen_some', 'lumen_has_value', 'lumen_value_or'].includes(runtimeName)) this.usesOptions = true
+    if (['lumen_json', 'lumen_json_get', 'lumen_json_set'].includes(runtimeName)) this.usesJsonRuntime = true
+    if (['lumen_error_code', 'lumen_error_text'].includes(runtimeName)) this.usesErrorRuntime = true
 
     const args = this.callArguments(tokens)
     if (args.length !== expectedCount) {
@@ -1121,6 +1154,125 @@ export class LLVMEmitter {
 
     return {
       type: returnType,
+      value: result
+    }
+  }
+
+  emitNewError(tokens) {
+    this.usesErrorRuntime = true
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 2) {
+      throw new Diagnostic('newError expects code and message', tokens[0].location, 'backend')
+    }
+
+    const code = this.emitExpression({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+    const message = this.emitExpression({
+      tokens: args[1],
+      location: tokens[0].location
+    })
+    const result = this.nextTemp()
+
+    this.lines.push(`  ${result} = call ptr @lumen_error_new(i32 ${this.cast(code, LumenTypes.I32)}, ptr ${message.value})`)
+
+    return {
+      type: LumenTypes.Error,
+      value: result
+    }
+  }
+
+  emitArraySum(tokens) {
+    const args = this.callArguments(tokens)
+    if (args.length !== 1) throw new Diagnostic('arraySum expects one array', tokens[0].location, 'backend')
+
+    const name = this.singleIdentifierName({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+    const symbol = this.resolve(name)
+    const elementType = this.typeSystem.elementType(symbol.type)
+
+    if (!this.typeSystem.isArray(symbol.type) || symbol.length === null || !this.typeSystem.isNumeric(elementType)) {
+      throw new Diagnostic('arraySum needs fixed numeric array', tokens[0].location, 'backend')
+    }
+
+    let total = {
+      type: elementType,
+      value: elementType === LumenTypes.F32 ? '0.000000e+00' : '0'
+    }
+
+    for (let index = 0; index < symbol.length; index += 1) {
+      const pointer = this.nextTemp()
+      const loaded = this.nextTemp()
+      const next = this.nextTemp()
+      const op = elementType === LumenTypes.F32 ? 'fadd' : 'add'
+      this.lines.push(`  ${pointer} = getelementptr inbounds ${this.typeSystem.llvmArray(symbol.type, symbol.length)}, ptr ${symbol.pointer}, i32 0, i32 ${index}`)
+      this.lines.push(`  ${loaded} = load ${this.llvmType(elementType)}, ptr ${pointer}`)
+      this.lines.push(`  ${next} = ${op} ${this.llvmType(elementType)} ${total.value}, ${loaded}`)
+      total = {
+        type: elementType,
+        value: next
+      }
+    }
+
+    return total
+  }
+
+  emitArrayEdge(tokens, edge) {
+    const args = this.callArguments(tokens)
+    if (args.length !== 1) throw new Diagnostic(`array${edge === 'first' ? 'First' : 'Last'} expects one array`, tokens[0].location, 'backend')
+
+    const name = this.singleIdentifierName({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+    const symbol = this.resolve(name)
+
+    if (!this.typeSystem.isArray(symbol.type) || symbol.length === null || symbol.length === 0) {
+      throw new Diagnostic('array edge helper needs fixed non-empty array', tokens[0].location, 'backend')
+    }
+
+    const elementType = this.typeSystem.elementType(symbol.type)
+    const index = edge === 'first' ? 0 : symbol.length - 1
+    const pointer = this.nextTemp()
+    const loaded = this.nextTemp()
+
+    this.lines.push(`  ${pointer} = getelementptr inbounds ${this.typeSystem.llvmArray(symbol.type, symbol.length)}, ptr ${symbol.pointer}, i32 0, i32 ${index}`)
+    this.lines.push(`  ${loaded} = load ${this.llvmType(elementType)}, ptr ${pointer}`)
+
+    return {
+      type: elementType,
+      value: loaded
+    }
+  }
+
+  emitArrayJoin(tokens) {
+    this.usesArrayRuntime = true
+    const args = this.callArguments(tokens)
+    if (args.length !== 2) throw new Diagnostic('arrayJoin expects array and separator', tokens[0].location, 'backend')
+
+    const name = this.singleIdentifierName({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+    const symbol = this.resolve(name)
+    const separator = this.emitExpression({
+      tokens: args[1],
+      location: tokens[0].location
+    })
+
+    if (symbol.type !== 'string[]' || symbol.length === null) {
+      throw new Diagnostic('arrayJoin needs fixed string array', tokens[0].location, 'backend')
+    }
+
+    const result = this.nextTemp()
+    this.lines.push(`  ${result} = call ptr @lumen_array_join(i32 ${symbol.length}, ptr ${symbol.pointer}, ptr ${separator.value})`)
+
+    return {
+      type: LumenTypes.String,
       value: result
     }
   }
@@ -1489,6 +1641,58 @@ export class LLVMEmitter {
     const result = this.nextTemp()
 
     this.lines.push(`  ${result} = call ptr @lumen_socketio_emit(ptr ${room.value}, ptr ${event.value}, ptr ${payload.value})`)
+
+    return {
+      type: LumenTypes.String,
+      value: result
+    }
+  }
+
+  emitHttpRequest(tokens) {
+    this.usesHttp = true
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 3) {
+      throw new Diagnostic('httpRequest expects method, path, and body', tokens[0].location, 'backend')
+    }
+
+    const values = args.map(arg => this.emitExpression({
+      tokens: arg,
+      location: tokens[0].location
+    }))
+    const result = this.nextTemp()
+
+    this.lines.push(`  ${result} = call ptr @lumen_http_request(ptr ${values[0].value}, ptr ${values[1].value}, ptr ${values[2].value})`)
+
+    return {
+      type: LumenTypes.String,
+      value: result
+    }
+  }
+
+  emitHttpResponse(tokens) {
+    this.usesHttp = true
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 3) {
+      throw new Diagnostic('httpResponse expects status, headers, and body', tokens[0].location, 'backend')
+    }
+
+    const status = this.emitExpression({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+    const headers = this.emitExpression({
+      tokens: args[1],
+      location: tokens[0].location
+    })
+    const body = this.emitExpression({
+      tokens: args[2],
+      location: tokens[0].location
+    })
+    const result = this.nextTemp()
+
+    this.lines.push(`  ${result} = call ptr @lumen_http_response(i32 ${this.cast(status, LumenTypes.I32)}, ptr ${headers.value}, ptr ${body.value})`)
 
     return {
       type: LumenTypes.String,
@@ -2341,7 +2545,7 @@ export class LLVMEmitter {
   }
 
   printlnFormat(type) {
-    if (type === LumenTypes.String) return this.globalCString('%s\n')
+    if ([LumenTypes.String, LumenTypes.Json, LumenTypes.Error].includes(type)) return this.globalCString('%s\n')
     if (type === LumenTypes.I64) return this.globalCString('%lld\n')
     if (type === LumenTypes.F32) return this.globalCString('%f\n')
     return this.globalCString('%d\n')
@@ -2355,14 +2559,14 @@ export class LLVMEmitter {
   }
 
   printlnArgumentType(type) {
-    if (type === LumenTypes.String) return 'ptr'
+    if ([LumenTypes.String, LumenTypes.Json, LumenTypes.Error].includes(type)) return 'ptr'
     if (type === LumenTypes.I64) return 'i64'
     if (type === LumenTypes.F32) return 'double'
     return 'i32'
   }
 
   printlnArgumentValue(value) {
-    if (value.type === LumenTypes.String) return value.value
+    if ([LumenTypes.String, LumenTypes.Json, LumenTypes.Error].includes(value.type)) return value.value
     if (value.type === LumenTypes.I64) return this.cast(value, LumenTypes.I64)
     if (value.type === LumenTypes.F32) return this.cast(value, 'f64')
     return this.cast(value, LumenTypes.I32)

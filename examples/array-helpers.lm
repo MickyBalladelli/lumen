@@ -1,0 +1,11 @@
+function main(): i32 {
+  let values: i32[] = [3, 4, 5]
+  let names: string[] = ["lumen", "native", "chat"]
+
+  println(arraySum(values))
+  println(arrayFirst(values))
+  println(arrayLast(values))
+  println(arrayJoin(names, ","))
+
+  return arraySum(values)
+}

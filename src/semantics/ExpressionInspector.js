@@ -18,6 +18,11 @@ export class ExpressionInspector {
 
   infer(rawExpression) {
     if (!rawExpression || rawExpression.tokens.length === 0) return LumenTypes.Void
+    if (rawExpression.tokens[0]?.lexeme === 'await') {
+      return this.infer({
+        tokens: rawExpression.tokens.slice(1)
+      })
+    }
     if (this.isCall(rawExpression, SystemFunctions.Println)) return LumenTypes.Void
     if (this.isCall(rawExpression, SystemFunctions.Len)) return LumenTypes.I32
     if (this.isCall(rawExpression, SystemFunctions.Filter)) return this.filterType(rawExpression.tokens)
@@ -43,6 +48,16 @@ export class ExpressionInspector {
     if (this.isCall(rawExpression, SystemFunctions.Channel)) return LumenTypes.String
     if (this.isCall(rawExpression, SystemFunctions.Send)) return LumenTypes.Void
     if (this.isCall(rawExpression, SystemFunctions.Receive)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.Json)) return LumenTypes.Json
+    if (this.isCall(rawExpression, SystemFunctions.JsonGet)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.JsonSet)) return LumenTypes.Json
+    if (this.isCall(rawExpression, SystemFunctions.NewError)) return LumenTypes.Error
+    if (this.isCall(rawExpression, SystemFunctions.ErrorCode)) return LumenTypes.I32
+    if (this.isCall(rawExpression, SystemFunctions.ErrorText)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.ArraySum)) return LumenTypes.I32
+    if (this.isCall(rawExpression, SystemFunctions.ArrayFirst)) return this.arrayElementCallType(rawExpression.tokens)
+    if (this.isCall(rawExpression, SystemFunctions.ArrayLast)) return this.arrayElementCallType(rawExpression.tokens)
+    if (this.isCall(rawExpression, SystemFunctions.ArrayJoin)) return LumenTypes.String
     if (this.isCall(rawExpression, FsFunctions.ReadFile)) return LumenTypes.String
     if (this.isCall(rawExpression, HttpFunctions.ServeFiles)) return LumenTypes.I32
     if (this.isCall(rawExpression, HttpFunctions.ServeApi)) return LumenTypes.I32
@@ -50,6 +65,8 @@ export class ExpressionInspector {
     if (this.isCall(rawExpression, HttpFunctions.ServeSocketIoChat)) return LumenTypes.I32
     if (this.isCall(rawExpression, HttpFunctions.SocketIoEvent)) return LumenTypes.String
     if (this.isCall(rawExpression, HttpFunctions.SocketIoEmit)) return LumenTypes.String
+    if (this.isCall(rawExpression, HttpFunctions.HttpRequest)) return LumenTypes.String
+    if (this.isCall(rawExpression, HttpFunctions.HttpResponse)) return LumenTypes.String
     if (this.isCall(rawExpression, ThreadFunctions.CreateSemaphore)) return LumenTypes.Semaphore
     if (this.isCall(rawExpression, ThreadFunctions.SemaphoreWait)) return LumenTypes.I32
     if (this.isCall(rawExpression, ThreadFunctions.SemaphoreSignal)) return LumenTypes.I32
@@ -117,7 +134,7 @@ export class ExpressionInspector {
       if (this.isAnyFieldKey(rawExpression.tokens, token)) continue
       if (this.isFieldAccessName(rawExpression.tokens, token)) continue
       if (this.isFieldName(rawExpression.tokens, token)) continue
-      if (['true', 'false', 'null'].includes(token.lexeme)) continue
+      if (['await', 'true', 'false', 'null'].includes(token.lexeme)) continue
       if (!this.scope.resolve(token.lexeme)) {
         throw new Diagnostic(`Unknown symbol "${token.lexeme}"`, token.location, 'semantic')
       }
@@ -349,6 +366,17 @@ export class ExpressionInspector {
     }
 
     return LumenTypes.Bool
+  }
+
+  arrayElementCallType(tokens) {
+    const args = this.callArguments(tokens)
+    if (args.length !== 1) return LumenTypes.Unknown
+    const collectionType = this.infer({
+      tokens: args[0]
+    })
+    return this.typeSystem.isArray(collectionType)
+      ? this.typeSystem.elementType(collectionType)
+      : LumenTypes.Unknown
   }
 
   splitDelimited(tokens) {

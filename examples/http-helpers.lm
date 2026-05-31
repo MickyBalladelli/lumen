@@ -1,0 +1,9 @@
+function main(): i32 {
+  let request = httpRequest("POST", "/api/hello", '{"name":"lumen"}')
+  let response = httpResponse(200, '{"content-type":"application/json"}', '{"message":"hello"}')
+
+  println(includes(request, "/api/hello"))
+  println(includes(response, "hello"))
+
+  return 0
+}

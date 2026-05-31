@@ -24,6 +24,14 @@ const expectations = new Map([
     stdout: '16\n',
     code: 16
   }],
+  ['array-helpers', {
+    stdout: '12\n3\n5\nlumen,native,chat\n',
+    code: 12
+  }],
+  ['async-foundation', {
+    stdout: '4\n',
+    code: 4
+  }],
   ['basic', {
     stdout: 'hello\n3\n',
     code: 3
@@ -52,6 +60,10 @@ const expectations = new Map([
     stdout: 'from-env\nfrom-dotenv\n\n1\n1\n',
     code: 0
   }],
+  ['error-type', {
+    stdout: '7\ndisk locked\ndisk locked\n',
+    code: 7
+  }],
   ['for-of', {
     stdout: '26\n',
     code: 26
@@ -64,9 +76,21 @@ const expectations = new Map([
     stdout: `${dataText}\n1\n`,
     code: 0
   }],
+  ['http-helpers', {
+    stdout: '1\n1\n',
+    code: 0
+  }],
+  ['json', {
+    stdout: 'lumen\n3\ntrue\n',
+    code: 0
+  }],
   ['native-main', {
     stdout: '10\n',
     code: 10
+  }],
+  ['module-app', {
+    stdout: '12\n',
+    code: 12
   }],
   ['newline-continuation', {
     stdout: '6\n',
@@ -125,9 +149,7 @@ for (const file of files) {
   const inputPath = join(examplesDir, file)
   const llvmPath = join(outputDir, `${name}.ll`)
   const executablePath = join(outputDir, name)
-  const source = await readFile(inputPath, 'utf8')
-
-  await compiler.writeLLVM(source, llvmPath)
+  await compiler.writeLLVMFile(inputPath, llvmPath)
   await compiler.buildExecutable(llvmPath, executablePath)
 
   if (name === 'thread') {

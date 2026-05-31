@@ -26,10 +26,20 @@ export class ModuleRegistry {
         'assert',
         'channel',
         'send',
-        'receive'
+        'receive',
+        'json',
+        'jsonGet',
+        'jsonSet',
+        'newError',
+        'errorCode',
+        'errorText',
+        'arraySum',
+        'arrayFirst',
+        'arrayLast',
+        'arrayJoin'
       ])],
       ['fs', new Set(['readFile'])],
-      ['http', new Set(['serveFiles', 'serveApi', 'serveHttp', 'serveSocketIoChat', 'socketIoEvent', 'socketIoEmit'])],
+      ['http', new Set(['serveFiles', 'serveApi', 'serveHttp', 'serveSocketIoChat', 'socketIoEvent', 'socketIoEmit', 'httpRequest', 'httpResponse'])],
       ['thread', new Set([
         'createSemaphore',
         'semaphoreWait',

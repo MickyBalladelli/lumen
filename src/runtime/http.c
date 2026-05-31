@@ -19,6 +19,7 @@
 #include <unistd.h>
 
 #ifndef __APPLE__
+#define CC_SHA1_DIGEST_LENGTH 20
 #define CC_SHA256_DIGEST_LENGTH 32
 typedef int CCOperation;
 #define kCCEncrypt 0
@@ -193,6 +194,119 @@ char *lumen_receive(void *raw_channel) {
   LumenChannel *channel = raw_channel;
   if (!channel) return "";
   return channel->message;
+}
+
+char *lumen_json(const char *value) {
+  return lumen_strdup(value);
+}
+
+static char *json_string_value(const char *start) {
+  const char *cursor = start;
+  if (*cursor == '"') cursor += 1;
+  const char *end = cursor;
+  while (*end && *end != '"') end += 1;
+
+  size_t length = (size_t)(end - cursor);
+  char *out = malloc(length + 1);
+  if (!out) return "";
+
+  memcpy(out, cursor, length);
+  out[length] = '\0';
+  return out;
+}
+
+char *lumen_json_get(const char *json, const char *key) {
+  size_t key_length = strlen(key);
+  size_t pattern_length = key_length + 4;
+  char *pattern = malloc(pattern_length);
+  if (!pattern) return "";
+
+  snprintf(pattern, pattern_length, "\"%s\"", key);
+  char *found = strstr(json, pattern);
+  free(pattern);
+  if (!found) return "";
+
+  char *colon = strchr(found, ':');
+  if (!colon) return "";
+  colon += 1;
+  while (*colon == ' ' || *colon == '\t') colon += 1;
+
+  if (*colon == '"') return json_string_value(colon);
+
+  const char *end = colon;
+  while (*end && *end != ',' && *end != '}') end += 1;
+  while (end > colon && (end[-1] == ' ' || end[-1] == '\t')) end -= 1;
+
+  size_t length = (size_t)(end - colon);
+  char *out = malloc(length + 1);
+  if (!out) return "";
+  memcpy(out, colon, length);
+  out[length] = '\0';
+  return out;
+}
+
+char *lumen_json_set(const char *json, const char *key, const char *value) {
+  size_t json_length = strlen(json);
+  int object = json_length >= 2 && json[0] == '{' && json[json_length - 1] == '}';
+  size_t length = json_length + strlen(key) + strlen(value) + 8;
+  char *out = malloc(length);
+  if (!out) return "";
+
+  if (!object || json_length == 2) {
+    snprintf(out, length, "{\"%s\":%s}", key, value);
+    return out;
+  }
+
+  snprintf(out, length, "%.*s,\"%s\":%s}", (int)(json_length - 1), json, key, value);
+  return out;
+}
+
+char *lumen_error_new(int code, const char *message) {
+  size_t length = strlen(message) + 32;
+  char *out = malloc(length);
+  if (!out) return "";
+  snprintf(out, length, "error:%d:%s", code, message);
+  return out;
+}
+
+int lumen_error_code(const char *error) {
+  if (strncmp(error, "error:", 6) != 0) return 0;
+  return atoi(error + 6);
+}
+
+char *lumen_error_text(const char *error) {
+  if (strncmp(error, "error:", 6) != 0) return (char *)error;
+  const char *message = strchr(error + 6, ':');
+  if (!message) return "";
+  return (char *)message + 1;
+}
+
+char *lumen_array_join(int count, const char **values, const char *separator) {
+  size_t total = 1;
+  size_t separator_length = strlen(separator);
+
+  for (int index = 0; index < count; index += 1) {
+    total += strlen(values[index]);
+    if (index + 1 < count) total += separator_length;
+  }
+
+  char *out = malloc(total);
+  if (!out) return "";
+
+  size_t offset = 0;
+  for (int index = 0; index < count; index += 1) {
+    size_t value_length = strlen(values[index]);
+    memcpy(out + offset, values[index], value_length);
+    offset += value_length;
+
+    if (index + 1 < count) {
+      memcpy(out + offset, separator, separator_length);
+      offset += separator_length;
+    }
+  }
+
+  out[offset] = '\0';
+  return out;
 }
 
 static char *lumen_prefixed(const char *prefix, const char *value) {
@@ -931,6 +1045,120 @@ static char *socketio_messages_json(void) {
   return out;
 }
 
+static const char *request_header(const char *request, const char *name, char *out, size_t out_size) {
+  size_t name_length = strlen(name);
+  const char *line = strstr(request, "\r\n");
+  if (!line) return NULL;
+  line += 2;
+
+  while (*line && strncmp(line, "\r\n", 2) != 0) {
+    const char *end = strstr(line, "\r\n");
+    if (!end) break;
+
+    if (strncmp(line, name, name_length) == 0 && line[name_length] == ':') {
+      const char *value = line + name_length + 1;
+      while (*value == ' ') value += 1;
+      size_t length = (size_t)(end - value);
+      if (length >= out_size) length = out_size - 1;
+      memcpy(out, value, length);
+      out[length] = '\0';
+      return out;
+    }
+
+    line = end + 2;
+  }
+
+  return NULL;
+}
+
+static void base64_encode(const unsigned char *input, size_t length, char *out, size_t out_size) {
+  static const char table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  size_t offset = 0;
+
+  for (size_t index = 0; index < length && offset + 4 < out_size; index += 3) {
+    unsigned int value = input[index] << 16;
+    if (index + 1 < length) value |= input[index + 1] << 8;
+    if (index + 2 < length) value |= input[index + 2];
+
+    out[offset++] = table[(value >> 18) & 63];
+    out[offset++] = table[(value >> 12) & 63];
+    out[offset++] = index + 1 < length ? table[(value >> 6) & 63] : '=';
+    out[offset++] = index + 2 < length ? table[value & 63] : '=';
+  }
+
+  out[offset] = '\0';
+}
+
+static int websocket_accept_key(const char *client_key, char *out, size_t out_size) {
+#ifdef __APPLE__
+  const char *guid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+  char combined[256];
+  unsigned char digest[CC_SHA1_DIGEST_LENGTH];
+
+  snprintf(combined, sizeof(combined), "%s%s", client_key, guid);
+  CC_SHA1(combined, (CC_LONG)strlen(combined), digest);
+  base64_encode(digest, CC_SHA1_DIGEST_LENGTH, out, out_size);
+  return 1;
+#else
+  (void)client_key;
+  (void)out;
+  (void)out_size;
+  return 0;
+#endif
+}
+
+static void websocket_send_text(int client, const char *message) {
+  size_t length = strlen(message);
+  unsigned char header[4];
+  header[0] = 0x81;
+
+  if (length < 126) {
+    header[1] = (unsigned char)length;
+    send(client, header, 2, 0);
+  } else {
+    header[1] = 126;
+    header[2] = (unsigned char)((length >> 8) & 255);
+    header[3] = (unsigned char)(length & 255);
+    send(client, header, 4, 0);
+  }
+
+  send(client, message, length, 0);
+}
+
+static int websocket_read_text(int client, char *out, size_t out_size) {
+  unsigned char header[2];
+  ssize_t read_count = recv(client, header, 2, 0);
+  if (read_count != 2) return 0;
+
+  int opcode = header[0] & 0x0f;
+  int masked = header[1] & 0x80;
+  size_t length = header[1] & 0x7f;
+  if (opcode == 8) return 0;
+  if (!masked || length >= out_size) return 0;
+  if (length == 126 || length == 127) return 0;
+
+  unsigned char mask[4];
+  if (recv(client, mask, 4, 0) != 4) return 0;
+  if (recv(client, out, length, 0) != (ssize_t)length) return 0;
+
+  for (size_t index = 0; index < length; index += 1) {
+    out[index] = (char)(out[index] ^ mask[index % 4]);
+  }
+  out[length] = '\0';
+  return 1;
+}
+
+static void websocket_chat_loop(int client) {
+  char message[2048];
+
+  while (websocket_read_text(client, message, sizeof(message))) {
+    socketio_append_message(message);
+    char *body = socketio_messages_json();
+    websocket_send_text(client, body);
+    free(body);
+  }
+}
+
 char *lumen_socketio_event(const char *event, const char *payload) {
   size_t length = strlen(event) + strlen(payload) + 8;
   char *out = malloc(length);
@@ -944,6 +1172,22 @@ char *lumen_socketio_emit(const char *room, const char *event, const char *paylo
   char *out = malloc(length);
   if (!out) return "";
   snprintf(out, length, "{\"room\":\"%s\",\"event\":\"%s\",\"payload\":%s}", room, event, payload);
+  return out;
+}
+
+char *lumen_http_request(const char *method, const char *path, const char *body) {
+  size_t length = strlen(method) + strlen(path) + strlen(body) + 48;
+  char *out = malloc(length);
+  if (!out) return "";
+  snprintf(out, length, "{\"method\":\"%s\",\"path\":\"%s\",\"body\":%s}", method, path, body);
+  return out;
+}
+
+char *lumen_http_response(int status, const char *headers, const char *body) {
+  size_t length = strlen(headers) + strlen(body) + 48;
+  char *out = malloc(length);
+  if (!out) return "";
+  snprintf(out, length, "{\"status\":%d,\"headers\":%s,\"body\":%s}", status, headers, body);
   return out;
 }
 
@@ -993,6 +1237,34 @@ int lumen_socketio_serve_chat(int port, const char *root) {
     if (strcmp(method, "GET") == 0 && (strcmp(path, "/socket.io") == 0 || strcmp(path, "/socket.io/") == 0)) {
       const char *body = "0{\"sid\":\"lumen\",\"upgrades\":[],\"pingInterval\":25000,\"pingTimeout\":20000,\"maxPayload\":1000000}";
       write_response_with_headers(client, 200, text_headers, body, strlen(body));
+      close(client);
+      continue;
+    }
+
+    if (strcmp(method, "GET") == 0 && strcmp(path, "/socket.io/ws") == 0) {
+      char client_key[128];
+      char accept_key[128];
+
+      if (!request_header(request, "Sec-WebSocket-Key", client_key, sizeof(client_key)) ||
+        !websocket_accept_key(client_key, accept_key, sizeof(accept_key))) {
+        const char *body = "websocket unavailable\n";
+        write_response(client, 404, "text/plain", body, strlen(body));
+        close(client);
+        continue;
+      }
+
+      char response[512];
+      int response_length = snprintf(
+        response,
+        sizeof(response),
+        "HTTP/1.1 101 Switching Protocols\r\n"
+        "Upgrade: websocket\r\n"
+        "Connection: Upgrade\r\n"
+        "Sec-WebSocket-Accept: %s\r\n\r\n",
+        accept_key
+      );
+      send(client, response, (size_t)response_length, 0);
+      websocket_chat_loop(client);
       close(client);
       continue;
     }
