@@ -53,7 +53,7 @@ export class Compiler {
   }
 
   async buildExecutable(llvmPath, outputPath, { clang = 'clang' } = {}) {
-    await this.run(clang, ['-Wno-override-module', llvmPath, resolve('src/runtime/http.c'), '-o', outputPath])
+    await this.run(clang, ['-Wno-override-module', llvmPath, resolve('src/runtime/http.c'), '-pthread', '-o', outputPath])
     return outputPath
   }
 

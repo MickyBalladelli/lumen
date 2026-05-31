@@ -4,6 +4,7 @@ import { LumenTypes, TypeSystem } from '../semantics/TypeSystem.js'
 import { SystemFunctions } from '../system/SystemLibrary.js'
 import { FsFunctions } from '../fs/FsLibrary.js'
 import { HttpFunctions } from '../http/HttpLibrary.js'
+import { ThreadFunctions } from '../thread/ThreadLibrary.js'
 
 const BINARY_PRECEDENCE = new Map([
   ['*', 40],
@@ -32,6 +33,7 @@ export class LLVMEmitter {
     this.usesFileIO = false
     this.usesHttp = false
     this.usesUuid = false
+    this.usesThread = false
     const typeDefinitions = irModule.structs.map(struct => this.emitStructType(struct))
     const functions = irModule.functions.flatMap(func => this.emitFunction(func))
 
@@ -51,6 +53,12 @@ export class LLVMEmitter {
       this.usesHttp ? 'declare i32 @lumen_http_serve_files(i32, ptr)' : '',
       this.usesHttp ? 'declare i32 @lumen_http_serve_api(i32, ptr, ptr, ptr, ptr)' : '',
       this.usesHttp ? 'declare i32 @lumen_http_serve_http(i32, ptr, ptr, ptr, ptr, ptr, i32)' : '',
+      this.usesThread ? 'declare ptr @lumen_semaphore_create(i32)' : '',
+      this.usesThread ? 'declare void @lumen_semaphore_wait(ptr)' : '',
+      this.usesThread ? 'declare void @lumen_semaphore_signal(ptr)' : '',
+      this.usesThread ? 'declare ptr @lumen_thread_start(ptr, ptr, ptr, ptr)' : '',
+      this.usesThread ? 'declare i32 @lumen_thread_join(ptr)' : '',
+      this.usesThread ? 'declare i32 @lumen_append_file(ptr, ptr)' : '',
       '',
       ...functions,
       ''
@@ -354,6 +362,12 @@ export class LLVMEmitter {
     if (this.isCall(expression.tokens, HttpFunctions.ServeFiles)) return this.emitServeFiles(expression.tokens)
     if (this.isCall(expression.tokens, HttpFunctions.ServeApi)) return this.emitServeApi(expression.tokens)
     if (this.isCall(expression.tokens, HttpFunctions.ServeHttp)) return this.emitServeHttp(expression.tokens)
+    if (this.isCall(expression.tokens, ThreadFunctions.CreateSemaphore)) return this.emitCreateSemaphore(expression.tokens)
+    if (this.isCall(expression.tokens, ThreadFunctions.SemaphoreWait)) return this.emitSemaphoreWait(expression.tokens)
+    if (this.isCall(expression.tokens, ThreadFunctions.SemaphoreSignal)) return this.emitSemaphoreSignal(expression.tokens)
+    if (this.isCall(expression.tokens, ThreadFunctions.StartThread)) return this.emitStartThread(expression.tokens)
+    if (this.isCall(expression.tokens, ThreadFunctions.JoinThread)) return this.emitJoinThread(expression.tokens)
+    if (this.isCall(expression.tokens, ThreadFunctions.AppendFile)) return this.emitAppendFile(expression.tokens)
     if (this.isFieldAccess(expression.tokens)) return this.emitFieldLoad(expression.tokens)
     if (this.isArrayAccess(expression.tokens)) return this.emitArrayLoad(expression.tokens)
 
@@ -687,6 +701,147 @@ export class LLVMEmitter {
 
     const result = this.nextTemp()
     this.lines.push(`  ${result} = call i32 @lumen_http_serve_http(i32 ${this.cast(port, LumenTypes.I32)}, ptr ${root.value}, ptr ${methods.pointer}, ptr ${routes.pointer}, ptr ${headers.pointer}, ptr ${bodies.pointer}, i32 ${methods.length})`)
+
+    return {
+      type: LumenTypes.I32,
+      value: result
+    }
+  }
+
+  emitCreateSemaphore(tokens) {
+    this.usesThread = true
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 1) {
+      throw new Diagnostic('createSemaphore expects one count', tokens[0].location, 'backend')
+    }
+
+    const count = this.emitExpression({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+    const result = this.nextTemp()
+    this.lines.push(`  ${result} = call ptr @lumen_semaphore_create(i32 ${this.cast(count, LumenTypes.I32)})`)
+
+    return {
+      type: LumenTypes.Semaphore,
+      value: result
+    }
+  }
+
+  emitSemaphoreWait(tokens) {
+    this.usesThread = true
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 1) {
+      throw new Diagnostic('semaphoreWait expects semaphore', tokens[0].location, 'backend')
+    }
+
+    const semaphore = this.emitExpression({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+    this.lines.push(`  call void @lumen_semaphore_wait(ptr ${semaphore.value})`)
+
+    return {
+      type: LumenTypes.I32,
+      value: '0'
+    }
+  }
+
+  emitSemaphoreSignal(tokens) {
+    this.usesThread = true
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 1) {
+      throw new Diagnostic('semaphoreSignal expects semaphore', tokens[0].location, 'backend')
+    }
+
+    const semaphore = this.emitExpression({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+    this.lines.push(`  call void @lumen_semaphore_signal(ptr ${semaphore.value})`)
+
+    return {
+      type: LumenTypes.I32,
+      value: '0'
+    }
+  }
+
+  emitStartThread(tokens) {
+    this.usesThread = true
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 4) {
+      throw new Diagnostic('startThread expects function, path, message, semaphore', tokens[0].location, 'backend')
+    }
+
+    const functionName = this.singleIdentifierName({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+    const path = this.emitExpression({
+      tokens: args[1],
+      location: tokens[0].location
+    })
+    const message = this.emitExpression({
+      tokens: args[2],
+      location: tokens[0].location
+    })
+    const semaphore = this.emitExpression({
+      tokens: args[3],
+      location: tokens[0].location
+    })
+    const result = this.nextTemp()
+
+    this.lines.push(`  ${result} = call ptr @lumen_thread_start(ptr @${functionName}, ptr ${path.value}, ptr ${message.value}, ptr ${semaphore.value})`)
+
+    return {
+      type: LumenTypes.Thread,
+      value: result
+    }
+  }
+
+  emitJoinThread(tokens) {
+    this.usesThread = true
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 1) {
+      throw new Diagnostic('joinThread expects thread', tokens[0].location, 'backend')
+    }
+
+    const thread = this.emitExpression({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+    const result = this.nextTemp()
+    this.lines.push(`  ${result} = call i32 @lumen_thread_join(ptr ${thread.value})`)
+
+    return {
+      type: LumenTypes.I32,
+      value: result
+    }
+  }
+
+  emitAppendFile(tokens) {
+    this.usesThread = true
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 2) {
+      throw new Diagnostic('appendFile expects path and message', tokens[0].location, 'backend')
+    }
+
+    const path = this.emitExpression({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+    const message = this.emitExpression({
+      tokens: args[1],
+      location: tokens[0].location
+    })
+    const result = this.nextTemp()
+    this.lines.push(`  ${result} = call i32 @lumen_append_file(ptr ${path.value}, ptr ${message.value})`)
 
     return {
       type: LumenTypes.I32,

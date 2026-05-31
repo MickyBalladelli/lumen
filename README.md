@@ -280,6 +280,33 @@ try {
 Current throw values must be strings. This is branch-based Lumen control flow,
 not native exception unwinding.
 
+### Threads
+
+The thread library can create a semaphore and run worker functions.
+
+```lumen
+function writeLine(path: string, message: string, semaphore: semaphore): void {
+  semaphoreWait(semaphore)
+  appendFile(path, message)
+  semaphoreSignal(semaphore)
+}
+
+let semaphore = createSemaphore(1)
+let one = startThread(writeLine, "build/thread-output.txt", "thread one", semaphore)
+let two = startThread(writeLine, "build/thread-output.txt", "thread two", semaphore)
+let three = startThread(writeLine, "build/thread-output.txt", "thread three", semaphore)
+
+joinThread(one)
+joinThread(two)
+joinThread(three)
+```
+
+`createSemaphore(1)` allows one thread into the critical section at a time.
+`startThread(...)` starts a native thread with the worker function and arguments.
+`joinThread(...)` waits for it to finish.
+`appendFile(path, message)` appends one line to a file; put it inside the
+worker function when the thread should write.
+
 ## Run parser
 
 ```bash
@@ -359,6 +386,7 @@ console.log(ast)
 - `examples/println.lm`: native print through `printf`
 - `examples/struct.lm`: object type with fields
 - `examples/system.lm`: `println`, `len`, and `filter`
+- `examples/thread.lm`: native threads with semaphore-protected file writes
 - `examples/try-catch.lm`: Lumen `try/catch` and `throw`
 - `examples/use-api.js`: tokenizer and parser from JavaScript
 

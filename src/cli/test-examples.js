@@ -1,4 +1,4 @@
-import { readdir, readFile } from 'node:fs/promises'
+import { readdir, readFile, unlink } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { spawn } from 'node:child_process'
 import { Compiler } from '../compiler/Compiler.js'
@@ -58,6 +58,10 @@ const expectations = new Map([
     stdout: '5\n1\n0\n1\n0\n1\n3\n4\n5\n12\n',
     code: 12
   }],
+  ['thread', {
+    stdout: '1\n1\n1\n',
+    code: 0
+  }],
   ['try-catch', {
     stdout: 'boom\n7\n',
     code: 7
@@ -79,6 +83,12 @@ for (const file of files) {
 
   await compiler.writeLLVM(source, llvmPath)
   await compiler.buildExecutable(llvmPath, executablePath)
+
+  if (name === 'thread') {
+    await unlink(join(outputDir, 'thread-output.txt')).catch(error => {
+      if (error.code !== 'ENOENT') throw error
+    })
+  }
 
   if (compileOnly.has(name)) {
     console.log(`ok ${name} compile`)

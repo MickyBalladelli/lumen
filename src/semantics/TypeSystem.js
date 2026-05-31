@@ -4,6 +4,8 @@ export const LumenTypes = Object.freeze({
   F32: 'f32',
   Bool: 'bool',
   String: 'string',
+  Semaphore: 'semaphore',
+  Thread: 'thread',
   Void: 'void',
   Unknown: 'unknown'
 })
@@ -41,6 +43,8 @@ export class TypeSystem {
     if (normalized === LumenTypes.I64) return 'i64'
     if (normalized === LumenTypes.F32) return 'float'
     if (normalized === LumenTypes.Bool) return 'i1'
+    if (normalized === LumenTypes.Semaphore) return 'ptr'
+    if (normalized === LumenTypes.Thread) return 'ptr'
     if (normalized === LumenTypes.Void) return 'void'
     if (this.structs.has(normalized)) return `%${normalized}`
 

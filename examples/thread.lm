@@ -1,0 +1,25 @@
+function writeLine(path: string, message: string, semaphore: semaphore): void {
+  semaphoreWait(semaphore)
+  appendFile(path, message)
+  semaphoreSignal(semaphore)
+}
+
+function main(): i32 {
+  let semaphore = createSemaphore(1)
+
+  let one = startThread(writeLine, "build/thread-output.txt", "thread one", semaphore)
+  let two = startThread(writeLine, "build/thread-output.txt", "thread two", semaphore)
+  let three = startThread(writeLine, "build/thread-output.txt", "thread three", semaphore)
+
+  joinThread(one)
+  joinThread(two)
+  joinThread(three)
+
+  let content = readFile("build/thread-output.txt")
+
+  println(includes(content, "thread one"))
+  println(includes(content, "thread two"))
+  println(includes(content, "thread three"))
+
+  return 0
+}
