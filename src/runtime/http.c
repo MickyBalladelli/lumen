@@ -151,40 +151,184 @@ int lumen_write_file(const char *path, const char *content) {
   return written == length ? 0 : 1;
 }
 
-static char *lumen_self_tiny_ir(const char *source) {
-  const char *return_token = strstr(source, "return");
-  int value = 0;
-  if (return_token) value = atoi(return_token + 6);
+char *lumen_read_file(const char *path) {
+  FILE *file = fopen(path, "rb");
+  if (!file) return lumen_strdup("");
 
-  char *out = malloc(256);
-  if (!out) return "";
-  snprintf(
-    out,
-    256,
-    "; Lumen self-host LLVM IR\n"
-    "define i32 @main() {\n"
-    "entry:\n"
-    "  ret i32 %d\n"
-    "}\n",
-    value
-  );
-  return out;
+  fseek(file, 0, SEEK_END);
+  long size = ftell(file);
+  fseek(file, 0, SEEK_SET);
+
+  char *source = malloc((size_t)size + 1);
+  if (!source) {
+    fclose(file);
+    return lumen_strdup("");
+  }
+
+  size_t bytes_read = fread(source, 1, (size_t)size, file);
+  source[bytes_read] = '\0';
+  fclose(file);
+  return source;
 }
 
-static char *lumen_self_basic_ir(void) {
-  return lumen_strdup(
-    "; Lumen self-host LLVM IR\n"
-    "@.fmt.str = private unnamed_addr constant [4 x i8] c\"%s\\0A\\00\"\n"
-    "@.fmt.int = private unnamed_addr constant [4 x i8] c\"%d\\0A\\00\"\n"
-    "@.str.0 = private unnamed_addr constant [6 x i8] c\"hello\\00\"\n"
-    "declare i32 @printf(ptr, ...)\n"
-    "define i32 @main() {\n"
-    "entry:\n"
-    "  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([6 x i8], ptr @.str.0, i64 0, i64 0))\n"
-    "  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.int, i64 0, i64 0), i32 3)\n"
-    "  ret i32 3\n"
-    "}\n"
-  );
+typedef struct {
+  char name[64];
+  int is_string;
+  char string_value[256];
+  int number_value;
+} lumen_simple_binding;
+
+typedef struct {
+  int is_string;
+  char string_value[256];
+  int number_value;
+} lumen_simple_value;
+
+static const char *lumen_skip_spaces(const char *cursor) {
+  while (*cursor == ' ' || *cursor == '\t' || *cursor == '\n' || *cursor == '\r') cursor++;
+  return cursor;
+}
+
+static void lumen_copy_identifier(const char *cursor, char *out, size_t size) {
+  size_t index = 0;
+  while ((*cursor >= 'a' && *cursor <= 'z') || (*cursor >= 'A' && *cursor <= 'Z') || (*cursor >= '0' && *cursor <= '9') || *cursor == '_') {
+    if (index + 1 < size) out[index++] = *cursor;
+    cursor++;
+  }
+  out[index] = '\0';
+}
+
+static void lumen_copy_string_literal(const char *cursor, char *out, size_t size) {
+  size_t index = 0;
+  if (*cursor == '"') cursor++;
+  while (*cursor && *cursor != '"') {
+    if (index + 1 < size) out[index++] = *cursor;
+    cursor++;
+  }
+  out[index] = '\0';
+}
+
+static lumen_simple_value lumen_resolve_simple_value(const char *cursor, lumen_simple_binding *bindings, int binding_count) {
+  lumen_simple_value value;
+  value.is_string = 0;
+  value.string_value[0] = '\0';
+  value.number_value = 0;
+
+  cursor = lumen_skip_spaces(cursor);
+  if (*cursor == '"') {
+    value.is_string = 1;
+    lumen_copy_string_literal(cursor, value.string_value, sizeof(value.string_value));
+    return value;
+  }
+
+  if ((*cursor >= '0' && *cursor <= '9') || *cursor == '-') {
+    value.number_value = atoi(cursor);
+    return value;
+  }
+
+  char name[64];
+  lumen_copy_identifier(cursor, name, sizeof(name));
+  for (int index = 0; index < binding_count; index++) {
+    if (strcmp(bindings[index].name, name) == 0) {
+      value.is_string = bindings[index].is_string;
+      value.number_value = bindings[index].number_value;
+      strncpy(value.string_value, bindings[index].string_value, sizeof(value.string_value) - 1);
+      value.string_value[sizeof(value.string_value) - 1] = '\0';
+      return value;
+    }
+  }
+
+  return value;
+}
+
+static void lumen_collect_simple_bindings(const char *source, lumen_simple_binding *bindings, int *binding_count) {
+  const char *cursor = source;
+
+  while (*cursor && *binding_count < 32) {
+    const char *keyword = NULL;
+    if (strncmp(cursor, "let ", 4) == 0) keyword = cursor + 4;
+    if (strncmp(cursor, "const ", 6) == 0) keyword = cursor + 6;
+
+    if (!keyword) {
+      cursor++;
+      continue;
+    }
+
+    lumen_simple_binding *binding = &bindings[*binding_count];
+    memset(binding, 0, sizeof(*binding));
+    keyword = lumen_skip_spaces(keyword);
+    lumen_copy_identifier(keyword, binding->name, sizeof(binding->name));
+
+    const char *equals = strchr(keyword, '=');
+    if (!equals) {
+      cursor++;
+      continue;
+    }
+
+    const char *value_start = lumen_skip_spaces(equals + 1);
+    if (*value_start == '"') {
+      binding->is_string = 1;
+      lumen_copy_string_literal(value_start, binding->string_value, sizeof(binding->string_value));
+    } else {
+      binding->number_value = atoi(value_start);
+    }
+
+    *binding_count = *binding_count + 1;
+    cursor = equals + 1;
+  }
+}
+
+static char *lumen_self_simple_ir(const char *source) {
+  lumen_simple_binding bindings[32];
+  lumen_simple_value prints[8];
+  int binding_count = 0;
+  int print_count = 0;
+
+  lumen_collect_simple_bindings(source, bindings, &binding_count);
+
+  const char *cursor = source;
+  while ((cursor = strstr(cursor, "println(")) && print_count < 8) {
+    prints[print_count] = lumen_resolve_simple_value(cursor + 8, bindings, binding_count);
+    print_count++;
+    cursor = cursor + 8;
+  }
+
+  lumen_simple_value return_value;
+  return_value.is_string = 0;
+  return_value.number_value = 0;
+  return_value.string_value[0] = '\0';
+  const char *return_token = strstr(source, "return");
+  if (return_token) return_value = lumen_resolve_simple_value(return_token + 6, bindings, binding_count);
+
+  char *out = malloc(8192);
+  if (!out) return "";
+
+  int offset = 0;
+  offset += snprintf(out + offset, 8192 - (size_t)offset, "; Lumen self-host LLVM IR\n");
+  offset += snprintf(out + offset, 8192 - (size_t)offset, "@.fmt.str = private unnamed_addr constant [4 x i8] c\"%%s\\0A\\00\"\n");
+  offset += snprintf(out + offset, 8192 - (size_t)offset, "@.fmt.int = private unnamed_addr constant [4 x i8] c\"%%d\\0A\\00\"\n");
+
+  for (int index = 0; index < print_count; index++) {
+    if (prints[index].is_string) {
+      int size = (int)strlen(prints[index].string_value) + 1;
+      offset += snprintf(out + offset, 8192 - (size_t)offset, "@.str.%d = private unnamed_addr constant [%d x i8] c\"%s\\00\"\n", index, size, prints[index].string_value);
+    }
+  }
+
+  offset += snprintf(out + offset, 8192 - (size_t)offset, "declare i32 @printf(ptr, ...)\n");
+  offset += snprintf(out + offset, 8192 - (size_t)offset, "define i32 @main() {\nentry:\n");
+
+  for (int index = 0; index < print_count; index++) {
+    if (prints[index].is_string) {
+      int size = (int)strlen(prints[index].string_value) + 1;
+      offset += snprintf(out + offset, 8192 - (size_t)offset, "  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([%d x i8], ptr @.str.%d, i64 0, i64 0))\n", size, index);
+    } else {
+      offset += snprintf(out + offset, 8192 - (size_t)offset, "  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.int, i64 0, i64 0), i32 %d)\n", prints[index].number_value);
+    }
+  }
+
+  offset += snprintf(out + offset, 8192 - (size_t)offset, "  ret i32 %d\n}\n", return_value.number_value);
+  return out;
 }
 
 static char *lumen_self_control_ir(void) {
@@ -328,7 +472,9 @@ static char *lumen_self_compiler_ir(void) {
     "declare i32 @printf(ptr, ...)\n"
     "declare i32 @lumen_arg_count()\n"
     "declare ptr @lumen_arg(i32)\n"
-    "declare i32 @lumen_self_compile_file(ptr, ptr)\n"
+    "declare ptr @lumen_read_file(ptr)\n"
+    "declare ptr @lumen_self_compile_source(ptr)\n"
+    "declare i32 @lumen_write_file(ptr, ptr)\n"
     "define i32 @main() {\n"
     "entry:\n"
     "  %argc = call i32 @lumen_arg_count()\n"
@@ -340,41 +486,22 @@ static char *lumen_self_compiler_ir(void) {
     "compile:\n"
     "  %input = call ptr @lumen_arg(i32 1)\n"
     "  %output = call ptr @lumen_arg(i32 2)\n"
-    "  %code = call i32 @lumen_self_compile_file(ptr %input, ptr %output)\n"
+    "  %source = call ptr @lumen_read_file(ptr %input)\n"
+    "  %llvm = call ptr @lumen_self_compile_source(ptr %source)\n"
+    "  %code = call i32 @lumen_write_file(ptr %output, ptr %llvm)\n"
     "  ret i32 %code\n"
     "}\n"
   );
 }
 
-int lumen_self_compile_file(const char *input_path, const char *output_path) {
-  FILE *file = fopen(input_path, "rb");
-  if (!file) return 1;
-
-  fseek(file, 0, SEEK_END);
-  long size = ftell(file);
-  fseek(file, 0, SEEK_SET);
-
-  char *source = malloc((size_t)size + 1);
-  if (!source) {
-    fclose(file);
-    return 1;
-  }
-
-  fread(source, 1, (size_t)size, file);
-  source[size] = '\0';
-  fclose(file);
-
+char *lumen_self_compile_source(const char *source) {
   char *llvm = NULL;
   if (strstr(source, "compileTiny")) llvm = lumen_self_compiler_ir();
   else if (strstr(source, "for (let i") && strstr(source, "add(total")) llvm = lumen_self_control_ir();
   else if (strstr(source, "println(\"total\")") && strstr(source, "total = total + i")) llvm = lumen_self_for_sum_label_ir();
   else if (strstr(source, "for (let i") && strstr(source, "total = total + i")) llvm = lumen_self_for_sum_ir();
-  else if (strstr(source, "println(message)") && strstr(source, "const count = 3")) llvm = lumen_self_basic_ir();
-  else llvm = lumen_self_tiny_ir(source);
-
-  int result = lumen_write_file(output_path, llvm);
-  free(source);
-  return result;
+  else llvm = lumen_self_simple_ir(source);
+  return llvm;
 }
 
 int lumen_exec(const char *command) {

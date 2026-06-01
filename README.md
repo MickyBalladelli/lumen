@@ -546,8 +546,8 @@ let summary = parseSummary(source)
 The first pure-Lumen compiler pieces live in `compiler/`:
 
 - `compiler/tokenizer.lm`: tokenizes a small Lumen subset
-- `compiler/parser.lm`: extracts a tiny `main` return program model
-- `compiler/emitter.lm`: emits LLVM for tiny `main`, `let`/`const`, `println`, return, simple loop examples, and the current control-flow example
+- `compiler/parser.lm`: extracts a small `main` program model with lets, consts, prints, returns, and selected loops
+- `compiler/emitter.lm`: emits LLVM for simple `main`, `let`/`const`, `println`, return, simple loop examples, and the current control-flow example
 - `compiler/main.lm`: CLI-shaped tiny compiler
 
 The bootstrap flow is now tested:
@@ -606,8 +606,9 @@ npm run compile:self -- compiler/main.lm build/lumen-compiler-self2.ll
 
 The second-stage compiler output is linked and tested by `npm run test`.
 This is not full pure self-hosting yet: the second-stage compiler uses the
-runtime bootstrap helper `lumen_self_compile_file` for the currently supported
-subset.
+runtime bootstrap helper `lumen_self_compile_source` for the currently
+supported source-to-LLVM subset. The emitted compiler now handles CLI args,
+file read, and file write itself.
 
 ### HTTP
 
@@ -740,7 +741,7 @@ This prints the AST JSON.
 
 There are three compiler entry points:
 
-- `npm run compile`: stage-0 Node compiler
+- `npm run compile -- <input.lm> <output.ll>`: stage-1 Lumen-built compiler
 - `npm run compile:lumen -- <input.lm> <output.ll>`: stage-1 Lumen-built compiler
 - `npm run compile:self -- <input.lm> <output.ll>`: stage-2 Lumen-built compiler
 
@@ -782,6 +783,10 @@ npm run compile:println
 npm run link:println
 npm run run:println
 
+npm run compile:simple
+npm run link:simple
+npm run run:simple
+
 npm run compile:native-main
 npm run link:native-main
 npm run run:native-main
@@ -790,24 +795,26 @@ npm run compile:self:basic
 npm run compile:self:control
 npm run compile:self:for-loop
 npm run compile:self:println
+npm run compile:self:simple
 npm run compile:self:native-main
 npm run run:self:basic
 npm run run:self:control
 npm run run:self:for-loop
 npm run run:self:println
+npm run run:self:simple
 npm run run:self:native-main
 ```
 
 Emit LLVM IR:
 
 ```bash
-npm run compile -- examples/native-main.lm --emit-llvm
+npm run compile -- examples/native-main.lm build/native-main.ll
 ```
 
-Build a native executable with `clang`:
+Build a native executable with the stage-0 compiler when you want the full current language surface:
 
 ```bash
-npm run compile -- examples/native-main.lm -o build/native-main
+npm run stage0:compile -- examples/native-main.lm -o build/native-main
 ```
 
 Build every Lumen example:
@@ -904,6 +911,7 @@ console.log(ast)
 - `examples/patterns.lm`: enum, match, defer, assert, range loop, slice, channel
 - `examples/println.lm`: native print through `printf`
 - `examples/self-host-parser.lm`: pure-Lumen parser and emitter smoke test
+- `examples/self-host-simple.lm`: simple self-host compile path with lets and println
 - `examples/self-host-tokenizer.lm`: pure-Lumen tokenizer smoke test
 - `examples/struct.lm`: object type with fields
 - `examples/socket-chat.lm`: Socket.IO-style chat server
