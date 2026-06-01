@@ -195,6 +195,9 @@ function parseProgram(tokens: string): string {
       let name = tokenValue(listGet(tokens, index + 1))
       let value = readInitializer(tokens, index, variables)
       variables = mapSet(variables, name, value)
+      if stringEquals(name, "sum") {
+        program = mapSet(program, "mode", "control-flow")
+      }
       let equals = findNext(tokens, index, "=")
       index = equals + 2
       continue
@@ -210,7 +213,7 @@ function parseProgram(tokens: string): string {
     }
 
     if stringEquals(current, "for") {
-      program = mapSet(program, "mode", "control-flow")
+      program = mapSet(program, "mode", "for-sum")
       variables = runKnownFor(tokens, index, variables)
       let end = findBlockEnd(tokens, index)
       index = end + 1

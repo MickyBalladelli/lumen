@@ -547,7 +547,7 @@ The first pure-Lumen compiler pieces live in `compiler/`:
 
 - `compiler/tokenizer.lm`: tokenizes a small Lumen subset
 - `compiler/parser.lm`: extracts a tiny `main` return program model
-- `compiler/emitter.lm`: emits LLVM for tiny `main`, `let`/`const`, `println`, return, and the current control-flow example
+- `compiler/emitter.lm`: emits LLVM for tiny `main`, `let`/`const`, `println`, return, simple loop examples, and the current control-flow example
 - `compiler/main.lm`: CLI-shaped tiny compiler
 
 The bootstrap flow is now tested:
@@ -571,6 +571,16 @@ clang -Wno-override-module build/basic-self.ll src/runtime/http.c -pthread -o bu
 
 That prints `hello` and `3`, then exits with code `3`.
 
+It also compiles `examples/for-loop.lm` and `examples/native-main.lm` with real
+LLVM loop blocks:
+
+```bash
+npm run run:for-loop
+npm run run:native-main
+```
+
+Both print `10`, then exit with code `10`.
+
 It also compiles the current `examples/control-flow.lm` with real LLVM blocks
 for `add(...)`, local variables, arithmetic, loop branches, `continue`, `break`,
 the final `if/else`, interpolated `println`, and `return sum`.
@@ -589,6 +599,8 @@ The compiler can now build a second-stage compiler without Node:
 npm run bootstrap:self
 npm run compile:self -- examples/basic.lm build/basic-self2.ll
 npm run compile:self -- examples/control-flow.lm build/control-flow-self2.ll
+npm run compile:self -- examples/for-loop.lm build/for-loop-self2.ll
+npm run compile:self -- examples/native-main.lm build/native-main-self2.ll
 npm run compile:self -- compiler/main.lm build/lumen-compiler-self2.ll
 ```
 
@@ -762,10 +774,22 @@ npm run compile:control
 npm run link:control
 npm run run:control
 
+npm run compile:for-loop
+npm run link:for-loop
+npm run run:for-loop
+
+npm run compile:native-main
+npm run link:native-main
+npm run run:native-main
+
 npm run compile:self:basic
 npm run compile:self:control
+npm run compile:self:for-loop
+npm run compile:self:native-main
 npm run run:self:basic
 npm run run:self:control
+npm run run:self:for-loop
+npm run run:self:native-main
 ```
 
 Emit LLVM IR:
