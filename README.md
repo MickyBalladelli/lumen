@@ -732,6 +732,13 @@ There are three compiler entry points:
 - `npm run compile:lumen -- <input.lm> <output.ll>`: stage-1 Lumen-built compiler
 - `npm run compile:self -- <input.lm> <output.ll>`: stage-2 Lumen-built compiler
 
+The explicit Node commands are named `stage0:*`:
+
+```bash
+npm run stage0:compile -- examples/native-main.lm -o build/native-main
+npm run stage0:test
+```
+
 Build the stage-1 compiler once:
 
 ```bash
@@ -742,6 +749,23 @@ Build the stage-2 compiler after stage 1 exists:
 
 ```bash
 npm run bootstrap:self
+```
+
+Supported Lumen compiler shortcuts:
+
+```bash
+npm run compile:basic
+npm run link:basic
+npm run run:basic
+
+npm run compile:control
+npm run link:control
+npm run run:control
+
+npm run compile:self:basic
+npm run compile:self:control
+npm run run:self:basic
+npm run run:self:control
 ```
 
 Emit LLVM IR:
