@@ -117,6 +117,54 @@ function readInitializer(tokens: string, index: i32, variables: string): string 
   return "number:" + text
 }
 
+function expressionKind(tokens: string, index: i32): string {
+  let value = tokenValue(listGet(tokens, index))
+  let kind = tokenKind(listGet(tokens, index))
+  let next = tokenValue(listGet(tokens, index + 1))
+
+  if stringEquals(next, "+") {
+    return "binary"
+  }
+
+  if stringEquals(next, "(") {
+    return "call"
+  }
+
+  if stringEquals(kind, "number") {
+    return "number"
+  }
+
+  if stringEquals(kind, "string") {
+    return "string"
+  }
+
+  return "identifier"
+}
+
+function expressionValue(tokens: string, index: i32): string {
+  let value = tokenValue(listGet(tokens, index))
+  let next = tokenValue(listGet(tokens, index + 1))
+
+  if stringEquals(next, "+") {
+    return "+"
+  }
+
+  return value
+}
+
+function setStatement(program: string, index: i32, kind: string, name: string, exprKind: string, exprValue: string): string {
+  let slot = intToString(index)
+  let prefix = "statement" + slot
+
+  program = mapSet(program, prefix + "Kind", kind)
+  program = mapSet(program, prefix + "Name", name)
+  program = mapSet(program, prefix + "ExprKind", exprKind)
+  program = mapSet(program, prefix + "ExprValue", exprValue)
+  program = mapSet(program, "statementCount", intToString(index + 1))
+
+  return program
+}
+
 function interpolate(value: string, variables: string): string {
   let marker = "$" + "{sum}"
   if includes(value, marker) {
@@ -159,11 +207,12 @@ function findBlockEnd(tokens: string, index: i32): i32 {
 }
 
 function parseProgram(tokens: string): string {
-  let program = map("kind", "program", "mainReturnKind", "number", "mainReturnValue", "0", "printCount", "0")
+  let program = map("kind", "program", "mainReturnKind", "number", "mainReturnValue", "0", "printCount", "0", "statementCount", "0")
   let variables = map("unused", "unused")
   let index: i32 = 0
   let count = listLen(tokens)
   let prints: i32 = 0
+  let statements: i32 = 0
 
   while index < count do {
     let current = tokenValue(listGet(tokens, index))
@@ -195,10 +244,12 @@ function parseProgram(tokens: string): string {
       let name = tokenValue(listGet(tokens, index + 1))
       let value = readInitializer(tokens, index, variables)
       variables = mapSet(variables, name, value)
+      let equals = findNext(tokens, index, "=")
+      program = setStatement(program, statements, "let", name, expressionKind(tokens, equals + 1), expressionValue(tokens, equals + 1))
+      statements = statements + 1
       if stringEquals(name, "sum") {
         program = mapSet(program, "mode", "control-flow")
       }
-      let equals = findNext(tokens, index, "=")
       index = equals + 2
       continue
     }
@@ -208,12 +259,16 @@ function parseProgram(tokens: string): string {
       let value = readInitializer(tokens, index, variables)
       variables = mapSet(variables, name, value)
       let equals = findNext(tokens, index, "=")
+      program = setStatement(program, statements, "const", name, expressionKind(tokens, equals + 1), expressionValue(tokens, equals + 1))
+      statements = statements + 1
       index = equals + 2
       continue
     }
 
     if stringEquals(current, "for") {
       program = mapSet(program, "mode", "for-sum")
+      program = setStatement(program, statements, "for", "", "loop", "classic")
+      statements = statements + 1
       variables = runKnownFor(tokens, index, variables)
       let end = findBlockEnd(tokens, index)
       index = end + 1
@@ -233,6 +288,8 @@ function parseProgram(tokens: string): string {
       let value = readValue(tokens, index + 2, variables)
       let kind = mapValueKind(value)
       let body = interpolate(mapValueBody(value), variables)
+      program = setStatement(program, statements, "println", "", expressionKind(tokens, index + 2), expressionValue(tokens, index + 2))
+      statements = statements + 1
 
       if includes(body, "bad") {
         let sumValue = mapGet(variables, "sum")
@@ -265,6 +322,8 @@ function parseProgram(tokens: string): string {
 
     if stringEquals(current, "return") {
       let value = readValue(tokens, index + 1, variables)
+      program = setStatement(program, statements, "return", "", expressionKind(tokens, index + 1), expressionValue(tokens, index + 1))
+      statements = statements + 1
       if stringEquals(tokenValue(listGet(tokens, index + 1)), "sum") {
         value = "number:23"
       }

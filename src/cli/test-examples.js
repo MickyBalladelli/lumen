@@ -125,7 +125,7 @@ const expectations = new Map([
     code: 10
   }],
   ['self-host-parser', {
-    stdout: '7\n1\n',
+    stdout: '7\n3\nlet\nnumber\nprintln\nidentifier\nreturn\nidentifier\n1\n',
     code: 0
   }],
   ['self-host-simple', {

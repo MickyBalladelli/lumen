@@ -3,11 +3,18 @@ import { parseProgram } from "../compiler/parser.lm"
 import { emitMain } from "../compiler/emitter.lm"
 
 function main(): i32 {
-  let tokens = tokenize("function main(): i32 { return 7 }")
+  let tokens = tokenize("function main(): i32 { let value = 7 println(value) return value }")
   let program = parseProgram(tokens)
   let llvm = emitMain(program)
 
   println(mapGet(program, "mainReturnValue"))
+  println(mapGet(program, "statementCount"))
+  println(mapGet(program, "statement0Kind"))
+  println(mapGet(program, "statement0ExprKind"))
+  println(mapGet(program, "statement1Kind"))
+  println(mapGet(program, "statement1ExprKind"))
+  println(mapGet(program, "statement2Kind"))
+  println(mapGet(program, "statement2ExprKind"))
   println(includes(llvm, "ret i32 7"))
 
   return 0

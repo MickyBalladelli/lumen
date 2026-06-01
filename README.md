@@ -546,7 +546,7 @@ let summary = parseSummary(source)
 The first pure-Lumen compiler pieces live in `compiler/`:
 
 - `compiler/tokenizer.lm`: tokenizes a small Lumen subset
-- `compiler/parser.lm`: extracts a small `main` program model with lets, consts, prints, returns, and selected loops
+- `compiler/parser.lm`: extracts a small `main` program model with statement slots and expression metadata for lets, consts, prints, returns, and selected loops
 - `compiler/emitter.lm`: emits LLVM for simple `main`, `let`/`const`, `println`, return, simple loop examples, and the current control-flow example
 - `compiler/main.lm`: CLI-shaped tiny compiler
 
