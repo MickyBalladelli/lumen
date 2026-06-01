@@ -11,7 +11,82 @@ function emitMain(program: string): string {
     return emitForSum(program)
   }
 
+  return emitStatementMain(program)
+}
+
+function statementPrefix(index: i32): string {
+  let out = stringBuilder()
+  out = stringBuilderAppend(out, "statement")
+  out = stringBuilderAppend(out, intToString(index))
+  return out
+}
+
+function buildStatementSymbols(program: string): string {
+  let symbols = map("unused", "unused")
+  let count = stringToInt(mapGet(program, "statementCount"))
+  let index: i32 = 0
+
+  while index < count do {
+    let prefix = statementPrefix(index)
+    let kind = mapGet(program, prefix + "Kind")
+
+    if includes(kind, "let") {
+      let name = mapGet(program, prefix + "Name")
+      symbols = mapSet(symbols, name + "Kind", mapGet(program, prefix + "ExprKind"))
+      symbols = mapSet(symbols, name + "Value", mapGet(program, prefix + "ExprValue"))
+    }
+
+    if includes(kind, "const") {
+      let name = mapGet(program, prefix + "Name")
+      symbols = mapSet(symbols, name + "Kind", mapGet(program, prefix + "ExprKind"))
+      symbols = mapSet(symbols, name + "Value", mapGet(program, prefix + "ExprValue"))
+    }
+
+    index = index + 1
+  }
+
+  return symbols
+}
+
+function resolvedExprKind(program: string, symbols: string, prefix: string): string {
+  let kind = mapGet(program, prefix + "ExprKind")
+  let value = mapGet(program, prefix + "ExprValue")
+
+  if includes(kind, "identifier") {
+    let resolved = mapGet(symbols, value + "Kind")
+    if includes(resolved, "string") {
+      return resolved
+    }
+    if includes(resolved, "number") {
+      return resolved
+    }
+  }
+
+  return kind
+}
+
+function resolvedExprValue(program: string, symbols: string, prefix: string): string {
+  let kind = mapGet(program, prefix + "ExprKind")
+  let value = mapGet(program, prefix + "ExprValue")
+
+  if includes(kind, "identifier") {
+    let resolvedKind = mapGet(symbols, value + "Kind")
+    let resolved = mapGet(symbols, value + "Value")
+    if includes(resolvedKind, "string") {
+      return resolved
+    }
+    if includes(resolvedKind, "number") {
+      return resolved
+    }
+  }
+
+  return value
+}
+
+function emitStatementMain(program: string): string {
+  let symbols = buildStatementSymbols(program)
   let returnValue = mapGet(program, "mainReturnValue")
+  let statementCount = stringToInt(mapGet(program, "statementCount"))
   let out = stringBuilder()
 
   out = stringBuilderAppend(out, "; Lumen self-host LLVM IR
@@ -21,16 +96,24 @@ function emitMain(program: string): string {
   out = stringBuilderAppend(out, '@.fmt.int = private unnamed_addr constant [4 x i8] c"%d\0A\00"
 ')
 
-  if includes(mapGet(program, "print0Kind"), "string") {
-    out = emitStringGlobal(out, "0", mapGet(program, "print0Value"))
-  }
+  let globalIndex: i32 = 0
+  while globalIndex < statementCount do {
+    let prefix = statementPrefix(globalIndex)
+    let statementKind = mapGet(program, prefix + "Kind")
 
-  if includes(mapGet(program, "print1Kind"), "string") {
-    out = emitStringGlobal(out, "1", mapGet(program, "print1Value"))
-  }
+    if includes(statementKind, "println") {
+      let kind = resolvedExprKind(program, symbols, prefix)
+      let value = resolvedExprValue(program, symbols, prefix)
+      if includes(kind, "string") {
+        out = emitStringGlobal(out, intToString(globalIndex), value)
+      }
+    }
 
-  if includes(mapGet(program, "print2Kind"), "string") {
-    out = emitStringGlobal(out, "2", mapGet(program, "print2Value"))
+    if includes(statementKind, "return") {
+      returnValue = resolvedExprValue(program, symbols, prefix)
+    }
+
+    globalIndex = globalIndex + 1
   }
 
   out = stringBuilderAppend(out, "declare i32 @printf(ptr, ...)
@@ -39,9 +122,18 @@ function emitMain(program: string): string {
 ")
   out = stringBuilderAppend(out, "entry:
 ")
-  out = emitPrint(out, "0", mapGet(program, "print0Kind"), mapGet(program, "print0Value"))
-  out = emitPrint(out, "1", mapGet(program, "print1Kind"), mapGet(program, "print1Value"))
-  out = emitPrint(out, "2", mapGet(program, "print2Kind"), mapGet(program, "print2Value"))
+  let emitIndex: i32 = 0
+  while emitIndex < statementCount do {
+    let prefix = statementPrefix(emitIndex)
+    let statementKind = mapGet(program, prefix + "Kind")
+
+    if includes(statementKind, "println") {
+      out = emitPrint(out, intToString(emitIndex), resolvedExprKind(program, symbols, prefix), resolvedExprValue(program, symbols, prefix))
+    }
+
+    emitIndex = emitIndex + 1
+  }
+
   out = stringBuilderAppend(out, "  ret i32 ")
   out = stringBuilderAppend(out, returnValue)
   out = stringBuilderAppend(out, "
