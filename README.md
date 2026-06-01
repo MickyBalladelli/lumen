@@ -546,8 +546,8 @@ let summary = parseSummary(source)
 The first pure-Lumen compiler pieces live in `compiler/`:
 
 - `compiler/tokenizer.lm`: tokenizes a small Lumen subset
-- `compiler/parser.lm`: extracts a small `main` program model with statement slots and expression metadata for lets, consts, prints, returns, and selected loops
-- `compiler/emitter.lm`: emits LLVM for simple `main`, `let`/`const`, `println`, return, simple loop examples, and the current control-flow example
+- `compiler/parser.lm`: extracts a small `main` program model with statement slots and expression metadata for lets, consts, prints, returns, `if`, binary `+`, and selected loops
+- `compiler/emitter.lm`: emits LLVM for simple `main`, `let`/`const`, `println`, return, binary `+`, simple `if`, statement-mode loop examples, and the current control-flow example
 - `compiler/main.lm`: CLI-shaped tiny compiler
 
 The bootstrap flow is now tested:
@@ -600,11 +600,13 @@ npm run bootstrap:self
 npm run compile:self -- examples/basic.lm build/basic-self2.ll
 npm run compile:self -- examples/control-flow.lm build/control-flow-self2.ll
 npm run compile:self -- examples/for-loop.lm build/for-loop-self2.ll
+npm run compile:self -- examples/self-host-if-binary.lm build/self-host-if-binary-self2.ll
 npm run compile:self -- examples/native-main.lm build/native-main-self2.ll
 npm run compile:self -- compiler/main.lm build/lumen-compiler-self2.ll
 ```
 
 The second-stage compiler output is linked and tested by `npm run test`.
+Invalid bootstrap input is rejected with a nonzero exit code.
 This is not full pure self-hosting yet: the second-stage compiler uses the
 runtime bootstrap helper `lumen_self_compile_source` for the currently
 supported source-to-LLVM subset. The emitted compiler now handles CLI args,
@@ -787,6 +789,10 @@ npm run compile:simple
 npm run link:simple
 npm run run:simple
 
+npm run compile:if-binary
+npm run link:if-binary
+npm run run:if-binary
+
 npm run compile:native-main
 npm run link:native-main
 npm run run:native-main
@@ -796,12 +802,14 @@ npm run compile:self:control
 npm run compile:self:for-loop
 npm run compile:self:println
 npm run compile:self:simple
+npm run compile:self:if-binary
 npm run compile:self:native-main
 npm run run:self:basic
 npm run run:self:control
 npm run run:self:for-loop
 npm run run:self:println
 npm run run:self:simple
+npm run run:self:if-binary
 npm run run:self:native-main
 ```
 
@@ -910,6 +918,7 @@ console.log(ast)
 - `examples/numbers.lm`: `i64` and `f32` numbers
 - `examples/patterns.lm`: enum, match, defer, assert, range loop, slice, channel
 - `examples/println.lm`: native print through `printf`
+- `examples/self-host-if-binary.lm`: self-host `if` plus binary `+` smoke test
 - `examples/self-host-parser.lm`: pure-Lumen parser and emitter smoke test
 - `examples/self-host-simple.lm`: simple self-host compile path with lets and println
 - `examples/self-host-tokenizer.lm`: pure-Lumen tokenizer smoke test

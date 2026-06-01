@@ -319,9 +319,16 @@ function parseProgram(tokens: string): string {
 
       let bodyStart = findNext(tokens, index, "{")
       let bodyValue = readValue(tokens, bodyStart + 3, variables)
+      let bodyKind = mapValueKind(bodyValue)
+      let bodyText = interpolate(mapValueBody(bodyValue), variables)
       program = mapSet(program, prefix + "BodyKind", "println")
-      program = mapSet(program, prefix + "BodyExprKind", mapValueKind(bodyValue))
-      program = mapSet(program, prefix + "BodyExprValue", mapValueBody(bodyValue))
+      program = mapSet(program, prefix + "BodyExprKind", bodyKind)
+      program = mapSet(program, prefix + "BodyExprValue", bodyText)
+      if prints == 0 {
+        program = mapSet(program, "print0Kind", bodyKind)
+        program = mapSet(program, "print0Value", bodyText)
+      }
+      prints = prints + 1
 
       statements = statements + 1
       let end = findBlockEnd(tokens, index)

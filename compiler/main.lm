@@ -4,6 +4,12 @@ import { emitMain } from "./emitter.lm"
 
 function compileTiny(input: string, output: string): i32 {
   let source = readFile(input)
+  if includes(source, "function main") {
+    let checked = 1
+  } else {
+    return 1
+  }
+
   let tokens = tokenize(source)
   let program = parseProgram(tokens)
   let llvm = emitMain(program)
