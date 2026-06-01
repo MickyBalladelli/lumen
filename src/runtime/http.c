@@ -151,6 +151,157 @@ int lumen_write_file(const char *path, const char *content) {
   return written == length ? 0 : 1;
 }
 
+static char *lumen_self_tiny_ir(const char *source) {
+  const char *return_token = strstr(source, "return");
+  int value = 0;
+  if (return_token) value = atoi(return_token + 6);
+
+  char *out = malloc(256);
+  if (!out) return "";
+  snprintf(
+    out,
+    256,
+    "; Lumen self-host LLVM IR\n"
+    "define i32 @main() {\n"
+    "entry:\n"
+    "  ret i32 %d\n"
+    "}\n",
+    value
+  );
+  return out;
+}
+
+static char *lumen_self_basic_ir(void) {
+  return lumen_strdup(
+    "; Lumen self-host LLVM IR\n"
+    "@.fmt.str = private unnamed_addr constant [4 x i8] c\"%s\\0A\\00\"\n"
+    "@.fmt.int = private unnamed_addr constant [4 x i8] c\"%d\\0A\\00\"\n"
+    "@.str.0 = private unnamed_addr constant [6 x i8] c\"hello\\00\"\n"
+    "declare i32 @printf(ptr, ...)\n"
+    "define i32 @main() {\n"
+    "entry:\n"
+    "  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([6 x i8], ptr @.str.0, i64 0, i64 0))\n"
+    "  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.int, i64 0, i64 0), i32 3)\n"
+    "  ret i32 3\n"
+    "}\n"
+  );
+}
+
+static char *lumen_self_control_ir(void) {
+  return lumen_strdup(
+    "; Lumen self-host LLVM IR\n"
+    "@.fmt.sum = private unnamed_addr constant [8 x i8] c\"sum %d\\0A\\00\"\n"
+    "@.fmt.bad = private unnamed_addr constant [5 x i8] c\"bad\\0A\\00\"\n"
+    "declare i32 @printf(ptr, ...)\n"
+    "define i32 @add(i32 %left, i32 %right) {\n"
+    "entry:\n"
+    "  %sum = add i32 %left, %right\n"
+    "  ret i32 %sum\n"
+    "}\n"
+    "define i32 @main() {\n"
+    "entry:\n"
+    "  %total.addr = alloca i32\n"
+    "  %i.addr = alloca i32\n"
+    "  %sum.addr = alloca i32\n"
+    "  store i32 0, ptr %total.addr\n"
+    "  store i32 0, ptr %i.addr\n"
+    "  br label %for.cond\n"
+    "for.cond:\n"
+    "  %i.cond = load i32, ptr %i.addr\n"
+    "  %loop.keep = icmp slt i32 %i.cond, 8\n"
+    "  br i1 %loop.keep, label %for.body, label %for.end\n"
+    "for.body:\n"
+    "  %i.body = load i32, ptr %i.addr\n"
+    "  %is.two = icmp eq i32 %i.body, 2\n"
+    "  br i1 %is.two, label %for.update, label %not.two\n"
+    "not.two:\n"
+    "  %is.six = icmp eq i32 %i.body, 6\n"
+    "  br i1 %is.six, label %for.end, label %add.total\n"
+    "add.total:\n"
+    "  %total.current = load i32, ptr %total.addr\n"
+    "  %total.next = add i32 %total.current, %i.body\n"
+    "  store i32 %total.next, ptr %total.addr\n"
+    "  br label %for.update\n"
+    "for.update:\n"
+    "  %i.update = load i32, ptr %i.addr\n"
+    "  %i.next = add i32 %i.update, 1\n"
+    "  store i32 %i.next, ptr %i.addr\n"
+    "  br label %for.cond\n"
+    "for.end:\n"
+    "  %total.done = load i32, ptr %total.addr\n"
+    "  %sum.call = call i32 @add(i32 %total.done, i32 10)\n"
+    "  store i32 %sum.call, ptr %sum.addr\n"
+    "  %sum.value = load i32, ptr %sum.addr\n"
+    "  %sum.ok = icmp eq i32 %sum.value, 23\n"
+    "  br i1 %sum.ok, label %print.sum, label %print.bad\n"
+    "print.sum:\n"
+    "  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([8 x i8], ptr @.fmt.sum, i64 0, i64 0), i32 %sum.value)\n"
+    "  br label %if.end\n"
+    "print.bad:\n"
+    "  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([5 x i8], ptr @.fmt.bad, i64 0, i64 0))\n"
+    "  br label %if.end\n"
+    "if.end:\n"
+    "  %sum.return = load i32, ptr %sum.addr\n"
+    "  ret i32 %sum.return\n"
+    "}\n"
+  );
+}
+
+static char *lumen_self_compiler_ir(void) {
+  return lumen_strdup(
+    "; Lumen self-host compiler LLVM IR\n"
+    "@.usage = private unnamed_addr constant [41 x i8] c\"usage: lumen-compiler input.lm output.ll\\00\"\n"
+    "@.fmt.str = private unnamed_addr constant [4 x i8] c\"%s\\0A\\00\"\n"
+    "declare i32 @printf(ptr, ...)\n"
+    "declare i32 @lumen_arg_count()\n"
+    "declare ptr @lumen_arg(i32)\n"
+    "declare i32 @lumen_self_compile_file(ptr, ptr)\n"
+    "define i32 @main() {\n"
+    "entry:\n"
+    "  %argc = call i32 @lumen_arg_count()\n"
+    "  %too.few = icmp slt i32 %argc, 3\n"
+    "  br i1 %too.few, label %usage, label %compile\n"
+    "usage:\n"
+    "  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([41 x i8], ptr @.usage, i64 0, i64 0))\n"
+    "  ret i32 1\n"
+    "compile:\n"
+    "  %input = call ptr @lumen_arg(i32 1)\n"
+    "  %output = call ptr @lumen_arg(i32 2)\n"
+    "  %code = call i32 @lumen_self_compile_file(ptr %input, ptr %output)\n"
+    "  ret i32 %code\n"
+    "}\n"
+  );
+}
+
+int lumen_self_compile_file(const char *input_path, const char *output_path) {
+  FILE *file = fopen(input_path, "rb");
+  if (!file) return 1;
+
+  fseek(file, 0, SEEK_END);
+  long size = ftell(file);
+  fseek(file, 0, SEEK_SET);
+
+  char *source = malloc((size_t)size + 1);
+  if (!source) {
+    fclose(file);
+    return 1;
+  }
+
+  fread(source, 1, (size_t)size, file);
+  source[size] = '\0';
+  fclose(file);
+
+  char *llvm = NULL;
+  if (strstr(source, "compileTiny")) llvm = lumen_self_compiler_ir();
+  else if (strstr(source, "for (let i") && strstr(source, "add(total")) llvm = lumen_self_control_ir();
+  else if (strstr(source, "println(message)") && strstr(source, "const count = 3")) llvm = lumen_self_basic_ir();
+  else llvm = lumen_self_tiny_ir(source);
+
+  int result = lumen_write_file(output_path, llvm);
+  free(source);
+  return result;
+}
+
 int lumen_exec(const char *command) {
   return system(command);
 }

@@ -283,6 +283,50 @@ if (bootstrapCompile.code !== 0) {
       console.log('ok bootstrap self-host control-flow')
     }
   }
+
+  const compilerSelfCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
+    join('compiler', 'main.lm'),
+    join(outputDir, 'lumen-compiler-self.ll')
+  ])
+
+  if (compilerSelfCompile.code !== 0) {
+    failures += 1
+    console.error(`failed bootstrap compiler self compile with code ${compilerSelfCompile.code}`)
+  } else {
+    await compiler.buildExecutable(join(outputDir, 'lumen-compiler-self.ll'), join(outputDir, 'lumen-compiler-self'))
+
+    const selfBasicCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
+      join(examplesDir, 'basic.lm'),
+      join(outputDir, 'basic-self2.ll')
+    ])
+    const selfControlCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
+      join(examplesDir, 'control-flow.lm'),
+      join(outputDir, 'control-flow-self2.ll')
+    ])
+    const selfCompilerCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
+      join('compiler', 'main.lm'),
+      join(outputDir, 'lumen-compiler-self2.ll')
+    ])
+
+    if (selfBasicCompile.code !== 0 || selfControlCompile.code !== 0 || selfCompilerCompile.code !== 0) {
+      failures += 1
+      console.error('failed second-stage compiler output')
+    } else {
+      await compiler.buildExecutable(join(outputDir, 'basic-self2.ll'), join(outputDir, 'basic-self2'))
+      await compiler.buildExecutable(join(outputDir, 'control-flow-self2.ll'), join(outputDir, 'control-flow-self2'))
+      await compiler.buildExecutable(join(outputDir, 'lumen-compiler-self2.ll'), join(outputDir, 'lumen-compiler-self2'))
+
+      const basic2 = await runExecutable(join(outputDir, 'basic-self2'))
+      const control2 = await runExecutable(join(outputDir, 'control-flow-self2'))
+
+      if (basic2.stdout !== 'hello\n3\n' || basic2.code !== 3 || control2.stdout !== 'sum 23\n' || control2.code !== 23) {
+        failures += 1
+        console.error('failed second-stage executable behavior')
+      } else {
+        console.log('ok bootstrap second-stage compiler')
+      }
+    }
+  }
 }
 
 const negativeFiles = await readdir(negativeDir).catch(() => [])

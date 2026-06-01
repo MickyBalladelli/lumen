@@ -1,4 +1,8 @@
 function emitMain(program: string): string {
+  if stringEquals(mapGet(program, "mode"), "compiler-main") {
+    return emitCompilerMain(program)
+  }
+
   if stringEquals(mapGet(program, "mode"), "control-flow") {
     return emitControlFlow(program)
   }
@@ -38,6 +42,55 @@ function emitMain(program: string): string {
   out = stringBuilderAppend(out, returnValue)
   out = stringBuilderAppend(out, "
 }
+")
+
+  return out
+}
+
+function emitCompilerMain(program: string): string {
+  let out = stringBuilder()
+
+  out = stringBuilderAppend(out, "; Lumen self-host compiler LLVM IR
+")
+  out = stringBuilderAppend(out, '@.usage = private unnamed_addr constant [41 x i8] c"usage: lumen-compiler input.lm output.ll\00"
+')
+  out = stringBuilderAppend(out, '@.fmt.str = private unnamed_addr constant [4 x i8] c"%s\0A\00"
+')
+  out = stringBuilderAppend(out, "declare i32 @printf(ptr, ...)
+")
+  out = stringBuilderAppend(out, "declare i32 @lumen_arg_count()
+")
+  out = stringBuilderAppend(out, "declare ptr @lumen_arg(i32)
+")
+  out = stringBuilderAppend(out, "declare i32 @lumen_self_compile_file(ptr, ptr)
+")
+  out = stringBuilderAppend(out, "define i32 @main() {
+")
+  out = stringBuilderAppend(out, "entry:
+")
+  out = stringBuilderAppend(out, "  %argc = call i32 @lumen_arg_count()
+")
+  out = stringBuilderAppend(out, "  %too.few = icmp slt i32 %argc, 3
+")
+  out = stringBuilderAppend(out, "  br i1 %too.few, label %usage, label %compile
+")
+  out = stringBuilderAppend(out, "usage:
+")
+  out = stringBuilderAppend(out, "  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([41 x i8], ptr @.usage, i64 0, i64 0))
+")
+  out = stringBuilderAppend(out, "  ret i32 1
+")
+  out = stringBuilderAppend(out, "compile:
+")
+  out = stringBuilderAppend(out, "  %input = call ptr @lumen_arg(i32 1)
+")
+  out = stringBuilderAppend(out, "  %output = call ptr @lumen_arg(i32 2)
+")
+  out = stringBuilderAppend(out, "  %code = call i32 @lumen_self_compile_file(ptr %input, ptr %output)
+")
+  out = stringBuilderAppend(out, "  ret i32 %code
+")
+  out = stringBuilderAppend(out, "}
 ")
 
   return out

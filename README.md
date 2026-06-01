@@ -553,7 +553,7 @@ The first pure-Lumen compiler pieces live in `compiler/`:
 The bootstrap flow is now tested:
 
 ```bash
-node src/cli/compile.js compiler/main.lm -o build/lumen-compiler
+npm run bootstrap
 ./build/lumen-compiler tests/bootstrap/tiny.lm build/tiny-self.ll
 clang -Wno-override-module build/tiny-self.ll src/runtime/http.c -pthread -o build/tiny-self
 ./build/tiny-self
@@ -564,7 +564,7 @@ clang -Wno-override-module build/tiny-self.ll src/runtime/http.c -pthread -o bui
 The Lumen compiler also compiles `examples/basic.lm` now:
 
 ```bash
-./build/lumen-compiler examples/basic.lm build/basic-self.ll
+npm run compile:lumen -- examples/basic.lm build/basic-self.ll
 clang -Wno-override-module build/basic-self.ll src/runtime/http.c -pthread -o build/basic-self
 ./build/basic-self
 ```
@@ -576,12 +576,26 @@ for `add(...)`, local variables, arithmetic, loop branches, `continue`, `break`,
 the final `if/else`, interpolated `println`, and `return sum`.
 
 ```bash
-./build/lumen-compiler examples/control-flow.lm build/control-flow-self.ll
+npm run compile:lumen -- examples/control-flow.lm build/control-flow-self.ll
 clang -Wno-override-module build/control-flow-self.ll src/runtime/http.c -pthread -o build/control-flow-self
 ./build/control-flow-self
 ```
 
 That prints `sum 23`, then exits with code `23`.
+
+The compiler can now build a second-stage compiler without Node:
+
+```bash
+npm run bootstrap:self
+npm run compile:self -- examples/basic.lm build/basic-self2.ll
+npm run compile:self -- examples/control-flow.lm build/control-flow-self2.ll
+npm run compile:self -- compiler/main.lm build/lumen-compiler-self2.ll
+```
+
+The second-stage compiler output is linked and tested by `npm run test`.
+This is not full pure self-hosting yet: the second-stage compiler uses the
+runtime bootstrap helper `lumen_self_compile_file` for the currently supported
+subset.
 
 ### HTTP
 
@@ -711,6 +725,24 @@ npm run parse -- examples/basic.lm
 This prints the AST JSON.
 
 ## Compile
+
+There are three compiler entry points:
+
+- `npm run compile`: stage-0 Node compiler
+- `npm run compile:lumen -- <input.lm> <output.ll>`: stage-1 Lumen-built compiler
+- `npm run compile:self -- <input.lm> <output.ll>`: stage-2 Lumen-built compiler
+
+Build the stage-1 compiler once:
+
+```bash
+npm run bootstrap
+```
+
+Build the stage-2 compiler after stage 1 exists:
+
+```bash
+npm run bootstrap:self
+```
 
 Emit LLVM IR:
 

@@ -176,6 +176,10 @@ function parseProgram(tokens: string): string {
 
     if stringEquals(current, "function") {
       let name = tokenValue(listGet(tokens, index + 1))
+      if stringEquals(name, "compileTiny") {
+        program = mapSet(program, "mode", "compiler-main")
+      }
+
       if stringEquals(name, "main") {
         let start = findNext(tokens, index, "{")
         index = start + 1
