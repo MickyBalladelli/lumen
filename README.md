@@ -778,6 +778,10 @@ npm run compile:for-loop
 npm run link:for-loop
 npm run run:for-loop
 
+npm run compile:println
+npm run link:println
+npm run run:println
+
 npm run compile:native-main
 npm run link:native-main
 npm run run:native-main
@@ -785,10 +789,12 @@ npm run run:native-main
 npm run compile:self:basic
 npm run compile:self:control
 npm run compile:self:for-loop
+npm run compile:self:println
 npm run compile:self:native-main
 npm run run:self:basic
 npm run run:self:control
 npm run run:self:for-loop
+npm run run:self:println
 npm run run:self:native-main
 ```
 

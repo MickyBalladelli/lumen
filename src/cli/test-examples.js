@@ -292,21 +292,29 @@ if (bootstrapCompile.code !== 0) {
     join(examplesDir, 'native-main.lm'),
     join(outputDir, 'native-main-self.ll')
   ])
+  const printlnCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
+    join(examplesDir, 'println.lm'),
+    join(outputDir, 'println-self.ll')
+  ])
 
-  if (forLoopCompile.code !== 0 || nativeMainCompile.code !== 0) {
+  if (forLoopCompile.code !== 0 || nativeMainCompile.code !== 0 || printlnCompile.code !== 0) {
     failures += 1
     console.error('failed bootstrap loop compiler output')
   } else {
     await compiler.buildExecutable(join(outputDir, 'for-loop-self.ll'), join(outputDir, 'for-loop-self'))
     await compiler.buildExecutable(join(outputDir, 'native-main-self.ll'), join(outputDir, 'native-main-self'))
+    await compiler.buildExecutable(join(outputDir, 'println-self.ll'), join(outputDir, 'println-self'))
     const forLoop = await runExecutable(join(outputDir, 'for-loop-self'))
     const nativeMain = await runExecutable(join(outputDir, 'native-main-self'))
+    const println = await runExecutable(join(outputDir, 'println-self'))
 
-    if (forLoop.stdout !== '10\n' || forLoop.code !== 10 || nativeMain.stdout !== '10\n' || nativeMain.code !== 10) {
+    if (forLoop.stdout !== '10\n' || forLoop.code !== 10 ||
+      nativeMain.stdout !== '10\n' || nativeMain.code !== 10 ||
+      println.stdout !== 'total\n10\n' || println.code !== 10) {
       failures += 1
       console.error('failed bootstrap loop executable behavior')
     } else {
-      console.log('ok bootstrap self-host loop examples')
+      console.log('ok bootstrap self-host loop/println examples')
     }
   }
 
@@ -337,12 +345,16 @@ if (bootstrapCompile.code !== 0) {
       join(examplesDir, 'native-main.lm'),
       join(outputDir, 'native-main-self2.ll')
     ])
+    const selfPrintlnCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
+      join(examplesDir, 'println.lm'),
+      join(outputDir, 'println-self2.ll')
+    ])
     const selfCompilerCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
       join('compiler', 'main.lm'),
       join(outputDir, 'lumen-compiler-self2.ll')
     ])
 
-    if (selfBasicCompile.code !== 0 || selfControlCompile.code !== 0 || selfForLoopCompile.code !== 0 || selfNativeMainCompile.code !== 0 || selfCompilerCompile.code !== 0) {
+    if (selfBasicCompile.code !== 0 || selfControlCompile.code !== 0 || selfForLoopCompile.code !== 0 || selfNativeMainCompile.code !== 0 || selfPrintlnCompile.code !== 0 || selfCompilerCompile.code !== 0) {
       failures += 1
       console.error('failed second-stage compiler output')
     } else {
@@ -350,17 +362,20 @@ if (bootstrapCompile.code !== 0) {
       await compiler.buildExecutable(join(outputDir, 'control-flow-self2.ll'), join(outputDir, 'control-flow-self2'))
       await compiler.buildExecutable(join(outputDir, 'for-loop-self2.ll'), join(outputDir, 'for-loop-self2'))
       await compiler.buildExecutable(join(outputDir, 'native-main-self2.ll'), join(outputDir, 'native-main-self2'))
+      await compiler.buildExecutable(join(outputDir, 'println-self2.ll'), join(outputDir, 'println-self2'))
       await compiler.buildExecutable(join(outputDir, 'lumen-compiler-self2.ll'), join(outputDir, 'lumen-compiler-self2'))
 
       const basic2 = await runExecutable(join(outputDir, 'basic-self2'))
       const control2 = await runExecutable(join(outputDir, 'control-flow-self2'))
       const forLoop2 = await runExecutable(join(outputDir, 'for-loop-self2'))
       const nativeMain2 = await runExecutable(join(outputDir, 'native-main-self2'))
+      const println2 = await runExecutable(join(outputDir, 'println-self2'))
 
       if (basic2.stdout !== 'hello\n3\n' || basic2.code !== 3 ||
         control2.stdout !== 'sum 23\n' || control2.code !== 23 ||
         forLoop2.stdout !== '10\n' || forLoop2.code !== 10 ||
-        nativeMain2.stdout !== '10\n' || nativeMain2.code !== 10) {
+        nativeMain2.stdout !== '10\n' || nativeMain2.code !== 10 ||
+        println2.stdout !== 'total\n10\n' || println2.code !== 10) {
         failures += 1
         console.error('failed second-stage executable behavior')
       } else {

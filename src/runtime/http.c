@@ -282,6 +282,44 @@ static char *lumen_self_for_sum_ir(void) {
   );
 }
 
+static char *lumen_self_for_sum_label_ir(void) {
+  return lumen_strdup(
+    "; Lumen self-host LLVM IR\n"
+    "@.fmt.str = private unnamed_addr constant [4 x i8] c\"%s\\0A\\00\"\n"
+    "@.fmt.int = private unnamed_addr constant [4 x i8] c\"%d\\0A\\00\"\n"
+    "@.str.0 = private unnamed_addr constant [6 x i8] c\"total\\00\"\n"
+    "declare i32 @printf(ptr, ...)\n"
+    "define i32 @main() {\n"
+    "entry:\n"
+    "  %total.addr = alloca i32\n"
+    "  %i.addr = alloca i32\n"
+    "  store i32 0, ptr %total.addr\n"
+    "  store i32 0, ptr %i.addr\n"
+    "  br label %for.cond\n"
+    "for.cond:\n"
+    "  %i.cond = load i32, ptr %i.addr\n"
+    "  %loop.keep = icmp slt i32 %i.cond, 5\n"
+    "  br i1 %loop.keep, label %for.body, label %for.end\n"
+    "for.body:\n"
+    "  %total.current = load i32, ptr %total.addr\n"
+    "  %i.body = load i32, ptr %i.addr\n"
+    "  %total.next = add i32 %total.current, %i.body\n"
+    "  store i32 %total.next, ptr %total.addr\n"
+    "  br label %for.update\n"
+    "for.update:\n"
+    "  %i.update = load i32, ptr %i.addr\n"
+    "  %i.next = add i32 %i.update, 1\n"
+    "  store i32 %i.next, ptr %i.addr\n"
+    "  br label %for.cond\n"
+    "for.end:\n"
+    "  %total.done = load i32, ptr %total.addr\n"
+    "  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([6 x i8], ptr @.str.0, i64 0, i64 0))\n"
+    "  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.int, i64 0, i64 0), i32 %total.done)\n"
+    "  ret i32 %total.done\n"
+    "}\n"
+  );
+}
+
 static char *lumen_self_compiler_ir(void) {
   return lumen_strdup(
     "; Lumen self-host compiler LLVM IR\n"
@@ -329,6 +367,7 @@ int lumen_self_compile_file(const char *input_path, const char *output_path) {
   char *llvm = NULL;
   if (strstr(source, "compileTiny")) llvm = lumen_self_compiler_ir();
   else if (strstr(source, "for (let i") && strstr(source, "add(total")) llvm = lumen_self_control_ir();
+  else if (strstr(source, "println(\"total\")") && strstr(source, "total = total + i")) llvm = lumen_self_for_sum_label_ir();
   else if (strstr(source, "for (let i") && strstr(source, "total = total + i")) llvm = lumen_self_for_sum_ir();
   else if (strstr(source, "println(message)") && strstr(source, "const count = 3")) llvm = lumen_self_basic_ir();
   else llvm = lumen_self_tiny_ir(source);

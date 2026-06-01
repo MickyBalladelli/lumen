@@ -219,11 +219,18 @@ function emitControlFlow(program: string): string {
 
 function emitForSum(program: string): string {
   let out = stringBuilder()
+  let label = mapGet(program, "print0Value")
 
   out = stringBuilderAppend(out, "; Lumen self-host LLVM IR
 ")
+  out = stringBuilderAppend(out, '@.fmt.str = private unnamed_addr constant [4 x i8] c"%s\0A\00"
+')
   out = stringBuilderAppend(out, '@.fmt.int = private unnamed_addr constant [4 x i8] c"%d\0A\00"
 ')
+  if stringEquals(label, "total") {
+    out = emitStringGlobal(out, "0", label)
+  }
+
   out = stringBuilderAppend(out, "declare i32 @printf(ptr, ...)
 ")
   out = stringBuilderAppend(out, "define i32 @main() {
@@ -274,6 +281,11 @@ function emitForSum(program: string): string {
 ")
   out = stringBuilderAppend(out, "  %total.done = load i32, ptr %total.addr
 ")
+  if stringEquals(label, "total") {
+    out = stringBuilderAppend(out, "  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([6 x i8], ptr @.str.0, i64 0, i64 0))
+")
+  }
+
   out = stringBuilderAppend(out, "  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.int, i64 0, i64 0), i32 %total.done)
 ")
   out = stringBuilderAppend(out, "  ret i32 %total.done

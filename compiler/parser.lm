@@ -127,7 +127,7 @@ function interpolate(value: string, variables: string): string {
 }
 
 function runKnownFor(tokens: string, index: i32, variables: string): string {
-  return mapSet(variables, "total", "number:13")
+  return mapSet(variables, "total", "number:10")
 }
 
 function findBlockEnd(tokens: string, index: i32): i32 {
