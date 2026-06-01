@@ -206,6 +206,7 @@ function parseProgram(tokens: string): string {
     }
 
     if stringEquals(current, "for") {
+      program = mapSet(program, "mode", "control-flow")
       variables = runKnownFor(tokens, index, variables)
       let end = findBlockEnd(tokens, index)
       index = end + 1

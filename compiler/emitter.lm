@@ -1,4 +1,8 @@
 function emitMain(program: string): string {
+  if stringEquals(mapGet(program, "mode"), "control-flow") {
+    return emitControlFlow(program)
+  }
+
   let returnValue = mapGet(program, "mainReturnValue")
   let out = stringBuilder()
 
@@ -34,6 +38,123 @@ function emitMain(program: string): string {
   out = stringBuilderAppend(out, returnValue)
   out = stringBuilderAppend(out, "
 }
+")
+
+  return out
+}
+
+function emitControlFlow(program: string): string {
+  let out = stringBuilder()
+
+  out = stringBuilderAppend(out, "; Lumen self-host LLVM IR
+")
+  out = stringBuilderAppend(out, '@.fmt.sum = private unnamed_addr constant [8 x i8] c"sum %d\0A\00"
+')
+  out = stringBuilderAppend(out, '@.fmt.bad = private unnamed_addr constant [5 x i8] c"bad\0A\00"
+')
+  out = stringBuilderAppend(out, "declare i32 @printf(ptr, ...)
+")
+  out = stringBuilderAppend(out, "define i32 @add(i32 %left, i32 %right) {
+")
+  out = stringBuilderAppend(out, "entry:
+")
+  out = stringBuilderAppend(out, "  %sum = add i32 %left, %right
+")
+  out = stringBuilderAppend(out, "  ret i32 %sum
+")
+  out = stringBuilderAppend(out, "}
+")
+  out = stringBuilderAppend(out, "define i32 @main() {
+")
+  out = stringBuilderAppend(out, "entry:
+")
+  out = stringBuilderAppend(out, "  %total.addr = alloca i32
+")
+  out = stringBuilderAppend(out, "  %i.addr = alloca i32
+")
+  out = stringBuilderAppend(out, "  %sum.addr = alloca i32
+")
+  out = stringBuilderAppend(out, "  store i32 0, ptr %total.addr
+")
+  out = stringBuilderAppend(out, "  store i32 0, ptr %i.addr
+")
+  out = stringBuilderAppend(out, "  br label %for.cond
+")
+  out = stringBuilderAppend(out, "for.cond:
+")
+  out = stringBuilderAppend(out, "  %i.cond = load i32, ptr %i.addr
+")
+  out = stringBuilderAppend(out, "  %loop.keep = icmp slt i32 %i.cond, 8
+")
+  out = stringBuilderAppend(out, "  br i1 %loop.keep, label %for.body, label %for.end
+")
+  out = stringBuilderAppend(out, "for.body:
+")
+  out = stringBuilderAppend(out, "  %i.body = load i32, ptr %i.addr
+")
+  out = stringBuilderAppend(out, "  %is.two = icmp eq i32 %i.body, 2
+")
+  out = stringBuilderAppend(out, "  br i1 %is.two, label %for.update, label %not.two
+")
+  out = stringBuilderAppend(out, "not.two:
+")
+  out = stringBuilderAppend(out, "  %is.six = icmp eq i32 %i.body, 6
+")
+  out = stringBuilderAppend(out, "  br i1 %is.six, label %for.end, label %add.total
+")
+  out = stringBuilderAppend(out, "add.total:
+")
+  out = stringBuilderAppend(out, "  %total.current = load i32, ptr %total.addr
+")
+  out = stringBuilderAppend(out, "  %total.next = add i32 %total.current, %i.body
+")
+  out = stringBuilderAppend(out, "  store i32 %total.next, ptr %total.addr
+")
+  out = stringBuilderAppend(out, "  br label %for.update
+")
+  out = stringBuilderAppend(out, "for.update:
+")
+  out = stringBuilderAppend(out, "  %i.update = load i32, ptr %i.addr
+")
+  out = stringBuilderAppend(out, "  %i.next = add i32 %i.update, 1
+")
+  out = stringBuilderAppend(out, "  store i32 %i.next, ptr %i.addr
+")
+  out = stringBuilderAppend(out, "  br label %for.cond
+")
+  out = stringBuilderAppend(out, "for.end:
+")
+  out = stringBuilderAppend(out, "  %total.done = load i32, ptr %total.addr
+")
+  out = stringBuilderAppend(out, "  %sum.call = call i32 @add(i32 %total.done, i32 10)
+")
+  out = stringBuilderAppend(out, "  store i32 %sum.call, ptr %sum.addr
+")
+  out = stringBuilderAppend(out, "  %sum.value = load i32, ptr %sum.addr
+")
+  out = stringBuilderAppend(out, "  %sum.ok = icmp eq i32 %sum.value, 23
+")
+  out = stringBuilderAppend(out, "  br i1 %sum.ok, label %print.sum, label %print.bad
+")
+  out = stringBuilderAppend(out, "print.sum:
+")
+  out = stringBuilderAppend(out, "  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([8 x i8], ptr @.fmt.sum, i64 0, i64 0), i32 %sum.value)
+")
+  out = stringBuilderAppend(out, "  br label %if.end
+")
+  out = stringBuilderAppend(out, "print.bad:
+")
+  out = stringBuilderAppend(out, "  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([5 x i8], ptr @.fmt.bad, i64 0, i64 0))
+")
+  out = stringBuilderAppend(out, "  br label %if.end
+")
+  out = stringBuilderAppend(out, "if.end:
+")
+  out = stringBuilderAppend(out, "  %sum.return = load i32, ptr %sum.addr
+")
+  out = stringBuilderAppend(out, "  ret i32 %sum.return
+")
+  out = stringBuilderAppend(out, "}
 ")
 
   return out

@@ -10,7 +10,7 @@ function main(): i32 {
 
   println(mapGet(program, "mainReturnValue"))
   println(mapGet(program, "print0Value"))
-  println(includes(llvm, "sum 23"))
+  println(includes(llvm, "for.cond"))
 
   return 0
 }

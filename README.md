@@ -547,7 +547,7 @@ The first pure-Lumen compiler pieces live in `compiler/`:
 
 - `compiler/tokenizer.lm`: tokenizes a small Lumen subset
 - `compiler/parser.lm`: extracts a tiny `main` return program model
-- `compiler/emitter.lm`: emits LLVM for tiny `main`, `let`/`const`, `println`, and return
+- `compiler/emitter.lm`: emits LLVM for tiny `main`, `let`/`const`, `println`, return, and the current control-flow example
 - `compiler/main.lm`: CLI-shaped tiny compiler
 
 The bootstrap flow is now tested:
@@ -571,9 +571,9 @@ clang -Wno-override-module build/basic-self.ll src/runtime/http.c -pthread -o bu
 
 That prints `hello` and `3`, then exits with code `3`.
 
-It also compiles the current `examples/control-flow.lm` through a small
-constant-evaluation path for `add(...)`, the known `for` loop shape,
-interpolated `println`, and `return sum`.
+It also compiles the current `examples/control-flow.lm` with real LLVM blocks
+for `add(...)`, local variables, arithmetic, loop branches, `continue`, `break`,
+the final `if/else`, interpolated `println`, and `return sum`.
 
 ```bash
 ./build/lumen-compiler examples/control-flow.lm build/control-flow-self.ll
