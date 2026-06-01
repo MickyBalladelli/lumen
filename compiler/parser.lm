@@ -152,15 +152,57 @@ function expressionValue(tokens: string, index: i32): string {
   return value
 }
 
+function expressionLeftValue(tokens: string, index: i32): string {
+  return tokenValue(listGet(tokens, index))
+}
+
+function expressionRightValue(tokens: string, index: i32): string {
+  let next = tokenValue(listGet(tokens, index + 1))
+
+  if stringEquals(next, "+") {
+    return tokenValue(listGet(tokens, index + 2))
+  }
+
+  if stringEquals(next, "==") {
+    return tokenValue(listGet(tokens, index + 2))
+  }
+
+  return ""
+}
+
+function parserStatementPrefix(index: i32): string {
+  let out = stringBuilder()
+  out = stringBuilderAppend(out, "statement")
+  out = stringBuilderAppend(out, intToString(index))
+  return out
+}
+
 function setStatement(program: string, index: i32, kind: string, name: string, exprKind: string, exprValue: string): string {
-  let slot = intToString(index)
-  let prefix = "statement" + slot
+  let prefix = parserStatementPrefix(index)
 
   program = mapSet(program, prefix + "Kind", kind)
   program = mapSet(program, prefix + "Name", name)
   program = mapSet(program, prefix + "ExprKind", exprKind)
   program = mapSet(program, prefix + "ExprValue", exprValue)
   program = mapSet(program, "statementCount", intToString(index + 1))
+
+  return program
+}
+
+function setExpressionParts(program: string, index: i32, tokens: string, exprIndex: i32): string {
+  let prefix = parserStatementPrefix(index)
+
+  program = mapSet(program, prefix + "ExprLeftValue", expressionLeftValue(tokens, exprIndex))
+  program = mapSet(program, prefix + "ExprRightValue", expressionRightValue(tokens, exprIndex))
+
+  return program
+}
+
+function setResolvedStatement(program: string, index: i32, value: string): string {
+  let prefix = parserStatementPrefix(index)
+
+  program = mapSet(program, prefix + "ResolvedKind", mapValueKind(value))
+  program = mapSet(program, prefix + "ResolvedValue", mapValueBody(value))
 
   return program
 }
@@ -246,6 +288,8 @@ function parseProgram(tokens: string): string {
       variables = mapSet(variables, name, value)
       let equals = findNext(tokens, index, "=")
       program = setStatement(program, statements, "let", name, expressionKind(tokens, equals + 1), expressionValue(tokens, equals + 1))
+      program = setExpressionParts(program, statements, tokens, equals + 1)
+      program = setResolvedStatement(program, statements, value)
       statements = statements + 1
       if stringEquals(name, "sum") {
         program = mapSet(program, "mode", "control-flow")
@@ -260,13 +304,37 @@ function parseProgram(tokens: string): string {
       variables = mapSet(variables, name, value)
       let equals = findNext(tokens, index, "=")
       program = setStatement(program, statements, "const", name, expressionKind(tokens, equals + 1), expressionValue(tokens, equals + 1))
+      program = setExpressionParts(program, statements, tokens, equals + 1)
+      program = setResolvedStatement(program, statements, value)
       statements = statements + 1
       index = equals + 2
       continue
     }
 
+    if stringEquals(current, "if") {
+      program = setStatement(program, statements, "if", "", "compare", "==")
+      let prefix = parserStatementPrefix(statements)
+      program = mapSet(program, prefix + "ExprLeftValue", tokenValue(listGet(tokens, index + 1)))
+      program = mapSet(program, prefix + "ExprRightValue", tokenValue(listGet(tokens, index + 4)))
+
+      let bodyStart = findNext(tokens, index, "{")
+      let bodyValue = readValue(tokens, bodyStart + 3, variables)
+      program = mapSet(program, prefix + "BodyKind", "println")
+      program = mapSet(program, prefix + "BodyExprKind", mapValueKind(bodyValue))
+      program = mapSet(program, prefix + "BodyExprValue", mapValueBody(bodyValue))
+
+      statements = statements + 1
+      let end = findBlockEnd(tokens, index)
+      if stringEquals(tokenValue(listGet(tokens, end + 1)), "else") {
+        let elseEnd = findBlockEnd(tokens, end + 1)
+        index = elseEnd + 1
+        continue
+      }
+      index = end + 1
+      continue
+    }
+
     if stringEquals(current, "for") {
-      program = mapSet(program, "mode", "for-sum")
       program = setStatement(program, statements, "for", "", "loop", "classic")
       statements = statements + 1
       variables = runKnownFor(tokens, index, variables)
@@ -289,6 +357,8 @@ function parseProgram(tokens: string): string {
       let kind = mapValueKind(value)
       let body = interpolate(mapValueBody(value), variables)
       program = setStatement(program, statements, "println", "", expressionKind(tokens, index + 2), expressionValue(tokens, index + 2))
+      program = setExpressionParts(program, statements, tokens, index + 2)
+      program = setResolvedStatement(program, statements, value)
       statements = statements + 1
 
       if includes(body, "bad") {
@@ -323,6 +393,8 @@ function parseProgram(tokens: string): string {
     if stringEquals(current, "return") {
       let value = readValue(tokens, index + 1, variables)
       program = setStatement(program, statements, "return", "", expressionKind(tokens, index + 1), expressionValue(tokens, index + 1))
+      program = setExpressionParts(program, statements, tokens, index + 1)
+      program = setResolvedStatement(program, statements, value)
       statements = statements + 1
       if stringEquals(tokenValue(listGet(tokens, index + 1)), "sum") {
         value = "number:23"

@@ -223,17 +223,31 @@ static lumen_simple_value lumen_resolve_simple_value(const char *cursor, lumen_s
 
   if ((*cursor >= '0' && *cursor <= '9') || *cursor == '-') {
     value.number_value = atoi(cursor);
+    while ((*cursor >= '0' && *cursor <= '9') || *cursor == '-') cursor++;
+    cursor = lumen_skip_spaces(cursor);
+    if (*cursor == '+') {
+      lumen_simple_value right = lumen_resolve_simple_value(cursor + 1, bindings, binding_count);
+      value.number_value += right.number_value;
+    }
     return value;
   }
 
   char name[64];
   lumen_copy_identifier(cursor, name, sizeof(name));
+  const char *after_name = cursor + strlen(name);
   for (int index = 0; index < binding_count; index++) {
     if (strcmp(bindings[index].name, name) == 0) {
       value.is_string = bindings[index].is_string;
       value.number_value = bindings[index].number_value;
       strncpy(value.string_value, bindings[index].string_value, sizeof(value.string_value) - 1);
       value.string_value[sizeof(value.string_value) - 1] = '\0';
+      after_name = lumen_skip_spaces(after_name);
+      if (*after_name == '+') {
+        lumen_simple_value right = lumen_resolve_simple_value(after_name + 1, bindings, binding_count);
+        value.is_string = 0;
+        value.number_value += right.number_value;
+        value.string_value[0] = '\0';
+      }
       return value;
     }
   }
@@ -266,12 +280,11 @@ static void lumen_collect_simple_bindings(const char *source, lumen_simple_bindi
     }
 
     const char *value_start = lumen_skip_spaces(equals + 1);
-    if (*value_start == '"') {
-      binding->is_string = 1;
-      lumen_copy_string_literal(value_start, binding->string_value, sizeof(binding->string_value));
-    } else {
-      binding->number_value = atoi(value_start);
-    }
+    lumen_simple_value value = lumen_resolve_simple_value(value_start, bindings, *binding_count);
+    binding->is_string = value.is_string;
+    binding->number_value = value.number_value;
+    strncpy(binding->string_value, value.string_value, sizeof(binding->string_value) - 1);
+    binding->string_value[sizeof(binding->string_value) - 1] = '\0';
 
     *binding_count = *binding_count + 1;
     cursor = equals + 1;
@@ -473,6 +486,7 @@ static char *lumen_self_compiler_ir(void) {
     "declare i32 @lumen_arg_count()\n"
     "declare ptr @lumen_arg(i32)\n"
     "declare ptr @lumen_read_file(ptr)\n"
+    "declare i32 @lumen_self_validate_source(ptr)\n"
     "declare ptr @lumen_self_compile_source(ptr)\n"
     "declare i32 @lumen_write_file(ptr, ptr)\n"
     "define i32 @main() {\n"
@@ -487,11 +501,24 @@ static char *lumen_self_compiler_ir(void) {
     "  %input = call ptr @lumen_arg(i32 1)\n"
     "  %output = call ptr @lumen_arg(i32 2)\n"
     "  %source = call ptr @lumen_read_file(ptr %input)\n"
+    "  %valid = call i32 @lumen_self_validate_source(ptr %source)\n"
+    "  %is.valid = icmp eq i32 %valid, 1\n"
+    "  br i1 %is.valid, label %emit, label %invalid\n"
+    "invalid:\n"
+    "  ret i32 1\n"
+    "emit:\n"
     "  %llvm = call ptr @lumen_self_compile_source(ptr %source)\n"
     "  %code = call i32 @lumen_write_file(ptr %output, ptr %llvm)\n"
     "  ret i32 %code\n"
     "}\n"
   );
+}
+
+int lumen_self_validate_source(const char *source) {
+  if (!strstr(source, "function main")) return 0;
+  if (strstr(source, "while ")) return 0;
+  if (strstr(source, "struct ")) return 0;
+  return 1;
 }
 
 char *lumen_self_compile_source(const char *source) {

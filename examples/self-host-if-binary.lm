@@ -1,0 +1,11 @@
+function main(): i32 {
+  let left = 2
+  let total = left + 5
+
+  if total == 7 {
+    println("seven")
+  }
+
+  println(total)
+  return total
+}
