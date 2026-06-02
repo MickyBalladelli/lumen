@@ -8,10 +8,6 @@
       "source": "./packages/config",
       "resolved": "local"
     },
-    "dotenv": {
-      "source": "./packages/dotenv",
-      "resolved": "local"
-    },
     "jwt-lite": {
       "source": "./packages/jwt-lite",
       "resolved": "local"

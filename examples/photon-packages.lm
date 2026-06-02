@@ -1,7 +1,6 @@
-import { envOr, requireEnv } from "dotenv"
 import { query2, urlWithQuery, urlNeedsEncoding } from "url"
 import { requireString, emailLike } from "validation"
-import { configFromEnv } from "config"
+import { envOr, requireEnv, configFromEnv } from "config"
 import { routeKey, routeMatches, jsonResponse } from "router"
 import { infoLine } from "logger"
 import { jwtLooksLikeToken, jwtNeedsVerification } from "jwt-lite"

@@ -4,7 +4,6 @@
   "dependencies": {
     "auth": "./packages/auth",
     "config": "./packages/config",
-    "dotenv": "./packages/dotenv",
     "jwt-lite": "./packages/jwt-lite",
     "logger": "./packages/logger",
     "router": "./packages/router",

@@ -1,3 +1,23 @@
+function envOr(name: string, fallback: string): string {
+  let value = env(name)
+
+  if stringEquals(value, "") {
+    return fallback
+  }
+
+  return value
+}
+
+function requireEnv(name: string): string {
+  let value = env(name)
+
+  if stringEquals(value, "") {
+    return err("missing env " + name)
+  }
+
+  return ok(value)
+}
+
 function configFromEnv(name: string, fallback: string): string {
   let value = env(name)
 

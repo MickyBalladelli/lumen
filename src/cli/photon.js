@@ -59,6 +59,7 @@ async function install() {
     packages: {}
   }
 
+  await rm(packageRoot, { recursive: true, force: true })
   await mkdir(packageRoot, { recursive: true })
 
   for (const [name, source] of Object.entries(manifest.dependencies ?? {})) {
