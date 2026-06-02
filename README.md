@@ -780,36 +780,36 @@ Latest local results from June 2, 2026 with the default 3 runs:
 
 | test | language | rank | best run ms | median run ms |
 | --- | --- | ---: | ---: | ---: |
-| sum | lumen | 1st | 8.14 | 9.23 |
-| sum | rust | 2nd | 9.17 | 10.99 |
-| sum | node | 3rd | 88.00 | 88.24 |
-| sum | lmsh | 4th | 402.69 | 412.48 |
-| sum | python | 5th | 426.32 | 438.48 |
-| fib | lumen | 2nd | 26.35 | 26.51 |
-| fib | rust | 1st | 26.11 | 26.13 |
-| fib | node | 3rd | 94.22 | 96.51 |
-| fib | lmsh | 4th | 433.72 | 500.56 |
-| fib | python | 5th | 702.99 | 710.85 |
-| branch | lumen | 2nd | 5.95 | 7.15 |
-| branch | rust | 1st | 4.12 | 5.13 |
-| branch | node | 3rd | 96.99 | 97.59 |
-| branch | lmsh | 4th | 397.83 | 409.48 |
-| branch | python | 5th | 1011.25 | 1022.72 |
-| math | lumen | 1st | 21.97 | 23.22 |
-| math | rust | 2nd | 22.53 | 23.60 |
-| math | node | 3rd | 103.57 | 104.45 |
-| math | lmsh | 4th | 420.65 | 431.47 |
-| math | python | 5th | 589.14 | 589.64 |
-| nested | lumen | 2nd | 9.21 | 10.70 |
-| nested | rust | 1st | 7.33 | 7.53 |
-| nested | node | 3rd | 92.78 | 93.10 |
-| nested | lmsh | 4th | 408.00 | 408.54 |
-| nested | python | 5th | 512.87 | 515.88 |
-| state | lumen | 1st | 33.10 | 33.20 |
-| state | rust | 2nd | 33.54 | 33.93 |
-| state | node | 3rd | 187.32 | 188.69 |
-| state | lmsh | 4th | 502.50 | 511.78 |
-| state | python | 5th | 1490.06 | 1502.13 |
+| sum | lumen | 2nd | 7.71 | 9.24 |
+| sum | rust | 1st | 7.28 | 8.22 |
+| sum | node | 3rd | 87.50 | 88.60 |
+| sum | lmsh | 4th | 313.14 | 313.95 |
+| sum | python | 5th | 410.25 | 412.15 |
+| fib | lumen | 1st | 23.83 | 24.81 |
+| fib | rust | 2nd | 26.32 | 26.63 |
+| fib | node | 3rd | 93.52 | 94.77 |
+| fib | lmsh | 4th | 387.63 | 607.02 |
+| fib | python | 5th | 704.56 | 715.00 |
+| branch | lumen | 2nd | 6.56 | 7.23 |
+| branch | rust | 1st | 6.40 | 7.55 |
+| branch | node | 3rd | 95.63 | 96.45 |
+| branch | lmsh | 4th | 309.93 | 312.13 |
+| branch | python | 5th | 1029.85 | 1040.78 |
+| math | lumen | 1st | 21.87 | 22.16 |
+| math | rust | 2nd | 22.09 | 23.37 |
+| math | node | 3rd | 104.59 | 104.76 |
+| math | lmsh | 4th | 337.86 | 355.01 |
+| math | python | 5th | 588.47 | 601.56 |
+| nested | lumen | 1st | 8.34 | 9.45 |
+| nested | rust | 2nd | 8.66 | 10.50 |
+| nested | node | 3rd | 89.89 | 90.02 |
+| nested | lmsh | 4th | 323.35 | 327.36 |
+| nested | python | 5th | 531.10 | 553.84 |
+| state | lumen | 1st | 32.87 | 32.90 |
+| state | rust | 2nd | 34.02 | 34.67 |
+| state | node | 3rd | 186.83 | 187.33 |
+| state | lmsh | 4th | 397.65 | 413.55 |
+| state | python | 5th | 1484.88 | 1495.60 |
 
 The test runner compiles examples, links binaries, runs expected-output tests,
 checks bootstrap stages, and runs negative compile tests.

@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { Tokenizer } from '../lexer/Tokenizer.js'
 import { Parser } from '../parser/Parser.js'
@@ -69,8 +69,16 @@ export class Compiler {
     if (optimize) flags.push('-O2')
     if (!selfHostFallback) flags.push('-DLUMEN_NO_SELF_HOST_FALLBACK')
 
-    await this.run(clang, [...flags, llvmPath, resolve('src/runtime/http.c'), '-pthread', '-o', outputPath])
+    const sources = [llvmPath]
+    if (await this.needsRuntime(llvmPath)) sources.push(resolve('src/runtime/http.c'))
+
+    await this.run(clang, [...flags, ...sources, '-pthread', '-o', outputPath])
     return outputPath
+  }
+
+  async needsRuntime(llvmPath) {
+    const llvm = await readFile(llvmPath, 'utf8')
+    return /@lumen_/.test(llvm)
   }
 
   run(command, args) {
