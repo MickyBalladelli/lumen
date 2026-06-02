@@ -234,6 +234,23 @@ if (failures > 0) {
 
 console.log(`${files.length} example tests passed`)
 
+const lmsh = await runCommand('node', [
+  join('src', 'cli', 'lmsh.js'),
+  join(examplesDir, 'cli-args.lm'),
+  'first',
+  'second'
+], {
+  LUMEN_DOTENV_PATH: join(examplesDir, '.env.test'),
+  LUMEN_TEST_ENV: 'from-env'
+})
+
+if (lmsh.stdout !== '1\n3\n' || lmsh.code !== 0) {
+  failures += 1
+  console.error('failed lmsh executable runner')
+} else {
+  console.log('ok lmsh executable runner')
+}
+
 await compiler.writeLLVMFile('compiler/main.lm', join(outputDir, 'lumen-compiler.ll'))
 await compiler.buildExecutable(join(outputDir, 'lumen-compiler.ll'), join(outputDir, 'lumen-compiler'))
 if (await hasSelfFallbackSymbols(join(outputDir, 'lumen-compiler'))) {
@@ -549,9 +566,14 @@ async function hasSelfFallbackSymbols(path) {
     result.stdout.includes('lumen_self_diagnostic')
 }
 
-function runCommand(command, args = []) {
+function runCommand(command, args = [], env = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args)
+    const child = spawn(command, args, {
+      env: {
+        ...process.env,
+        ...env
+      }
+    })
     let stdout = ''
     let stderr = ''
 

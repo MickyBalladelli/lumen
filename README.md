@@ -719,6 +719,7 @@ There are a few npm commands:
 - `npm run test`: compile, link, and run the full test suite
 - `npm run bootstrap`: build `build/lumen-compiler`
 - `npm run compile -- <input.lm> <output.ll>`: use the Lumen-built compiler
+- `npm run lmsh -- <input.lm> [args...]`: compile, link, and run a Lumen file
 - `npm run parse -- <input.lm>`: print AST JSON
 - `npm run http`: run the HTTP example
 - `npm run chat`: run the Socket.IO chat example
@@ -741,6 +742,14 @@ Link and run manually:
 clang -Wno-override-module -DLUMEN_NO_SELF_HOST_FALLBACK build/native-main.ll src/runtime/http.c -pthread -o build/native-main
 ./build/native-main
 ```
+
+Run like a scripting language:
+
+```bash
+npm run lmsh -- examples/cli-args.lm first second
+```
+
+The package also exposes a `lmsh` bin entry for linked installs.
 
 Run all tests:
 

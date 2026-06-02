@@ -6,10 +6,14 @@
   "exports": {
     ".": "./src/index.js"
   },
+  "bin": {
+    "lmsh": "./src/cli/lmsh.js"
+  },
   "scripts": {
     "parse": "node ./src/cli/parse.js",
     "compile": "./build/lumen-compiler",
     "bootstrap": "node ./src/cli/compile.js compiler/main.lm -o build/lumen-compiler",
+    "lmsh": "node ./src/cli/lmsh.js",
     "http": "node ./src/cli/http.js",
     "chat": "node ./src/cli/chat.js",
     "test": "node ./src/cli/test-examples.js"
