@@ -301,6 +301,7 @@ static void lumen_collect_simple_bindings(const char *source, lumen_simple_bindi
   }
 }
 
+#ifndef LUMEN_NO_SELF_HOST_FALLBACK
 static char *lumen_self_simple_ir(const char *source) {
   lumen_simple_binding bindings[32];
   lumen_simple_value prints[8];
@@ -558,6 +559,7 @@ char *lumen_self_compile_source(const char *source) {
   else llvm = lumen_self_simple_ir(source);
   return llvm;
 }
+#endif
 
 int lumen_exec(const char *command) {
   return system(command);

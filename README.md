@@ -547,71 +547,41 @@ The first pure-Lumen compiler pieces live in `compiler/`:
 
 - `compiler/tokenizer.lm`: tokenizes a small Lumen subset
 - `compiler/parser.lm`: extracts a small program model with helper functions, statement slots, calls, and expression metadata for lets, consts, prints, returns, `if`, binary `+`, and selected loops
-- `compiler/emitter.lm`: emits LLVM for simple helper functions, calls, `main`, `let`/`const`, `println`, return, binary `+`, simple `if`, statement-mode loop examples, and the current control-flow example
+- `compiler/emitter.lm`: emits LLVM for simple helper functions, calls, `main`, `let`/`const`, local `i32` storage, `println`, return, binary `+`, simple `if`, statement-mode loop examples, and the current control-flow example
 - `compiler/main.lm`: CLI-shaped tiny compiler
 
-The bootstrap flow is now tested:
+The bootstrap flow is tested by one command:
+
+```bash
+npm run test
+```
+
+That command builds the stage-1 compiler, compiles examples, links binaries,
+runs expected-output checks, verifies bootstrap examples, builds the stage-2
+compiler checkpoint, and runs negative compile tests.
+
+Manual use stays small:
 
 ```bash
 npm run bootstrap
-./build/lumen-compiler tests/bootstrap/tiny.lm build/tiny-self.ll
-clang -Wno-override-module build/tiny-self.ll src/runtime/http.c -pthread -o build/tiny-self
-./build/tiny-self
-```
-
-`build/tiny-self` exits with code `7`.
-
-The Lumen compiler also compiles `examples/basic.lm` now:
-
-```bash
-npm run compile:lumen -- examples/basic.lm build/basic-self.ll
-clang -Wno-override-module build/basic-self.ll src/runtime/http.c -pthread -o build/basic-self
+npm run compile -- examples/basic.lm build/basic-self.ll
+clang -Wno-override-module -DLUMEN_NO_SELF_HOST_FALLBACK build/basic-self.ll src/runtime/http.c -pthread -o build/basic-self
 ./build/basic-self
 ```
 
 That prints `hello` and `3`, then exits with code `3`.
 
-It also compiles `examples/for-loop.lm` and `examples/native-main.lm` with real
-LLVM loop blocks:
-
-```bash
-npm run run:for-loop
-npm run run:native-main
-```
-
-Both print `10`, then exit with code `10`.
-
-It also compiles the current `examples/control-flow.lm` with real LLVM blocks
-for `add(...)`, local variables, arithmetic, loop branches, `continue`, `break`,
-the final `if/else`, interpolated `println`, and `return sum`.
-
-```bash
-npm run compile:lumen -- examples/control-flow.lm build/control-flow-self.ll
-clang -Wno-override-module build/control-flow-self.ll src/runtime/http.c -pthread -o build/control-flow-self
-./build/control-flow-self
-```
-
-That prints `sum 23`, then exits with code `23`.
-
-The compiler can now build a second-stage compiler without Node:
-
-```bash
-npm run bootstrap:self
-npm run compile:self -- examples/basic.lm build/basic-self2.ll
-npm run compile:self -- examples/control-flow.lm build/control-flow-self2.ll
-npm run compile:self -- examples/for-loop.lm build/for-loop-self2.ll
-npm run compile:self -- examples/self-host-if-binary.lm build/self-host-if-binary-self2.ll
-npm run compile:self -- examples/self-host-call.lm build/self-host-call-self2.ll
-npm run compile:self -- examples/native-main.lm build/native-main-self2.ll
-npm run compile:self -- compiler/main.lm build/lumen-compiler-self2.ll
-```
-
-The second-stage compiler output is linked and tested by `npm run test`.
+The second-stage compiler output is also linked and tested by `npm run test`.
 Invalid bootstrap input is rejected with a nonzero exit code.
-This is not full pure self-hosting yet: the second-stage compiler uses the
-runtime bootstrap helper `lumen_self_compile_source` for the currently
-supported source-to-LLVM subset. The emitted compiler now handles CLI args,
-file read, and file write itself.
+Normal stage-1 compiler and example executables now link with
+`-DLUMEN_NO_SELF_HOST_FALLBACK`, which removes the C source-to-LLVM fallback
+symbols from the runtime. This proves those binaries use the Lumen compiler
+pipeline plus runtime primitives, not the old C pattern matcher.
+
+One compatibility path remains inside the test runner: stage-2 compiler linking
+keeps the C fallback enabled. That stage-2 compiler is kept as a bootstrap
+checkpoint until the Lumen parser/emitter can lower the whole compiler source
+without the special `compiler-main` path.
 
 ### HTTP
 
@@ -742,82 +712,19 @@ This prints the AST JSON.
 
 ## Compile
 
-There are three compiler entry points:
+There are a few npm commands:
 
-- `npm run compile -- <input.lm> <output.ll>`: stage-1 Lumen-built compiler
-- `npm run compile:lumen -- <input.lm> <output.ll>`: stage-1 Lumen-built compiler
-- `npm run compile:self -- <input.lm> <output.ll>`: stage-2 Lumen-built compiler
+- `npm run test`: compile, link, and run the full test suite
+- `npm run bootstrap`: build `build/lumen-compiler`
+- `npm run compile -- <input.lm> <output.ll>`: use the Lumen-built compiler
+- `npm run parse -- <input.lm>`: print AST JSON
+- `npm run http`: run the HTTP example
+- `npm run chat`: run the Socket.IO chat example
 
-The explicit Node commands are named `stage0:*`:
-
-```bash
-npm run stage0:compile -- examples/native-main.lm -o build/native-main
-npm run stage0:test
-```
-
-Build the stage-1 compiler once:
+Build the compiler once:
 
 ```bash
 npm run bootstrap
-```
-
-Build the stage-2 compiler after stage 1 exists:
-
-```bash
-npm run bootstrap:self
-```
-
-Supported Lumen compiler shortcuts:
-
-```bash
-npm run compile:basic
-npm run link:basic
-npm run run:basic
-
-npm run compile:control
-npm run link:control
-npm run run:control
-
-npm run compile:for-loop
-npm run link:for-loop
-npm run run:for-loop
-
-npm run compile:println
-npm run link:println
-npm run run:println
-
-npm run compile:simple
-npm run link:simple
-npm run run:simple
-
-npm run compile:if-binary
-npm run link:if-binary
-npm run run:if-binary
-
-npm run compile:call
-npm run link:call
-npm run run:call
-
-npm run compile:native-main
-npm run link:native-main
-npm run run:native-main
-
-npm run compile:self:basic
-npm run compile:self:control
-npm run compile:self:for-loop
-npm run compile:self:println
-npm run compile:self:simple
-npm run compile:self:if-binary
-npm run compile:self:call
-npm run compile:self:native-main
-npm run run:self:basic
-npm run run:self:control
-npm run run:self:for-loop
-npm run run:self:println
-npm run run:self:simple
-npm run run:self:if-binary
-npm run run:self:call
-npm run run:self:native-main
 ```
 
 Emit LLVM IR:
@@ -826,29 +733,21 @@ Emit LLVM IR:
 npm run compile -- examples/native-main.lm build/native-main.ll
 ```
 
-Build a native executable with the stage-0 compiler when you want the full current language surface:
+Link and run manually:
 
 ```bash
-npm run stage0:compile -- examples/native-main.lm -o build/native-main
+clang -Wno-override-module -DLUMEN_NO_SELF_HOST_FALLBACK build/native-main.ll src/runtime/http.c -pthread -o build/native-main
+./build/native-main
 ```
 
-Build every Lumen example:
-
-```bash
-npm run compile:examples
-```
-
-This command skips examples whose executable is newer than the source and
-runtime.
-
-Build and verify every example:
+Run all tests:
 
 ```bash
 npm run test
 ```
 
-The test runner compiles examples, runs expected-output tests, and runs negative
-compile tests from `tests/negative`.
+The test runner compiles examples, links binaries, runs expected-output tests,
+checks bootstrap stages, and runs negative compile tests.
 
 Compile from `lumen.json`:
 

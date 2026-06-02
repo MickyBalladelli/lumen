@@ -382,7 +382,9 @@ if (bootstrapCompile.code !== 0) {
     failures += 1
     console.error(`failed bootstrap compiler self compile with code ${compilerSelfCompile.code}`)
   } else {
-    await compiler.buildExecutable(join(outputDir, 'lumen-compiler-self.ll'), join(outputDir, 'lumen-compiler-self'))
+    await compiler.buildExecutable(join(outputDir, 'lumen-compiler-self.ll'), join(outputDir, 'lumen-compiler-self'), {
+      selfHostFallback: true
+    })
 
     const selfBasicCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
       join(examplesDir, 'basic.lm'),
@@ -433,7 +435,9 @@ if (bootstrapCompile.code !== 0) {
       await compiler.buildExecutable(join(outputDir, 'self-host-simple-self2.ll'), join(outputDir, 'self-host-simple-self2'))
       await compiler.buildExecutable(join(outputDir, 'self-host-if-binary-self2.ll'), join(outputDir, 'self-host-if-binary-self2'))
       await compiler.buildExecutable(join(outputDir, 'self-host-call-self2.ll'), join(outputDir, 'self-host-call-self2'))
-      await compiler.buildExecutable(join(outputDir, 'lumen-compiler-self2.ll'), join(outputDir, 'lumen-compiler-self2'))
+      await compiler.buildExecutable(join(outputDir, 'lumen-compiler-self2.ll'), join(outputDir, 'lumen-compiler-self2'), {
+        selfHostFallback: true
+      })
 
       const basic2 = await runExecutable(join(outputDir, 'basic-self2'))
       const control2 = await runExecutable(join(outputDir, 'control-flow-self2'))

@@ -64,8 +64,11 @@ export class Compiler {
     return this.writeLLVM(source, outputPath)
   }
 
-  async buildExecutable(llvmPath, outputPath, { clang = 'clang' } = {}) {
-    await this.run(clang, ['-Wno-override-module', llvmPath, resolve('src/runtime/http.c'), '-pthread', '-o', outputPath])
+  async buildExecutable(llvmPath, outputPath, { clang = 'clang', selfHostFallback = false } = {}) {
+    const flags = ['-Wno-override-module']
+    if (!selfHostFallback) flags.push('-DLUMEN_NO_SELF_HOST_FALLBACK')
+
+    await this.run(clang, [...flags, llvmPath, resolve('src/runtime/http.c'), '-pthread', '-o', outputPath])
     return outputPath
   }
 
