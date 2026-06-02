@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { Tokenizer } from '../lexer/Tokenizer.js'
 import { Parser } from '../parser/Parser.js'
 import { SemanticAnalyzer } from '../semantics/SemanticAnalyzer.js'
@@ -10,6 +11,8 @@ import { IRBuilder } from '../ir/IRBuilder.js'
 import { LLVMEmitter } from '../backend/LLVMEmitter.js'
 import { Diagnostic } from '../diagnostics/Diagnostic.js'
 import { ModuleLoader } from '../modules/ModuleLoader.js'
+
+const runtimePath = fileURLToPath(new URL('../runtime/http.c', import.meta.url))
 
 export class Compiler {
   constructor({
@@ -29,7 +32,7 @@ export class Compiler {
     this.backend = backend
   }
 
-  compileSource(source) {
+  compileSource(source, { sourcePath = null } = {}) {
     try {
       const tokens = new this.tokenizer(source).tokenize()
       const ast = new this.parser(tokens).parseProgram()
@@ -38,7 +41,7 @@ export class Compiler {
       this.typeChecker.check(ast)
 
       const ir = this.irBuilder.build(ast)
-      const llvm = this.backend.emit(ir)
+      const llvm = this.backend.emit(ir, { sourcePath })
 
       return {
         tokens,
@@ -52,8 +55,8 @@ export class Compiler {
     }
   }
 
-  async writeLLVM(source, outputPath) {
-    const result = this.compileSource(source)
+  async writeLLVM(source, outputPath, { sourcePath = null } = {}) {
+    const result = this.compileSource(source, { sourcePath })
     await mkdir(dirname(outputPath), { recursive: true })
     await writeFile(outputPath, result.llvm)
     return result
@@ -61,16 +64,19 @@ export class Compiler {
 
   async writeLLVMFile(inputPath, outputPath) {
     const source = await new ModuleLoader().load(inputPath)
-    return this.writeLLVM(source, outputPath)
+    return this.writeLLVM(source, outputPath, { sourcePath: resolve(inputPath) })
   }
 
   async buildExecutable(llvmPath, outputPath, { clang = 'clang', selfHostFallback = false, optimize = false } = {}) {
-    const flags = ['-Wno-override-module']
+    const flags = ['-Wno-override-module', '-g']
     if (optimize) flags.push('-O2')
     if (!selfHostFallback) flags.push('-DLUMEN_NO_SELF_HOST_FALLBACK')
 
-    const sources = [llvmPath]
-    if (await this.needsRuntime(llvmPath)) sources.push(resolve('src/runtime/http.c'))
+    const objectPath = `${outputPath}.o`
+    await this.run(clang, [...flags, '-c', llvmPath, '-o', objectPath])
+
+    const sources = [objectPath]
+    if (await this.needsRuntime(llvmPath)) sources.push(runtimePath)
 
     await this.run(clang, [...flags, ...sources, '-pthread', '-o', outputPath])
     return outputPath

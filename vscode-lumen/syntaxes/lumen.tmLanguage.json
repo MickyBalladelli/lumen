@@ -1,0 +1,84 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Lumen",
+  "scopeName": "source.lumen",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#types"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.lumen",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.lumen",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.lumen",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.lumen",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.lumen",
+          "match": "\\b\\d+(?:\\.\\d+)?\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.lumen",
+          "match": "\\b(?:if|else|for|of|while|do|until|switch|case|default|break|continue|return|try|catch|throw|defer|await)\\b"
+        },
+        {
+          "name": "keyword.declaration.lumen",
+          "match": "\\b(?:function|async|let|const|struct|enum|import|from)\\b"
+        },
+        {
+          "name": "constant.language.lumen",
+          "match": "\\b(?:true|false|null|none)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "storage.type.lumen",
+          "match": "\\b(?:i32|i64|f32|bool|string|json|error|void|Result|Map)\\b"
+        }
+      ]
+    }
+  }
+}

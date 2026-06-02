@@ -5,6 +5,7 @@ import { SystemFunctions } from '../system/SystemLibrary.js'
 import { FsFunctions } from '../fs/FsLibrary.js'
 import { HttpFunctions } from '../http/HttpLibrary.js'
 import { ThreadFunctions } from '../thread/ThreadLibrary.js'
+import { basename, dirname } from 'node:path'
 
 const BINARY_PRECEDENCE = new Map([
   ['*', 40],
@@ -25,8 +26,9 @@ export class LLVMEmitter {
     this.typeSystem = typeSystem
   }
 
-  emit(irModule) {
+  emit(irModule, { sourcePath = null } = {}) {
     this.globals = []
+    this.debug = this.createDebugContext(sourcePath)
     this.stringId = 0
     this.usesPrintf = false
     this.usesStrstr = false
@@ -64,6 +66,7 @@ export class LLVMEmitter {
 
     return [
       '; Lumen LLVM IR',
+      this.debug ? `source_filename = "${this.escapeDebugString(this.debug.filename)}"` : '',
       ...typeDefinitions,
       ...this.globals,
       this.usesPrintf ? 'declare i32 @printf(ptr, ...)' : '',
@@ -141,6 +144,7 @@ export class LLVMEmitter {
       this.usesThread ? 'declare i32 @lumen_append_file(ptr, ptr)' : '',
       '',
       ...functions,
+      ...this.emitDebugMetadata(),
       ''
     ].filter(line => line !== null).join('\n')
   }
@@ -153,7 +157,7 @@ export class LLVMEmitter {
   emitFunction(func) {
     this.temp = 0
     this.label = 0
-    this.lines = []
+    this.lines = this.createLineBuffer()
     this.scopes = [new Map()]
     this.tryStack = []
     this.loopStack = []
@@ -165,7 +169,10 @@ export class LLVMEmitter {
       .map(param => `${this.llvmType(param.type)} %${param.name}`)
       .join(', ')
 
-    this.lines.push(`define ${this.llvmType(func.returnType)} @${func.name}(${params}) {`)
+    const subprogram = this.createDebugSubprogram(func)
+    this.currentDebugScope = subprogram
+
+    this.lines.push(`define ${this.llvmType(func.returnType)} @${func.name}(${params})${subprogram ? ` !dbg ${subprogram}` : ''} {`)
     this.lines.push('entry:')
 
     for (const param of func.params) {
@@ -181,28 +188,122 @@ export class LLVMEmitter {
     }
 
     this.lines.push('}')
+    this.currentDebugScope = null
     return this.lines
   }
 
   emitStatement(node) {
-    if (node.kind === 'VariableDeclaration') return this.emitVariableDeclaration(node)
-    if (node.kind === 'ExpressionStatement') return this.emitExpression(node.expression)
-    if (node.kind === 'DeferStatement') return this.emitDefer(node)
-    if (node.kind === 'ReturnStatement') return this.emitReturn(node)
-    if (node.kind === 'BreakStatement') return this.emitBreak(node)
-    if (node.kind === 'ContinueStatement') return this.emitContinue(node)
-    if (node.kind === 'ThrowStatement') return this.emitThrow(node)
-    if (node.kind === 'TryCatchStatement') return this.emitTryCatch(node)
-    if (node.kind === 'IfStatement') return this.emitIf(node)
-    if (node.kind === 'SwitchStatement') return this.emitSwitch(node)
-    if (node.kind === 'BlockStatement') return this.emitBlock(node)
-    if (node.kind === 'ForOfStatement') return this.emitForOf(node)
-    if (node.kind === 'ForRangeStatement') return this.emitForRange(node)
-    if (node.kind === 'ForStatement') return this.emitFor(node)
-    if (node.kind === 'WhileStatement') return this.emitWhile(node)
-    if (node.kind === 'DoUntilStatement') return this.emitDoUntil(node)
+    const previousDebugLocation = this.activeDebugLocation
+    const debugLocation = this.createDebugLocation(node)
+    if (debugLocation) this.activeDebugLocation = debugLocation
 
-    throw new Diagnostic(`LLVM backend does not support ${node.kind}`, node.location, 'backend')
+    try {
+      if (node.kind === 'VariableDeclaration') return this.emitVariableDeclaration(node)
+      if (node.kind === 'ExpressionStatement') return this.emitExpression(node.expression)
+      if (node.kind === 'DeferStatement') return this.emitDefer(node)
+      if (node.kind === 'ReturnStatement') return this.emitReturn(node)
+      if (node.kind === 'BreakStatement') return this.emitBreak(node)
+      if (node.kind === 'ContinueStatement') return this.emitContinue(node)
+      if (node.kind === 'ThrowStatement') return this.emitThrow(node)
+      if (node.kind === 'TryCatchStatement') return this.emitTryCatch(node)
+      if (node.kind === 'IfStatement') return this.emitIf(node)
+      if (node.kind === 'SwitchStatement') return this.emitSwitch(node)
+      if (node.kind === 'BlockStatement') return this.emitBlock(node)
+      if (node.kind === 'ForOfStatement') return this.emitForOf(node)
+      if (node.kind === 'ForRangeStatement') return this.emitForRange(node)
+      if (node.kind === 'ForStatement') return this.emitFor(node)
+      if (node.kind === 'WhileStatement') return this.emitWhile(node)
+      if (node.kind === 'DoUntilStatement') return this.emitDoUntil(node)
+
+      throw new Diagnostic(`LLVM backend does not support ${node.kind}`, node.location, 'backend')
+    } finally {
+      this.activeDebugLocation = previousDebugLocation
+    }
+  }
+
+  createLineBuffer() {
+    const lines = []
+    const originalPush = lines.push.bind(lines)
+
+    lines.push = (...items) => originalPush(...items.map(line => this.attachDebugLocation(line)))
+
+    return lines
+  }
+
+  attachDebugLocation(line) {
+    if (!this.activeDebugLocation) return line
+    if (!line.startsWith('  ')) return line
+    if (line.includes('!dbg')) return line
+    if (line.trim() === '') return line
+
+    return `${line}, !dbg ${this.activeDebugLocation}`
+  }
+
+  createDebugContext(sourcePath) {
+    if (!sourcePath) return null
+
+    const metadata = []
+    const context = {
+      filename: basename(sourcePath),
+      directory: dirname(sourcePath),
+      metadata
+    }
+
+    context.empty = this.addDebugMetadata(context, '!{}')
+    context.file = this.addDebugMetadata(
+      context,
+      `!DIFile(filename: "${this.escapeDebugString(context.filename)}", directory: "${this.escapeDebugString(context.directory)}")`
+    )
+    context.unit = this.addDebugMetadata(
+      context,
+      `distinct !DICompileUnit(language: DW_LANG_C, file: ${context.file}, producer: "Lumen", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)`
+    )
+    context.subroutineType = this.addDebugMetadata(context, `!DISubroutineType(types: ${context.empty})`)
+    context.dwarfVersion = this.addDebugMetadata(context, '!{i32 2, !"Dwarf Version", i32 4}')
+    context.debugInfoVersion = this.addDebugMetadata(context, '!{i32 2, !"Debug Info Version", i32 3}')
+
+    return context
+  }
+
+  addDebugMetadata(context, value) {
+    const id = `!${context.metadata.length}`
+    context.metadata.push(`${id} = ${value}`)
+    return id
+  }
+
+  createDebugSubprogram(func) {
+    if (!this.debug) return null
+
+    const line = func.body[0]?.location?.line ?? 1
+    return this.addDebugMetadata(
+      this.debug,
+      `distinct !DISubprogram(name: "${this.escapeDebugString(func.name)}", linkageName: "${this.escapeDebugString(func.name)}", scope: ${this.debug.file}, file: ${this.debug.file}, line: ${line}, type: ${this.debug.subroutineType}, scopeLine: ${line}, spFlags: DISPFlagDefinition, unit: ${this.debug.unit}, retainedNodes: ${this.debug.empty})`
+    )
+  }
+
+  createDebugLocation(node) {
+    if (!this.debug || !this.currentDebugScope || !node?.location) return
+
+    const line = Math.max(1, node.location.line ?? 1)
+    const column = Math.max(1, node.location.column ?? 1)
+    return this.addDebugMetadata(
+      this.debug,
+      `!DILocation(line: ${line}, column: ${column}, scope: ${this.currentDebugScope})`
+    )
+  }
+
+  emitDebugMetadata() {
+    if (!this.debug) return []
+
+    return [
+      '!llvm.dbg.cu = !{!2}',
+      `!llvm.module.flags = !{${this.debug.dwarfVersion}, ${this.debug.debugInfoVersion}}`,
+      ...this.debug.metadata
+    ]
+  }
+
+  escapeDebugString(value) {
+    return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')
   }
 
   emitBlock(node) {

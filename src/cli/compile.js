@@ -28,7 +28,7 @@ const llvmPath = mode === 'llvm'
 await compiler.writeLLVMFile(input, llvmPath)
 
 if (mode === 'native') {
-  await compiler.buildExecutable(llvmPath, output)
+  await compiler.buildExecutable(llvmPath, output, { clang: process.env.LUMEN_CLANG ?? 'clang' })
 }
 
 console.log(output)

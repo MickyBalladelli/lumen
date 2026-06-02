@@ -1,0 +1,19 @@
+{
+  "main": {
+    "prefix": "main",
+    "body": [
+      "function main(): i32 {",
+      "  $0",
+      "  return 0",
+      "}"
+    ]
+  },
+  "function": {
+    "prefix": "fn",
+    "body": [
+      "function ${1:name}(${2}): ${3:i32} {",
+      "  $0",
+      "}"
+    ]
+  }
+}

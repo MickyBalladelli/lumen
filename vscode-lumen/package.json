@@ -1,0 +1,94 @@
+{
+  "name": "lumen-language",
+  "displayName": "Lumen",
+  "description": "Lumen language support, build command, and native debug launcher",
+  "version": "0.1.0",
+  "publisher": "lumen",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Debuggers"
+  ],
+  "activationEvents": [
+    "onLanguage:lumen",
+    "onCommand:lumen.compileCurrentFile",
+    "onCommand:lumen.debugCurrentFile"
+  ],
+  "main": "./src/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "lumen",
+        "aliases": [
+          "Lumen",
+          "lumen"
+        ],
+        "extensions": [
+          ".lm"
+        ],
+        "configuration": "./language/lumen-language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "lumen",
+        "scopeName": "source.lumen",
+        "path": "./syntaxes/lumen.tmLanguage.json"
+      }
+    ],
+    "breakpoints": [
+      {
+        "language": "lumen"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "lumen",
+        "path": "./snippets/lumen.code-snippets"
+      }
+    ],
+    "commands": [
+      {
+        "command": "lumen.compileCurrentFile",
+        "title": "Lumen: Compile Current File"
+      },
+      {
+        "command": "lumen.debugCurrentFile",
+        "title": "Lumen: Debug Current File"
+      }
+    ],
+    "configuration": {
+      "title": "Lumen",
+      "properties": {
+        "lumen.clangPath": {
+          "type": "string",
+          "default": "clang",
+          "description": "clang executable used to build Lumen debug binaries."
+        },
+        "lumen.debuggerType": {
+          "type": "string",
+          "default": "lldb",
+          "enum": [
+            "lldb",
+            "cppdbg"
+          ],
+          "description": "Native VS Code debugger to launch. lldb uses CodeLLDB. cppdbg uses Microsoft C/C++."
+        },
+        "lumen.buildDirectory": {
+          "type": "string",
+          "default": ".lumen/build",
+          "description": "Workspace-relative directory for compiled debug outputs."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "copy-compiler": "rm -rf compiler && mkdir -p compiler && cp -R ../src compiler/src && cp ../package.json compiler/package.json",
+    "package": "npm run copy-compiler && vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.2.2"
+  }
+}
