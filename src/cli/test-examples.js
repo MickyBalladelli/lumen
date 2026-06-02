@@ -120,6 +120,10 @@ const expectations = new Map([
     stdout: 'missing\nume\n6\ncleanup\n',
     code: 6
   }],
+  ['photon-auth', {
+    stdout: '1\n1\ncode-123\n',
+    code: 0
+  }],
   ['println', {
     stdout: 'total\n10\n',
     code: 10

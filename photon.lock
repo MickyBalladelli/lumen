@@ -1,0 +1,8 @@
+{
+  "packages": {
+    "auth": {
+      "source": "./packages/auth",
+      "resolved": "local"
+    }
+  }
+}

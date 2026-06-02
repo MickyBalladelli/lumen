@@ -68,7 +68,9 @@ async function install() {
 
     lock.packages[name] = {
       source,
-      resolved: await resolvePackageVersion(target)
+      resolved: isLocalSource(source)
+        ? 'local'
+        : await resolvePackageVersion(target)
     }
 
     console.log(`installed ${name}`)
