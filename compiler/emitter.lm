@@ -28,6 +28,13 @@ function binaryValueName(slot: string): string {
   return out
 }
 
+function callValueName(slot: string): string {
+  let out = stringBuilder()
+  out = stringBuilderAppend(out, "%call.")
+  out = stringBuilderAppend(out, slot)
+  return out
+}
+
 function buildStatementSymbols(program: string): string {
   let symbols = map("unused", "unused")
   let count = stringToInt(mapGet(program, "statementCount"))
@@ -42,6 +49,9 @@ function buildStatementSymbols(program: string): string {
       if includes(mapGet(program, prefix + "ExprKind"), "binary") {
         symbols = mapSet(symbols, name + "Kind", "number")
         symbols = mapSet(symbols, name + "Value", binaryValueName(intToString(index)))
+      } else if includes(mapGet(program, prefix + "ExprKind"), "call") {
+        symbols = mapSet(symbols, name + "Kind", "number")
+        symbols = mapSet(symbols, name + "Value", callValueName(intToString(index)))
       } else {
         symbols = mapSet(symbols, name + "Kind", resolvedExprKind(program, symbols, prefix))
         symbols = mapSet(symbols, name + "Value", resolvedExprValue(program, symbols, prefix))
@@ -53,6 +63,9 @@ function buildStatementSymbols(program: string): string {
       if includes(mapGet(program, prefix + "ExprKind"), "binary") {
         symbols = mapSet(symbols, name + "Kind", "number")
         symbols = mapSet(symbols, name + "Value", binaryValueName(intToString(index)))
+      } else if includes(mapGet(program, prefix + "ExprKind"), "call") {
+        symbols = mapSet(symbols, name + "Kind", "number")
+        symbols = mapSet(symbols, name + "Value", callValueName(intToString(index)))
       } else {
         symbols = mapSet(symbols, name + "Kind", resolvedExprKind(program, symbols, prefix))
         symbols = mapSet(symbols, name + "Value", resolvedExprValue(program, symbols, prefix))
@@ -148,6 +161,11 @@ function resolvedNumberAtom(symbols: string, value: string): string {
   return value
 }
 
+function hasFunction(program: string): bool {
+  let count = stringToInt(mapGet(program, "functionCount"))
+  return count > 0
+}
+
 function emitStatementMain(program: string): string {
   let symbols = buildStatementSymbols(program)
   let returnValue = mapGet(program, "mainReturnValue")
@@ -161,6 +179,9 @@ function emitStatementMain(program: string): string {
 ')
   out = stringBuilderAppend(out, '@.fmt.int = private unnamed_addr constant [4 x i8] c"%d\0A\00"
 ')
+  if hasFunction(program) {
+    out = emitFunctionDefinitions(out, program)
+  }
 
   let globalIndex: i32 = 0
   while globalIndex < statementCount do {
@@ -201,6 +222,7 @@ function emitStatementMain(program: string): string {
   }
 
   out = emitBinaryStatements(out, program, symbols)
+  out = emitCallStatements(out, program, symbols)
 
   let emitIndex: i32 = 0
   while emitIndex < statementCount do {
@@ -222,6 +244,95 @@ function emitStatementMain(program: string): string {
   out = stringBuilderAppend(out, returnValue)
   out = stringBuilderAppend(out, "
 }
+")
+
+  return out
+}
+
+function functionPrefix(index: i32): string {
+  let out = stringBuilder()
+  out = stringBuilderAppend(out, "function")
+  out = stringBuilderAppend(out, intToString(index))
+  return out
+}
+
+function emitFunctionDefinitions(out: string, program: string): string {
+  let count = stringToInt(mapGet(program, "functionCount"))
+  let index: i32 = 0
+
+  while index < count do {
+    let prefix = functionPrefix(index)
+    let name = mapGet(program, prefix + "Name")
+    let param0 = mapGet(program, prefix + "Param0")
+    let param1 = mapGet(program, prefix + "Param1")
+    let left = mapGet(program, prefix + "ReturnLeftValue")
+    let right = mapGet(program, prefix + "ReturnRightValue")
+
+    out = stringBuilderAppend(out, "define i32 @")
+    out = stringBuilderAppend(out, name)
+    out = stringBuilderAppend(out, "(i32 %")
+    out = stringBuilderAppend(out, param0)
+    out = stringBuilderAppend(out, ", i32 %")
+    out = stringBuilderAppend(out, param1)
+    out = stringBuilderAppend(out, ") {
+entry:
+")
+    out = stringBuilderAppend(out, "  %fn.ret = add i32 %")
+    out = stringBuilderAppend(out, left)
+    out = stringBuilderAppend(out, ", %")
+    out = stringBuilderAppend(out, right)
+    out = stringBuilderAppend(out, "
+")
+    out = stringBuilderAppend(out, "  ret i32 %fn.ret
+}
+")
+
+    index = index + 1
+  }
+
+  return out
+}
+
+function emitCallStatements(out: string, program: string, symbols: string): string {
+  let count = stringToInt(mapGet(program, "statementCount"))
+  let index: i32 = 0
+
+  while index < count do {
+    let prefix = statementPrefix(index)
+    let kind = mapGet(program, prefix + "Kind")
+
+    if includes(kind, "let") {
+      if includes(mapGet(program, prefix + "ExprKind"), "call") {
+        out = emitCall(out, intToString(index), program, symbols, prefix)
+      }
+    }
+
+    if includes(kind, "const") {
+      if includes(mapGet(program, prefix + "ExprKind"), "call") {
+        out = emitCall(out, intToString(index), program, symbols, prefix)
+      }
+    }
+
+    index = index + 1
+  }
+
+  return out
+}
+
+function emitCall(out: string, slot: string, program: string, symbols: string, prefix: string): string {
+  let name = mapGet(program, prefix + "ExprValue")
+  let arg0 = resolvedNumberAtom(symbols, mapGet(program, prefix + "ExprCallArg0"))
+  let arg1 = resolvedNumberAtom(symbols, mapGet(program, prefix + "ExprCallArg1"))
+
+  out = stringBuilderAppend(out, "  ")
+  out = stringBuilderAppend(out, callValueName(slot))
+  out = stringBuilderAppend(out, " = call i32 @")
+  out = stringBuilderAppend(out, name)
+  out = stringBuilderAppend(out, "(i32 ")
+  out = stringBuilderAppend(out, arg0)
+  out = stringBuilderAppend(out, ", i32 ")
+  out = stringBuilderAppend(out, arg1)
+  out = stringBuilderAppend(out, ")
 ")
 
   return out
@@ -363,6 +474,8 @@ function emitCompilerMain(program: string): string {
 ")
   out = stringBuilderAppend(out, '@.usage = private unnamed_addr constant [41 x i8] c"usage: lumen-compiler input.lm output.ll\00"
 ')
+  out = stringBuilderAppend(out, '@.invalid = private unnamed_addr constant [37 x i8] c"compile error: missing function main\00"
+')
   out = stringBuilderAppend(out, '@.fmt.str = private unnamed_addr constant [4 x i8] c"%s\0A\00"
 ')
   out = stringBuilderAppend(out, "declare i32 @printf(ptr, ...)
@@ -410,6 +523,8 @@ function emitCompilerMain(program: string): string {
   out = stringBuilderAppend(out, "  br i1 %is.valid, label %emit, label %invalid
 ")
   out = stringBuilderAppend(out, "invalid:
+")
+  out = stringBuilderAppend(out, "  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([37 x i8], ptr @.invalid, i64 0, i64 0))
 ")
   out = stringBuilderAppend(out, "  ret i32 1
 ")

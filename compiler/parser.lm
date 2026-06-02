@@ -170,6 +170,14 @@ function expressionRightValue(tokens: string, index: i32): string {
   return ""
 }
 
+function expressionCallArg(tokens: string, index: i32, offset: i32): string {
+  if stringEquals(tokenValue(listGet(tokens, index + 1)), "(") {
+    return tokenValue(listGet(tokens, index + offset))
+  }
+
+  return ""
+}
+
 function parserStatementPrefix(index: i32): string {
   let out = stringBuilder()
   out = stringBuilderAppend(out, "statement")
@@ -194,6 +202,8 @@ function setExpressionParts(program: string, index: i32, tokens: string, exprInd
 
   program = mapSet(program, prefix + "ExprLeftValue", expressionLeftValue(tokens, exprIndex))
   program = mapSet(program, prefix + "ExprRightValue", expressionRightValue(tokens, exprIndex))
+  program = mapSet(program, prefix + "ExprCallArg0", expressionCallArg(tokens, exprIndex, 2))
+  program = mapSet(program, prefix + "ExprCallArg1", expressionCallArg(tokens, exprIndex, 4))
 
   return program
 }
@@ -248,13 +258,33 @@ function findBlockEnd(tokens: string, index: i32): i32 {
   return index
 }
 
+function setFunction(program: string, index: i32, tokens: string, functionIndex: i32): string {
+  let slot = intToString(index)
+  let prefix = "function" + slot
+  let name = tokenValue(listGet(tokens, functionIndex + 1))
+  let bodyStart = findNext(tokens, functionIndex, "{")
+  let returnIndex = findNext(tokens, bodyStart, "return")
+
+  program = mapSet(program, prefix + "Name", name)
+  program = mapSet(program, prefix + "Param0", tokenValue(listGet(tokens, functionIndex + 3)))
+  program = mapSet(program, prefix + "Param1", tokenValue(listGet(tokens, functionIndex + 7)))
+  program = mapSet(program, prefix + "ReturnKind", expressionKind(tokens, returnIndex + 1))
+  program = mapSet(program, prefix + "ReturnValue", expressionValue(tokens, returnIndex + 1))
+  program = mapSet(program, prefix + "ReturnLeftValue", expressionLeftValue(tokens, returnIndex + 1))
+  program = mapSet(program, prefix + "ReturnRightValue", expressionRightValue(tokens, returnIndex + 1))
+  program = mapSet(program, "functionCount", intToString(index + 1))
+
+  return program
+}
+
 function parseProgram(tokens: string): string {
-  let program = map("kind", "program", "mainReturnKind", "number", "mainReturnValue", "0", "printCount", "0", "statementCount", "0")
+  let program = map("kind", "program", "mainReturnKind", "number", "mainReturnValue", "0", "printCount", "0", "statementCount", "0", "functionCount", "0")
   let variables = map("unused", "unused")
   let index: i32 = 0
   let count = listLen(tokens)
   let prints: i32 = 0
   let statements: i32 = 0
+  let functions: i32 = 0
 
   while index < count do {
     let current = tokenValue(listGet(tokens, index))
@@ -277,6 +307,8 @@ function parseProgram(tokens: string): string {
         continue
       }
 
+      program = setFunction(program, functions, tokens, index)
+      functions = functions + 1
       let end = findBlockEnd(tokens, index)
       index = end + 1
       continue

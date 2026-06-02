@@ -132,6 +132,10 @@ const expectations = new Map([
     stdout: 'seven\n7\n',
     code: 7
   }],
+  ['self-host-call', {
+    stdout: '9\n',
+    code: 9
+  }],
   ['self-host-simple', {
     stdout: 'simple\n4\ndone\n',
     code: 4
@@ -312,8 +316,12 @@ if (bootstrapCompile.code !== 0) {
     join(examplesDir, 'self-host-if-binary.lm'),
     join(outputDir, 'self-host-if-binary-self.ll')
   ])
+  const callCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
+    join(examplesDir, 'self-host-call.lm'),
+    join(outputDir, 'self-host-call-self.ll')
+  ])
 
-  if (forLoopCompile.code !== 0 || nativeMainCompile.code !== 0 || printlnCompile.code !== 0 || simpleCompile.code !== 0 || ifBinaryCompile.code !== 0) {
+  if (forLoopCompile.code !== 0 || nativeMainCompile.code !== 0 || printlnCompile.code !== 0 || simpleCompile.code !== 0 || ifBinaryCompile.code !== 0 || callCompile.code !== 0) {
     failures += 1
     console.error('failed bootstrap loop compiler output')
   } else {
@@ -322,21 +330,24 @@ if (bootstrapCompile.code !== 0) {
     await compiler.buildExecutable(join(outputDir, 'println-self.ll'), join(outputDir, 'println-self'))
     await compiler.buildExecutable(join(outputDir, 'self-host-simple-self.ll'), join(outputDir, 'self-host-simple-self'))
     await compiler.buildExecutable(join(outputDir, 'self-host-if-binary-self.ll'), join(outputDir, 'self-host-if-binary-self'))
+    await compiler.buildExecutable(join(outputDir, 'self-host-call-self.ll'), join(outputDir, 'self-host-call-self'))
     const forLoop = await runExecutable(join(outputDir, 'for-loop-self'))
     const nativeMain = await runExecutable(join(outputDir, 'native-main-self'))
     const println = await runExecutable(join(outputDir, 'println-self'))
     const simple = await runExecutable(join(outputDir, 'self-host-simple-self'))
     const ifBinary = await runExecutable(join(outputDir, 'self-host-if-binary-self'))
+    const call = await runExecutable(join(outputDir, 'self-host-call-self'))
 
     if (forLoop.stdout !== '10\n' || forLoop.code !== 10 ||
       nativeMain.stdout !== '10\n' || nativeMain.code !== 10 ||
       println.stdout !== 'total\n10\n' || println.code !== 10 ||
       simple.stdout !== 'simple\n4\ndone\n' || simple.code !== 4 ||
-      ifBinary.stdout !== 'seven\n7\n' || ifBinary.code !== 7) {
+      ifBinary.stdout !== 'seven\n7\n' || ifBinary.code !== 7 ||
+      call.stdout !== '9\n' || call.code !== 9) {
       failures += 1
       console.error('failed bootstrap loop executable behavior')
     } else {
-      console.log('ok bootstrap self-host simple/if/loop/println examples')
+      console.log('ok bootstrap self-host simple/call/if/loop/println examples')
     }
   }
 
@@ -344,7 +355,7 @@ if (bootstrapCompile.code !== 0) {
     join('tests', 'bootstrap', 'invalid.lm'),
     join(outputDir, 'invalid-self.ll')
   ])
-  if (invalidCompile.code === 0) {
+  if (invalidCompile.code === 0 || invalidCompile.stdout !== 'compile error: missing function main\n') {
     failures += 1
     console.error('failed bootstrap invalid source rejection')
   } else {
@@ -390,12 +401,16 @@ if (bootstrapCompile.code !== 0) {
       join(examplesDir, 'self-host-if-binary.lm'),
       join(outputDir, 'self-host-if-binary-self2.ll')
     ])
+    const selfCallCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
+      join(examplesDir, 'self-host-call.lm'),
+      join(outputDir, 'self-host-call-self2.ll')
+    ])
     const selfCompilerCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
       join('compiler', 'main.lm'),
       join(outputDir, 'lumen-compiler-self2.ll')
     ])
 
-    if (selfBasicCompile.code !== 0 || selfControlCompile.code !== 0 || selfForLoopCompile.code !== 0 || selfNativeMainCompile.code !== 0 || selfPrintlnCompile.code !== 0 || selfSimpleCompile.code !== 0 || selfIfBinaryCompile.code !== 0 || selfCompilerCompile.code !== 0) {
+    if (selfBasicCompile.code !== 0 || selfControlCompile.code !== 0 || selfForLoopCompile.code !== 0 || selfNativeMainCompile.code !== 0 || selfPrintlnCompile.code !== 0 || selfSimpleCompile.code !== 0 || selfIfBinaryCompile.code !== 0 || selfCallCompile.code !== 0 || selfCompilerCompile.code !== 0) {
       failures += 1
       console.error('failed second-stage compiler output')
     } else {
@@ -406,6 +421,7 @@ if (bootstrapCompile.code !== 0) {
       await compiler.buildExecutable(join(outputDir, 'println-self2.ll'), join(outputDir, 'println-self2'))
       await compiler.buildExecutable(join(outputDir, 'self-host-simple-self2.ll'), join(outputDir, 'self-host-simple-self2'))
       await compiler.buildExecutable(join(outputDir, 'self-host-if-binary-self2.ll'), join(outputDir, 'self-host-if-binary-self2'))
+      await compiler.buildExecutable(join(outputDir, 'self-host-call-self2.ll'), join(outputDir, 'self-host-call-self2'))
       await compiler.buildExecutable(join(outputDir, 'lumen-compiler-self2.ll'), join(outputDir, 'lumen-compiler-self2'))
 
       const basic2 = await runExecutable(join(outputDir, 'basic-self2'))
@@ -415,6 +431,7 @@ if (bootstrapCompile.code !== 0) {
       const println2 = await runExecutable(join(outputDir, 'println-self2'))
       const simple2 = await runExecutable(join(outputDir, 'self-host-simple-self2'))
       const ifBinary2 = await runExecutable(join(outputDir, 'self-host-if-binary-self2'))
+      const call2 = await runExecutable(join(outputDir, 'self-host-call-self2'))
 
       if (basic2.stdout !== 'hello\n3\n' || basic2.code !== 3 ||
         control2.stdout !== 'sum 23\n' || control2.code !== 23 ||
@@ -422,7 +439,8 @@ if (bootstrapCompile.code !== 0) {
         nativeMain2.stdout !== '10\n' || nativeMain2.code !== 10 ||
         println2.stdout !== 'total\n10\n' || println2.code !== 10 ||
         simple2.stdout !== 'simple\n4\ndone\n' || simple2.code !== 4 ||
-        ifBinary2.stdout !== 'seven\n7\n' || ifBinary2.code !== 7) {
+        ifBinary2.stdout !== 'seven\n7\n' || ifBinary2.code !== 7 ||
+        call2.stdout !== '9\n' || call2.code !== 9) {
         failures += 1
         console.error('failed second-stage executable behavior')
       } else {
@@ -434,7 +452,7 @@ if (bootstrapCompile.code !== 0) {
       join('tests', 'bootstrap', 'invalid.lm'),
       join(outputDir, 'invalid-self2.ll')
     ])
-    if (selfInvalidCompile.code === 0) {
+    if (selfInvalidCompile.code === 0 || selfInvalidCompile.stdout !== 'compile error: missing function main\n') {
       failures += 1
       console.error('failed second-stage invalid source rejection')
     } else {

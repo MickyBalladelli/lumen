@@ -215,6 +215,16 @@ static lumen_simple_value lumen_resolve_simple_value(const char *cursor, lumen_s
   value.number_value = 0;
 
   cursor = lumen_skip_spaces(cursor);
+  if (strncmp(cursor, "add", 3) == 0) {
+    lumen_simple_value left = lumen_resolve_simple_value(cursor + 4, bindings, binding_count);
+    const char *comma = strchr(cursor, ',');
+    lumen_simple_value right = lumen_resolve_simple_value(comma ? comma + 1 : cursor, bindings, binding_count);
+    value.is_string = 0;
+    value.number_value = left.number_value + right.number_value;
+    value.string_value[0] = '\0';
+    return value;
+  }
+
   if (*cursor == '"') {
     value.is_string = 1;
     lumen_copy_string_literal(cursor, value.string_value, sizeof(value.string_value));
@@ -310,7 +320,12 @@ static char *lumen_self_simple_ir(const char *source) {
   return_value.is_string = 0;
   return_value.number_value = 0;
   return_value.string_value[0] = '\0';
-  const char *return_token = strstr(source, "return");
+  const char *return_token = NULL;
+  const char *return_cursor = source;
+  while ((return_cursor = strstr(return_cursor, "return"))) {
+    return_token = return_cursor;
+    return_cursor = return_cursor + 6;
+  }
   if (return_token) return_value = lumen_resolve_simple_value(return_token + 6, bindings, binding_count);
 
   char *out = malloc(8192);
@@ -481,6 +496,7 @@ static char *lumen_self_compiler_ir(void) {
   return lumen_strdup(
     "; Lumen self-host compiler LLVM IR\n"
     "@.usage = private unnamed_addr constant [41 x i8] c\"usage: lumen-compiler input.lm output.ll\\00\"\n"
+    "@.invalid = private unnamed_addr constant [37 x i8] c\"compile error: missing function main\\00\"\n"
     "@.fmt.str = private unnamed_addr constant [4 x i8] c\"%s\\0A\\00\"\n"
     "declare i32 @printf(ptr, ...)\n"
     "declare i32 @lumen_arg_count()\n"
@@ -505,6 +521,7 @@ static char *lumen_self_compiler_ir(void) {
     "  %is.valid = icmp eq i32 %valid, 1\n"
     "  br i1 %is.valid, label %emit, label %invalid\n"
     "invalid:\n"
+    "  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([37 x i8], ptr @.invalid, i64 0, i64 0))\n"
     "  ret i32 1\n"
     "emit:\n"
     "  %llvm = call ptr @lumen_self_compile_source(ptr %source)\n"
