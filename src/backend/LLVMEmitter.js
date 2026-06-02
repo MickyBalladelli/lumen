@@ -37,6 +37,7 @@ export class LLVMEmitter {
     this.usesChannel = false
     this.usesHttp = false
     this.usesUuid = false
+    this.usesDate = false
     this.usesEnv = false
     this.usesCrypto = false
     this.usesArgs = false
@@ -82,6 +83,7 @@ export class LLVMEmitter {
       this.usesChannel ? 'declare void @lumen_send(ptr, ptr)' : '',
       this.usesChannel ? 'declare ptr @lumen_receive(ptr)' : '',
       this.usesUuid ? 'declare ptr @lumen_uuid()' : '',
+      this.usesDate ? 'declare ptr @lumen_date()' : '',
       this.usesEnv ? 'declare ptr @lumen_env(ptr)' : '',
       this.usesCrypto ? 'declare ptr @lumen_encrypt(ptr, ptr, ptr)' : '',
       this.usesCrypto ? 'declare ptr @lumen_decrypt(ptr, ptr, ptr)' : '',
@@ -649,6 +651,7 @@ export class LLVMEmitter {
     if (this.isCall(expression.tokens, SystemFunctions.Max)) return this.emitMinMax(expression.tokens, 'max')
     if (this.isCall(expression.tokens, SystemFunctions.Includes)) return this.emitIncludes(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.Uuid)) return this.emitUuid(expression.tokens)
+    if (this.isCall(expression.tokens, SystemFunctions.Date)) return this.emitDate(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.Env)) return this.emitEnv(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.Encrypt)) return this.emitEncrypt(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.Decrypt)) return this.emitDecrypt(expression.tokens)
@@ -1025,6 +1028,23 @@ export class LLVMEmitter {
     this.usesUuid = true
     const value = this.nextTemp()
     this.lines.push(`  ${value} = call ptr @lumen_uuid()`)
+
+    return {
+      type: LumenTypes.String,
+      value
+    }
+  }
+
+  emitDate(tokens) {
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 0) {
+      throw new Diagnostic('date expects no arguments', tokens[0].location, 'backend')
+    }
+
+    this.usesDate = true
+    const value = this.nextTemp()
+    this.lines.push(`  ${value} = call ptr @lumen_date()`)
 
     return {
       type: LumenTypes.String,

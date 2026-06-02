@@ -58,6 +58,18 @@ char *lumen_uuid(void) {
   return out;
 }
 
+char *lumen_date(void) {
+  time_t now = time(NULL);
+  struct tm value;
+  localtime_r(&now, &value);
+
+  char *out = malloc(20);
+  if (!out) return "";
+
+  strftime(out, 20, "%Y-%m-%d %H:%M:%S", &value);
+  return out;
+}
+
 char *lumen_env(const char *name) {
   char *value = getenv(name);
   if (value) return value;

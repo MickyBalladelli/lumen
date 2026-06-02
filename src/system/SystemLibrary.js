@@ -6,6 +6,7 @@ export const SystemFunctions = Object.freeze({
   Filter: 'filter',
   Includes: 'includes',
   Uuid: 'uuid',
+  Date: 'date',
   Env: 'env',
   Encrypt: 'encrypt',
   Decrypt: 'decrypt',

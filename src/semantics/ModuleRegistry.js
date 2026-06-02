@@ -9,6 +9,7 @@ export class ModuleRegistry {
         'filter',
         'includes',
         'uuid',
+        'date',
         'env',
         'encrypt',
         'decrypt',

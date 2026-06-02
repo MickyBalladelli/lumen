@@ -370,6 +370,13 @@ let id = uuid()
 println(id)
 ```
 
+`date()` returns the current local date and time as a string formatted like
+`YYYY-MM-DD HH:MM:SS`.
+
+```lumen
+println(date())
+```
+
 `env(name)` reads an environment variable. Missing variables return an empty
 string. If the variable is not in the process environment, Lumen also checks a
 `.env` file in the current directory.
@@ -843,7 +850,7 @@ console.log(ast)
 - `examples/struct.lm`: object type with fields
 - `examples/socket-chat.lm`: Socket.IO-style chat server
 - `examples/socket-helpers.lm`: Socket.IO-style payload helpers
-- `examples/system.lm`: `println`, `len`, `min`, `max`, `includes`, and `filter`
+- `examples/system.lm`: `println`, `len`, `min`, `max`, `includes`, `uuid`, `date`, and `filter`
 - `examples/switch.lm`: switch with numeric and string cases
 - `examples/thread.lm`: native threads with semaphore-protected file writes
 - `examples/try-catch.lm`: Lumen `try/catch` and `throw`

@@ -31,6 +31,7 @@ export class ExpressionInspector {
     if (this.isCall(rawExpression, SystemFunctions.Filter)) return this.filterType(rawExpression.tokens)
     if (this.isCall(rawExpression, SystemFunctions.Includes)) return this.includesType(rawExpression.tokens)
     if (this.isCall(rawExpression, SystemFunctions.Uuid)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.Date)) return LumenTypes.String
     if (this.isCall(rawExpression, SystemFunctions.Env)) return LumenTypes.String
     if (this.isCall(rawExpression, SystemFunctions.Encrypt)) return LumenTypes.String
     if (this.isCall(rawExpression, SystemFunctions.Decrypt)) return LumenTypes.String

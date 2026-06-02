@@ -9,6 +9,7 @@ function main(): i32 {
   println(includes(text, "lumen"))
   println(includes(text, "rust"))
   println(includes(uuid(), "-"))
+  println(includes(date(), "-"))
   println(min(9, 4))
   println(max(9, 4))
 
