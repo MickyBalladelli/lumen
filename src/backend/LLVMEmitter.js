@@ -142,6 +142,7 @@ export class LLVMEmitter {
       this.usesThread ? 'declare ptr @lumen_thread_start(ptr, ptr, ptr, ptr)' : '',
       this.usesThread ? 'declare i32 @lumen_thread_join(ptr)' : '',
       this.usesThread ? 'declare i32 @lumen_append_file(ptr, ptr)' : '',
+      this.debug ? 'declare void @llvm.dbg.declare(metadata, metadata, metadata)' : '',
       '',
       ...functions,
       ...this.emitDebugMetadata(),
@@ -176,7 +177,11 @@ export class LLVMEmitter {
     this.lines.push('entry:')
 
     for (const param of func.params) {
-      const pointer = this.alloca(param.name, param.type)
+      const pointer = this.alloca(param.name, param.type, {
+        debugLocation: param.location,
+        isParameter: true,
+        argumentIndex: func.params.indexOf(param) + 1
+      })
       this.lines.push(`  store ${this.llvmType(param.type)} %${param.name}, ptr ${pointer}`)
     }
 
@@ -256,11 +261,13 @@ export class LLVMEmitter {
     )
     context.unit = this.addDebugMetadata(
       context,
-      `distinct !DICompileUnit(language: DW_LANG_C, file: ${context.file}, producer: "Lumen", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)`
+      `distinct !DICompileUnit(language: DW_LANG_C_plus_plus, file: ${context.file}, producer: "Lumen", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)`
     )
     context.subroutineType = this.addDebugMetadata(context, `!DISubroutineType(types: ${context.empty})`)
     context.dwarfVersion = this.addDebugMetadata(context, '!{i32 2, !"Dwarf Version", i32 4}')
     context.debugInfoVersion = this.addDebugMetadata(context, '!{i32 2, !"Debug Info Version", i32 3}')
+    context.expression = this.addDebugMetadata(context, '!DIExpression()')
+    context.types = new Map()
 
     return context
   }
@@ -290,6 +297,55 @@ export class LLVMEmitter {
       this.debug,
       `!DILocation(line: ${line}, column: ${column}, scope: ${this.currentDebugScope})`
     )
+  }
+
+  createDebugVariable(name, type, location, { isParameter = false, argumentIndex = null } = {}) {
+    if (!this.debug || !this.currentDebugScope || !location) return null
+
+    const line = Math.max(1, location.line ?? 1)
+    const typeMetadata = this.debugType(type)
+    const argument = isParameter ? `arg: ${argumentIndex}, ` : ''
+    return this.addDebugMetadata(
+      this.debug,
+      `!DILocalVariable(name: "${this.escapeDebugString(name)}", ${argument}scope: ${this.currentDebugScope}, file: ${this.debug.file}, line: ${line}, type: ${typeMetadata})`
+    )
+  }
+
+  debugType(type) {
+    if (!this.debug) return null
+
+    const normalized = this.typeSystem.normalize(type)
+    if (this.debug.types.has(normalized)) return this.debug.types.get(normalized)
+
+    const primitive = {
+      [LumenTypes.I32]: '!DIBasicType(name: "i32", size: 32, encoding: DW_ATE_signed)',
+      [LumenTypes.I64]: '!DIBasicType(name: "i64", size: 64, encoding: DW_ATE_signed)',
+      [LumenTypes.F32]: '!DIBasicType(name: "f32", size: 32, encoding: DW_ATE_float)',
+      [LumenTypes.Bool]: '!DIBasicType(name: "bool", size: 1, encoding: DW_ATE_boolean)'
+    }[normalized]
+
+    if (primitive) {
+      const metadata = this.addDebugMetadata(this.debug, primitive)
+      this.debug.types.set(normalized, metadata)
+      return metadata
+    }
+
+    const pointerType = this.addDebugMetadata(
+      this.debug,
+      `!DIDerivedType(tag: DW_TAG_pointer_type, name: "${this.escapeDebugString(normalized)}", baseType: null, size: 64)`
+    )
+    this.debug.types.set(normalized, pointerType)
+    return pointerType
+  }
+
+  emitDebugDeclare(name, pointer, type, location, options = {}) {
+    if (!this.debug || name.startsWith('.')) return
+
+    const variable = this.createDebugVariable(name, type, location, options)
+    if (!variable) return
+
+    const dbg = this.createDebugLocation({ location })
+    this.lines.push(`  call void @llvm.dbg.declare(metadata ptr ${pointer}, metadata ${variable}, metadata ${this.debug.expression})${dbg ? `, !dbg ${dbg}` : ''}`)
   }
 
   emitDebugMetadata() {
@@ -371,7 +427,8 @@ export class LLVMEmitter {
     for (const declaration of node.declarations) {
       const type = declaration.inferredType ?? LumenTypes.I32
       const pointer = this.alloca(declaration.id.name, type, {
-        length: declaration.arrayLength
+        length: declaration.arrayLength,
+        debugLocation: declaration.id.location ?? node.location
       })
 
       if (declaration.initializer) {
@@ -3005,13 +3062,22 @@ export class LLVMEmitter {
     return `\\${byte.toString(16).padStart(2, '0').toUpperCase()}`
   }
 
-  alloca(name, type, { length = null } = {}) {
+  alloca(name, type, {
+    length = null,
+    debugLocation = null,
+    isParameter = false,
+    argumentIndex = null
+  } = {}) {
     const pointer = `%${name}.addr.${this.temp}`
     this.temp += 1
     const storageType = this.typeSystem.isArray(type)
       ? this.typeSystem.llvmArray(type, length)
       : this.llvmType(type)
     this.lines.push(`  ${pointer} = alloca ${storageType}`)
+    this.emitDebugDeclare(name, pointer, type, debugLocation, {
+      isParameter,
+      argumentIndex
+    })
     this.define(name, {
       pointer,
       type,

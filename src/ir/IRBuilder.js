@@ -32,7 +32,8 @@ export class IRBuilder {
       node.name.name,
       node.params.map(param => ({
         name: param.name,
-        type: param.inferredType
+        type: param.inferredType,
+        location: param.location
       })),
       node.inferredType,
       node.body.body
