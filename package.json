@@ -7,7 +7,8 @@
     ".": "./src/index.js"
   },
   "bin": {
-    "lmsh": "./src/cli/lmsh.js"
+    "lmsh": "./src/cli/lmsh.js",
+    "photon": "./src/cli/photon.js"
   },
   "scripts": {
     "parse": "node ./src/cli/parse.js",

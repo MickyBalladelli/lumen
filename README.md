@@ -822,6 +822,47 @@ npm run compile
 
 Current config keys are `entry` and `output`.
 
+## Photon packages
+
+Photon installs external Lumen packages into `.photon/packages`.
+
+Create a package manifest:
+
+```bash
+photon init
+```
+
+Add a package from a local path or Git URL:
+
+```bash
+photon add math ../lumen-math
+photon add http git@github.com:you/lumen-http.git#v1.0.0
+```
+
+Install packages:
+
+```bash
+photon install
+```
+
+Use a package:
+
+```lumen
+import { triple } from "math"
+```
+
+Package directories may include `photon.json`:
+
+```json
+{
+  "name": "math",
+  "version": "1.0.0",
+  "main": "main.lm"
+}
+```
+
+If no package manifest exists, Photon loads `main.lm`.
+
 Run it:
 
 ```bash
