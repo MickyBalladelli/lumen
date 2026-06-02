@@ -236,6 +236,12 @@ console.log(`${files.length} example tests passed`)
 
 await compiler.writeLLVMFile('compiler/main.lm', join(outputDir, 'lumen-compiler.ll'))
 await compiler.buildExecutable(join(outputDir, 'lumen-compiler.ll'), join(outputDir, 'lumen-compiler'))
+if (await hasSelfFallbackSymbols(join(outputDir, 'lumen-compiler'))) {
+  failures += 1
+  console.error('failed stage-1 compiler fallback symbol check')
+} else {
+  console.log('ok stage-1 compiler has no C fallback symbols')
+}
 
 const bootstrapCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
   join('tests', 'bootstrap', 'tiny.lm'),
@@ -382,9 +388,13 @@ if (bootstrapCompile.code !== 0) {
     failures += 1
     console.error(`failed bootstrap compiler self compile with code ${compilerSelfCompile.code}`)
   } else {
-    await compiler.buildExecutable(join(outputDir, 'lumen-compiler-self.ll'), join(outputDir, 'lumen-compiler-self'), {
-      selfHostFallback: true
-    })
+    await compiler.buildExecutable(join(outputDir, 'lumen-compiler-self.ll'), join(outputDir, 'lumen-compiler-self'))
+    if (await hasSelfFallbackSymbols(join(outputDir, 'lumen-compiler-self'))) {
+      failures += 1
+      console.error('failed stage-2 compiler fallback symbol check')
+    } else {
+      console.log('ok stage-2 compiler has no C fallback symbols')
+    }
 
     const selfBasicCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
       join(examplesDir, 'basic.lm'),
@@ -435,9 +445,7 @@ if (bootstrapCompile.code !== 0) {
       await compiler.buildExecutable(join(outputDir, 'self-host-simple-self2.ll'), join(outputDir, 'self-host-simple-self2'))
       await compiler.buildExecutable(join(outputDir, 'self-host-if-binary-self2.ll'), join(outputDir, 'self-host-if-binary-self2'))
       await compiler.buildExecutable(join(outputDir, 'self-host-call-self2.ll'), join(outputDir, 'self-host-call-self2'))
-      await compiler.buildExecutable(join(outputDir, 'lumen-compiler-self2.ll'), join(outputDir, 'lumen-compiler-self2'), {
-        selfHostFallback: true
-      })
+      await compiler.buildExecutable(join(outputDir, 'lumen-compiler-self2.ll'), join(outputDir, 'lumen-compiler-self2'))
 
       const basic2 = await runExecutable(join(outputDir, 'basic-self2'))
       const control2 = await runExecutable(join(outputDir, 'control-flow-self2'))
@@ -530,6 +538,34 @@ function runExecutable(path, args = [], env = {}) {
         stdout,
         code
       })
+    })
+  })
+}
+
+async function hasSelfFallbackSymbols(path) {
+  const result = await runCommand('nm', [path])
+  return result.stdout.includes('lumen_self_compile_source') ||
+    result.stdout.includes('lumen_self_validate_source') ||
+    result.stdout.includes('lumen_self_diagnostic')
+}
+
+function runCommand(command, args = []) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args)
+    let stdout = ''
+    let stderr = ''
+
+    child.stdout.on('data', chunk => {
+      stdout += chunk
+    })
+
+    child.stderr.on('data', chunk => {
+      stderr += chunk
+    })
+
+    child.on('error', reject)
+    child.on('close', code => {
+      resolve({ code, stdout, stderr })
     })
   })
 }
