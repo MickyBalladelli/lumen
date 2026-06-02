@@ -26,6 +26,8 @@ export class ExpressionInspector {
     }
     if (this.isCall(rawExpression, SystemFunctions.Println)) return LumenTypes.Void
     if (this.isCall(rawExpression, SystemFunctions.Len)) return LumenTypes.I32
+    if (this.isCall(rawExpression, SystemFunctions.Min)) return this.numericPairType(rawExpression.tokens, 'min')
+    if (this.isCall(rawExpression, SystemFunctions.Max)) return this.numericPairType(rawExpression.tokens, 'max')
     if (this.isCall(rawExpression, SystemFunctions.Filter)) return this.filterType(rawExpression.tokens)
     if (this.isCall(rawExpression, SystemFunctions.Includes)) return this.includesType(rawExpression.tokens)
     if (this.isCall(rawExpression, SystemFunctions.Uuid)) return LumenTypes.String
@@ -385,6 +387,26 @@ export class ExpressionInspector {
     }
 
     return LumenTypes.Bool
+  }
+
+  numericPairType(tokens, name) {
+    const args = this.callArguments(tokens)
+    if (args.length !== 2) {
+      throw new Diagnostic(`${name} expects two numbers`, tokens[0].location, 'semantic')
+    }
+
+    const left = this.infer({
+      tokens: args[0]
+    })
+    const right = this.infer({
+      tokens: args[1]
+    })
+
+    if (!this.typeSystem.isNumeric(left) || !this.typeSystem.isNumeric(right)) {
+      throw new Diagnostic(`${name} expects numeric arguments`, tokens[0].location, 'semantic')
+    }
+
+    return this.typeSystem.widest(left, right)
   }
 
   arrayElementCallType(tokens) {

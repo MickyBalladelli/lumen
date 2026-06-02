@@ -645,6 +645,8 @@ export class LLVMEmitter {
 
     if (this.isCall(expression.tokens, SystemFunctions.Println)) return this.emitPrintln(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.Len)) return this.emitLen(expression.tokens)
+    if (this.isCall(expression.tokens, SystemFunctions.Min)) return this.emitMinMax(expression.tokens, 'min')
+    if (this.isCall(expression.tokens, SystemFunctions.Max)) return this.emitMinMax(expression.tokens, 'max')
     if (this.isCall(expression.tokens, SystemFunctions.Includes)) return this.emitIncludes(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.Uuid)) return this.emitUuid(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.Env)) return this.emitEnv(expression.tokens)
@@ -970,6 +972,46 @@ export class LLVMEmitter {
     return {
       type: LumenTypes.I32,
       value: String(iterable.length)
+    }
+  }
+
+  emitMinMax(tokens, mode) {
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 2) {
+      throw new Diagnostic(`${mode} expects two numbers`, tokens[0].location, 'backend')
+    }
+
+    const left = this.emitExpression({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+    const right = this.emitExpression({
+      tokens: args[1],
+      location: tokens[0].location
+    })
+
+    if (!this.typeSystem.isNumeric(left.type) || !this.typeSystem.isNumeric(right.type)) {
+      throw new Diagnostic(`${mode} expects numeric arguments`, tokens[0].location, 'backend')
+    }
+
+    const type = this.typeSystem.widest(left.type, right.type)
+    const predicate = type === LumenTypes.F32
+      ? mode === 'min' ? 'olt' : 'ogt'
+      : mode === 'min' ? 'slt' : 'sgt'
+    const compare = this.nextTemp()
+    const result = this.nextTemp()
+    const instruction = type === LumenTypes.F32 ? 'fcmp' : 'icmp'
+    const llvmType = this.llvmType(type)
+    const leftValue = this.cast(left, type)
+    const rightValue = this.cast(right, type)
+
+    this.lines.push(`  ${compare} = ${instruction} ${predicate} ${llvmType} ${leftValue}, ${rightValue}`)
+    this.lines.push(`  ${result} = select i1 ${compare}, ${llvmType} ${leftValue}, ${llvmType} ${rightValue}`)
+
+    return {
+      type,
+      value: result
     }
   }
 

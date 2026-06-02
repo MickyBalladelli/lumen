@@ -1,6 +1,8 @@
 export const SystemFunctions = Object.freeze({
   Println: 'println',
   Len: 'len',
+  Min: 'min',
+  Max: 'max',
   Filter: 'filter',
   Includes: 'includes',
   Uuid: 'uuid',

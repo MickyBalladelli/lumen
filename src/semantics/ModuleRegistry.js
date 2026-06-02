@@ -4,6 +4,8 @@ export class ModuleRegistry {
       ['system', new Set([
         'println',
         'len',
+        'min',
+        'max',
         'filter',
         'includes',
         'uuid',

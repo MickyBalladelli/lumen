@@ -348,6 +348,13 @@ let greeting = "hello ${name}"
 println(len(values))
 ```
 
+`min(...)` and `max(...)` return the smaller or larger numeric value.
+
+```lumen
+println(min(9, 4))
+println(max(9, 4))
+```
+
 `includes(...)` checks whether a string contains another string, or whether an
 array contains a value.
 
@@ -827,7 +834,7 @@ console.log(ast)
 - `examples/struct.lm`: object type with fields
 - `examples/socket-chat.lm`: Socket.IO-style chat server
 - `examples/socket-helpers.lm`: Socket.IO-style payload helpers
-- `examples/system.lm`: `println`, `len`, and `filter`
+- `examples/system.lm`: `println`, `len`, `min`, `max`, `includes`, and `filter`
 - `examples/switch.lm`: switch with numeric and string cases
 - `examples/thread.lm`: native threads with semaphore-protected file writes
 - `examples/try-catch.lm`: Lumen `try/catch` and `throw`
