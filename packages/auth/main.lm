@@ -19,14 +19,10 @@ function activeDirectoryAuthorizeUrl(tenant: string, clientId: string, redirectU
   return oidcAuthorizeUrl(issuer, clientId, redirectUri, "openid profile email", state, nonce)
 }
 
-function authCallback(code: string, state: string): string {
-  return map("code", code, "state", state)
+function authStateMatches(expected: string, actual: string): bool {
+  return stringEquals(expected, actual)
 }
 
-function authCallbackCode(callback: string): string {
-  return mapGet(callback, "code")
-}
-
-function authCallbackState(callback: string): string {
-  return mapGet(callback, "state")
+function authNeedsTokenExchange(): string {
+  return "Photon auth cannot finish login yet: Lumen needs outbound HTTPS and JWT verification"
 }

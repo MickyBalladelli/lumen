@@ -1,6 +1,10 @@
 # Photon Auth
 
-OIDC helpers for Lumen apps.
+OIDC login-start helpers for Lumen apps.
+
+This package does not finish authentication yet. Real Google, Apple, and Active
+Directory login needs outbound HTTPS token exchange and JWT signature
+verification. Lumen does not have those runtime pieces yet.
 
 ## Install
 
@@ -25,5 +29,6 @@ function main(): i32 {
 - Google: `googleAuthorizeUrl(clientId, redirectUri, state, nonce)`
 - Apple: `appleAuthorizeUrl(clientId, redirectUri, state, nonce)`
 - Active Directory: `activeDirectoryAuthorizeUrl(tenant, clientId, redirectUri, state, nonce)`
+- State check: `authStateMatches(expected, actual)`
 
-This package starts the browser auth flow and keeps callback data. Token exchange and JWT verification need more Lumen HTTP/client crypto support.
+Token exchange and JWT verification need more Lumen HTTP/client crypto support.

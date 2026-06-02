@@ -121,7 +121,7 @@ const expectations = new Map([
     code: 6
   }],
   ['photon-auth', {
-    stdout: '1\n1\ncode-123\n',
+    stdout: '1\n1\n1\nPhoton auth cannot finish login yet: Lumen needs outbound HTTPS and JWT verification\n',
     code: 0
   }],
   ['println', {
