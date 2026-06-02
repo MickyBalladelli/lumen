@@ -16,6 +16,7 @@
     "lmsh": "node ./src/cli/lmsh.js",
     "http": "node ./src/cli/http.js",
     "chat": "node ./src/cli/chat.js",
+    "speedtest": "node ./src/cli/speedtest.js",
     "test": "node ./src/cli/test-examples.js"
   }
 }

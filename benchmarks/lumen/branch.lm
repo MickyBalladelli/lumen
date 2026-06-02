@@ -1,0 +1,22 @@
+function main(): i32 {
+  let total: i64 = 0
+
+  for (let i: i32 = 0; i < 5000000; i++) {
+    if (i % 2) == 0 {
+      if i > 3 {
+        total = total + i
+      } else {
+        total = total + 3
+      }
+    } else {
+      if i < 3 {
+        total = total + i
+      } else {
+        total = total + 3
+      }
+    }
+  }
+
+  println(total)
+  return 0
+}

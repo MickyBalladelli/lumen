@@ -730,6 +730,7 @@ There are a few npm commands:
 - `npm run parse -- <input.lm>`: print AST JSON
 - `npm run http`: run the HTTP example
 - `npm run chat`: run the Socket.IO chat example
+- `npm run speedtest`: compare Lumen, Rust, Python, and Node on benchmark programs
 
 Build the compiler once:
 
@@ -763,6 +764,17 @@ Run all tests:
 ```bash
 npm run test
 ```
+
+Run speed benchmarks:
+
+```bash
+npm run speedtest
+```
+
+The speed test compares precompiled Lumen, `lmsh` compile-and-run mode, Rust,
+Python, and Node versions of the same benchmark programs. Set
+`LUMEN_SPEEDTEST_RUNS=5` to change run count. If `rustc`, `python3`, or `node`
+is missing, that row is marked as missing.
 
 The test runner compiles examples, links binaries, runs expected-output tests,
 checks bootstrap stages, and runs negative compile tests.

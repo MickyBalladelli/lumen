@@ -1,0 +1,14 @@
+function main(): i32 {
+  let a: i64 = 1
+  let b: i64 = 1
+  let next: i64 = 0
+
+  for (let i: i32 = 0; i < 5000000; i++) {
+    next = (a + b) % 1000000007
+    a = b
+    b = next
+  }
+
+  println(b)
+  return 0
+}
