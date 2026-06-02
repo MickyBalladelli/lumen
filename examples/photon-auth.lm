@@ -1,12 +1,32 @@
-import { googleAuthorizeUrl, activeDirectoryAuthorizeUrl, authStateMatches, authNeedsTokenExchange } from "auth"
+import { googleAuthorizeUrl, authNeedsTokenExchange } from "auth"
 
 function main(): i32 {
-  let google = googleAuthorizeUrl("google-client", "http://localhost:3000/auth/callback", "state-1", "nonce-1")
-  let microsoft = activeDirectoryAuthorizeUrl("common", "microsoft-client", "http://localhost:3000/auth/callback", "state-2", "nonce-2")
+  let clientId = env("GOOGLE_CLIENT_ID")
+  let redirectUri = env("AUTH_REDIRECT_URI")
+  let state = env("AUTH_STATE")
+  let nonce = env("AUTH_NONCE")
 
-  println(includes(google, "accounts.google.com"))
-  println(includes(microsoft, "login.microsoftonline.com"))
-  println(authStateMatches("state-1", "state-1"))
+  if stringEquals(clientId, "") {
+    println("missing GOOGLE_CLIENT_ID")
+    return 0
+  }
+
+  if stringEquals(redirectUri, "") {
+    println("missing AUTH_REDIRECT_URI")
+    return 0
+  }
+
+  if stringEquals(state, "") {
+    println("missing AUTH_STATE")
+    return 0
+  }
+
+  if stringEquals(nonce, "") {
+    println("missing AUTH_NONCE")
+    return 0
+  }
+
+  println(googleAuthorizeUrl(clientId, redirectUri, state, nonce))
   println(authNeedsTokenExchange())
 
   return 0
