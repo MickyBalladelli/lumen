@@ -323,9 +323,6 @@ function parseProgram(tokens: string): string {
       program = setExpressionParts(program, statements, tokens, equals + 1)
       program = setResolvedStatement(program, statements, value)
       statements = statements + 1
-      if stringEquals(name, "sum") {
-        program = mapSet(program, "mode", "control-flow")
-      }
       index = equals + 2
       continue
     }

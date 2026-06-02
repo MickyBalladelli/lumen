@@ -1,10 +1,10 @@
-function add(left: i32, right: i32): i32 {
+function combine(left: i32, right: i32): i32 {
   return left + right
 }
 
 function main(): i32 {
   let left = 5
-  let total = add(left, 4)
+  let total = combine(left, 4)
 
   println(total)
   return total

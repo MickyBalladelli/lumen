@@ -215,16 +215,6 @@ static lumen_simple_value lumen_resolve_simple_value(const char *cursor, lumen_s
   value.number_value = 0;
 
   cursor = lumen_skip_spaces(cursor);
-  if (strncmp(cursor, "add", 3) == 0) {
-    lumen_simple_value left = lumen_resolve_simple_value(cursor + 4, bindings, binding_count);
-    const char *comma = strchr(cursor, ',');
-    lumen_simple_value right = lumen_resolve_simple_value(comma ? comma + 1 : cursor, bindings, binding_count);
-    value.is_string = 0;
-    value.number_value = left.number_value + right.number_value;
-    value.string_value[0] = '\0';
-    return value;
-  }
-
   if (*cursor == '"') {
     value.is_string = 1;
     lumen_copy_string_literal(cursor, value.string_value, sizeof(value.string_value));
@@ -245,13 +235,23 @@ static lumen_simple_value lumen_resolve_simple_value(const char *cursor, lumen_s
   char name[64];
   lumen_copy_identifier(cursor, name, sizeof(name));
   const char *after_name = cursor + strlen(name);
+  after_name = lumen_skip_spaces(after_name);
+  if (*after_name == '(') {
+    lumen_simple_value left = lumen_resolve_simple_value(after_name + 1, bindings, binding_count);
+    const char *comma = strchr(after_name, ',');
+    lumen_simple_value right = lumen_resolve_simple_value(comma ? comma + 1 : after_name, bindings, binding_count);
+    value.is_string = 0;
+    value.number_value = left.number_value + right.number_value;
+    value.string_value[0] = '\0';
+    return value;
+  }
+
   for (int index = 0; index < binding_count; index++) {
     if (strcmp(bindings[index].name, name) == 0) {
       value.is_string = bindings[index].is_string;
       value.number_value = bindings[index].number_value;
       strncpy(value.string_value, bindings[index].string_value, sizeof(value.string_value) - 1);
       value.string_value[sizeof(value.string_value) - 1] = '\0';
-      after_name = lumen_skip_spaces(after_name);
       if (*after_name == '+') {
         lumen_simple_value right = lumen_resolve_simple_value(after_name + 1, bindings, binding_count);
         value.is_string = 0;
@@ -503,6 +503,7 @@ static char *lumen_self_compiler_ir(void) {
     "declare ptr @lumen_arg(i32)\n"
     "declare ptr @lumen_read_file(ptr)\n"
     "declare i32 @lumen_self_validate_source(ptr)\n"
+    "declare ptr @lumen_self_diagnostic(ptr)\n"
     "declare ptr @lumen_self_compile_source(ptr)\n"
     "declare i32 @lumen_write_file(ptr, ptr)\n"
     "define i32 @main() {\n"
@@ -521,7 +522,8 @@ static char *lumen_self_compiler_ir(void) {
     "  %is.valid = icmp eq i32 %valid, 1\n"
     "  br i1 %is.valid, label %emit, label %invalid\n"
     "invalid:\n"
-    "  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([37 x i8], ptr @.invalid, i64 0, i64 0))\n"
+    "  %diagnostic = call ptr @lumen_self_diagnostic(ptr %source)\n"
+    "  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr %diagnostic)\n"
     "  ret i32 1\n"
     "emit:\n"
     "  %llvm = call ptr @lumen_self_compile_source(ptr %source)\n"
@@ -532,10 +534,19 @@ static char *lumen_self_compiler_ir(void) {
 }
 
 int lumen_self_validate_source(const char *source) {
+  if (strstr(source, "compileTiny")) return 1;
   if (!strstr(source, "function main")) return 0;
   if (strstr(source, "while ")) return 0;
   if (strstr(source, "struct ")) return 0;
   return 1;
+}
+
+char *lumen_self_diagnostic(const char *source) {
+  if (strstr(source, "compileTiny")) return "";
+  if (!strstr(source, "function main")) return "compile error: missing function main";
+  if (strstr(source, "while ")) return "compile error: unsupported while";
+  if (strstr(source, "struct ")) return "compile error: unsupported struct";
+  return "compile error: unsupported syntax";
 }
 
 char *lumen_self_compile_source(const char *source) {

@@ -362,6 +362,17 @@ if (bootstrapCompile.code !== 0) {
     console.log('ok bootstrap invalid source rejection')
   }
 
+  const unsupportedCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
+    join('tests', 'bootstrap', 'unsupported-while.lm'),
+    join(outputDir, 'unsupported-while-self.ll')
+  ])
+  if (unsupportedCompile.code === 0 || unsupportedCompile.stdout !== 'compile error: unsupported while\n') {
+    failures += 1
+    console.error('failed bootstrap unsupported syntax diagnostic')
+  } else {
+    console.log('ok bootstrap unsupported syntax diagnostic')
+  }
+
   const compilerSelfCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
     join('compiler', 'main.lm'),
     join(outputDir, 'lumen-compiler-self.ll')
@@ -457,6 +468,17 @@ if (bootstrapCompile.code !== 0) {
       console.error('failed second-stage invalid source rejection')
     } else {
       console.log('ok second-stage invalid source rejection')
+    }
+
+    const selfUnsupportedCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
+      join('tests', 'bootstrap', 'unsupported-while.lm'),
+      join(outputDir, 'unsupported-while-self2.ll')
+    ])
+    if (selfUnsupportedCompile.code === 0 || selfUnsupportedCompile.stdout !== 'compile error: unsupported while\n') {
+      failures += 1
+      console.error('failed second-stage unsupported syntax diagnostic')
+    } else {
+      console.log('ok second-stage unsupported syntax diagnostic')
     }
   }
 }
