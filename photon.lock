@@ -3,6 +3,38 @@
     "auth": {
       "source": "./packages/auth",
       "resolved": "local"
+    },
+    "config": {
+      "source": "./packages/config",
+      "resolved": "local"
+    },
+    "dotenv": {
+      "source": "./packages/dotenv",
+      "resolved": "local"
+    },
+    "jwt-lite": {
+      "source": "./packages/jwt-lite",
+      "resolved": "local"
+    },
+    "logger": {
+      "source": "./packages/logger",
+      "resolved": "local"
+    },
+    "router": {
+      "source": "./packages/router",
+      "resolved": "local"
+    },
+    "testing": {
+      "source": "./packages/testing",
+      "resolved": "local"
+    },
+    "url": {
+      "source": "./packages/url",
+      "resolved": "local"
+    },
+    "validation": {
+      "source": "./packages/validation",
+      "resolved": "local"
     }
   }
 }

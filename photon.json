@@ -2,6 +2,14 @@
   "name": "lumen",
   "version": "0.1.0",
   "dependencies": {
-    "auth": "./packages/auth"
+    "auth": "./packages/auth",
+    "config": "./packages/config",
+    "dotenv": "./packages/dotenv",
+    "jwt-lite": "./packages/jwt-lite",
+    "logger": "./packages/logger",
+    "router": "./packages/router",
+    "testing": "./packages/testing",
+    "url": "./packages/url",
+    "validation": "./packages/validation"
   }
 }

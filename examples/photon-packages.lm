@@ -1,0 +1,37 @@
+import { envOr, requireEnv } from "dotenv"
+import { query2, urlWithQuery, urlNeedsEncoding } from "url"
+import { requireString, emailLike } from "validation"
+import { configFromEnv } from "config"
+import { routeKey, routeMatches, jsonResponse } from "router"
+import { infoLine } from "logger"
+import { jwtLooksLikeToken, jwtNeedsVerification } from "jwt-lite"
+import { expectString, expectI32 } from "testing"
+
+function main(): i32 {
+  let query = query2("page", "1", "sort", "new")
+  let url = urlWithQuery("https://example.com/items", query)
+  let missingEnv = requireEnv("PHOTON_MISSING_ENV")
+  let validName = requireString("name", "lumen")
+  let invalidEmail = emailLike("email", "not-email")
+  let response = jsonResponse(200, '{"ok":true}')
+  let info = infoLine("ready")
+
+  println(envOr("PHOTON_MISSING_ENV", "fallback"))
+  println(errorMessage(missingEnv))
+  println(includes(url, "page=1&sort=new"))
+  println(urlNeedsEncoding())
+  println(isOk(validName))
+  println(errorMessage(invalidEmail))
+  println(configFromEnv("PHOTON_MISSING_CONFIG", "local"))
+  println(routeKey("GET", "/health"))
+  println(routeMatches("GET", "/health", "GET", "/health"))
+  println(includes(response, '"ok":true'))
+  println(includes(info, "INFO ready"))
+  println(jwtLooksLikeToken("a.b.c"))
+  println(jwtNeedsVerification())
+
+  expectString("string", "same", "same")
+  expectI32("number", 3, 3)
+
+  return 0
+}

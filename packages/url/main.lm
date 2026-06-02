@@ -1,0 +1,23 @@
+function queryPair(name: string, value: string): string {
+  return name + "=" + value
+}
+
+function query2(firstName: string, firstValue: string, secondName: string, secondValue: string): string {
+  let first = queryPair(firstName, firstValue)
+  let second = queryPair(secondName, secondValue)
+  return first + "&" + second
+}
+
+function query3(firstName: string, firstValue: string, secondName: string, secondValue: string, thirdName: string, thirdValue: string): string {
+  let first = query2(firstName, firstValue, secondName, secondValue)
+  let second = queryPair(thirdName, thirdValue)
+  return first + "&" + second
+}
+
+function urlWithQuery(base: string, query: string): string {
+  return base + "?" + query
+}
+
+function urlNeedsEncoding(): string {
+  return "url package does not encode yet"
+}

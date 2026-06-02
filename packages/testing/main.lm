@@ -1,0 +1,21 @@
+function expectString(name: string, actual: string, expected: string): i32 {
+  if stringEquals(actual, expected) {
+    println("ok " + name)
+    return 0
+  }
+
+  println("failed " + name)
+  println(actual)
+  return 1
+}
+
+function expectI32(name: string, actual: i32, expected: i32): i32 {
+  if actual == expected {
+    println("ok " + name)
+    return 0
+  }
+
+  println("failed " + name)
+  println(actual)
+  return 1
+}

@@ -1,0 +1,23 @@
+function configFromEnv(name: string, fallback: string): string {
+  let value = env(name)
+
+  if stringEquals(value, "") {
+    return fallback
+  }
+
+  return value
+}
+
+function configRequired(name: string): string {
+  let value = env(name)
+
+  if stringEquals(value, "") {
+    return err("missing config " + name)
+  }
+
+  return ok(value)
+}
+
+function configPair(name: string, value: string): string {
+  return map(name, value)
+}

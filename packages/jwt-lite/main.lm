@@ -1,0 +1,7 @@
+function jwtLooksLikeToken(value: string): bool {
+  return includes(value, ".")
+}
+
+function jwtNeedsVerification(): string {
+  return "jwt-lite does not verify signatures yet"
+}

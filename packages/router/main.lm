@@ -1,0 +1,19 @@
+function routeKey(method: string, path: string): string {
+  return method + " " + path
+}
+
+function routeMatches(actualMethod: string, actualPath: string, expectedMethod: string, expectedPath: string): bool {
+  if stringEquals(actualMethod, expectedMethod) {
+    return stringEquals(actualPath, expectedPath)
+  }
+
+  return false
+}
+
+function jsonResponse(status: i32, body: string): string {
+  return httpResponse(status, '{"content-type":"application/json"}', body)
+}
+
+function notFoundResponse(): string {
+  return httpResponse(404, '{"content-type":"application/json"}', '{"error":"not found"}')
+}

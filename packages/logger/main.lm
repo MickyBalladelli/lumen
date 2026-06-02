@@ -1,0 +1,24 @@
+function logLine(level: string, message: string): string {
+  let now = date()
+  return now + " " + level + " " + message
+}
+
+function infoLine(message: string): string {
+  let now = date()
+  return now + " INFO " + message
+}
+
+function warnLine(message: string): string {
+  let now = date()
+  return now + " WARN " + message
+}
+
+function errorLine(message: string): string {
+  let now = date()
+  return now + " ERROR " + message
+}
+
+function appendLog(path: string, level: string, message: string): i32 {
+  let line = logLine(level, message)
+  return appendFile(path, line)
+}
