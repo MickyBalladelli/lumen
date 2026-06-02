@@ -1,0 +1,25 @@
+function okOr(value: string, fallbackError: string): string {
+  if stringEquals(value, "") {
+    return err(fallbackError)
+  }
+
+  return ok(value)
+}
+
+function mapError(result: string, prefix: string): string {
+  if isOk(result) {
+    return result
+  }
+
+  let message = errorMessage(result)
+  let next = stringBuilderAppend(prefix, message)
+  return err(next)
+}
+
+function errorOr(result: string, fallback: string): string {
+  if isOk(result) {
+    return fallback
+  }
+
+  return errorMessage(result)
+}

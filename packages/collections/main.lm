@@ -1,0 +1,23 @@
+function mapRequire(data: string, key: string): string {
+  let value = mapGet(data, key)
+
+  if stringEquals(value, "") {
+    return err("missing key " + key)
+  }
+
+  return ok(value)
+}
+
+function mapValueOr(data: string, key: string, fallback: string): string {
+  let value = mapGet(data, key)
+
+  if stringEquals(value, "") {
+    return fallback
+  }
+
+  return value
+}
+
+function listAppend(listValue: string, value: string): string {
+  return listPush(listValue, value)
+}

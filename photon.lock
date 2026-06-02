@@ -8,6 +8,22 @@
       "source": "./packages/config",
       "resolved": "local"
     },
+    "cli": {
+      "source": "./packages/cli",
+      "resolved": "local"
+    },
+    "collections": {
+      "source": "./packages/collections",
+      "resolved": "local"
+    },
+    "fs-extra": {
+      "source": "./packages/fs-extra",
+      "resolved": "local"
+    },
+    "http-kit": {
+      "source": "./packages/http-kit",
+      "resolved": "local"
+    },
     "jwt-lite": {
       "source": "./packages/jwt-lite",
       "resolved": "local"
@@ -16,12 +32,28 @@
       "source": "./packages/logger",
       "resolved": "local"
     },
+    "option": {
+      "source": "./packages/option",
+      "resolved": "local"
+    },
+    "result": {
+      "source": "./packages/result",
+      "resolved": "local"
+    },
     "router": {
       "source": "./packages/router",
       "resolved": "local"
     },
+    "string-extra": {
+      "source": "./packages/string-extra",
+      "resolved": "local"
+    },
     "testing": {
       "source": "./packages/testing",
+      "resolved": "local"
+    },
+    "time": {
+      "source": "./packages/time",
       "resolved": "local"
     },
     "url": {

@@ -11,7 +11,8 @@ function minI32(name: string, value: i32, min: i32): string {
     return err(name + " is too small")
   }
 
-  return ok(intToString(value))
+  let text = intToString(value)
+  return ok(text)
 }
 
 function maxI32(name: string, value: i32, max: i32): string {
@@ -19,7 +20,8 @@ function maxI32(name: string, value: i32, max: i32): string {
     return err(name + " is too large")
   }
 
-  return ok(intToString(value))
+  let text = intToString(value)
+  return ok(text)
 }
 
 function emailLike(name: string, value: string): string {

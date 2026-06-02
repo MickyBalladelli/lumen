@@ -1,0 +1,19 @@
+function someIf(value: string, condition: bool): string? {
+  if condition {
+    return some(value)
+  }
+
+  return none()
+}
+
+function noneIfEmpty(value: string): string? {
+  if stringEquals(value, "") {
+    return none()
+  }
+
+  return some(value)
+}
+
+function valueOrEmpty(value: string?): string {
+  return valueOr(value, "")
+}

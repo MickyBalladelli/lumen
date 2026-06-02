@@ -1,0 +1,13 @@
+function nowText(): string {
+  return date()
+}
+
+function timestampedName(prefix: string, suffix: string): string {
+  let now = date()
+  return prefix + "-" + now + suffix
+}
+
+function timeNote(message: string): string {
+  let now = date()
+  return now + " " + message
+}

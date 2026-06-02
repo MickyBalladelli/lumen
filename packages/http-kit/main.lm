@@ -1,0 +1,18 @@
+function jsonHeaders(): string {
+  return '{"content-type":"application/json"}'
+}
+
+function jsonOk(body: string): string {
+  let headers = jsonHeaders()
+  return httpResponse(200, headers, body)
+}
+
+function jsonError(status: i32, message: string): string {
+  let body = '{"error":"' + message + '"}'
+  let headers = jsonHeaders()
+  return httpResponse(status, headers, body)
+}
+
+function textResponse(status: i32, body: string): string {
+  return httpResponse(status, '{"content-type":"text/plain"}', body)
+}

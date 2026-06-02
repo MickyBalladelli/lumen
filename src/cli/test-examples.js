@@ -128,6 +128,10 @@ const expectations = new Map([
     stdout: 'fallback\nmissing env PHOTON_MISSING_ENV\n1\nurl package does not encode yet\n1\nemail must look like email\nlocal\nGET /health\n1\n1\n1\n1\njwt-lite does not verify signatures yet\nok string\nok number\n',
     code: 0
   }],
+  ['photon-more-packages', {
+    stdout: 'bad empty\nvalue\n0\n1\n1\n1\nhi lumen\nfallback-arg\n0\n1\n1\n1\n{"ok":true}\n1\nfallback-map\nfirst\n1\n1\n',
+    code: 0
+  }],
   ['println', {
     stdout: 'total\n10\n',
     code: 10

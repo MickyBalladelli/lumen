@@ -1,0 +1,18 @@
+function argOr(index: i32, fallback: string): string {
+  let value = arg(index)
+
+  if stringEquals(value, "") {
+    return fallback
+  }
+
+  return value
+}
+
+function hasArgs(): bool {
+  let count = argCount()
+  return count > 1
+}
+
+function commandName(fallback: string): string {
+  return argOr(1, fallback)
+}

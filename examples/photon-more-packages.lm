@@ -1,0 +1,47 @@
+import { errorOr, mapError, okOr } from "result"
+import { noneIfEmpty, someIf, valueOrEmpty } from "option"
+import { containsText, isEmpty, notEmpty, prefixLine } from "string-extra"
+import { argOr, hasArgs } from "cli"
+import { jsonError, jsonOk, textResponse } from "http-kit"
+import { readTextOr, writeJsonText } from "fs-extra"
+import { mapRequire, mapValueOr, listAppend } from "collections"
+import { nowText, timeNote } from "time"
+
+function main(): i32 {
+  let missing = okOr("", "empty")
+  let mapped = mapError(missing, "bad ")
+  let present = someIf("value", true)
+  let empty = noneIfEmpty("")
+  let data = map("name", "lumen")
+  let requiredName = mapRequire(data, "name")
+  let items = list()
+  let nextItems = listAppend(items, "first")
+  let okResponse = jsonOk('{"ok":true}')
+  let errorResponse = jsonError(400, "bad")
+  let text = textResponse(200, "hello")
+  let now = nowText()
+  let note = timeNote("ready")
+
+  writeJsonText("build/photon-more.json", '{"ok":true}')
+
+  println(errorOr(mapped, "none"))
+  println(valueOrEmpty(present))
+  println(hasValue(empty))
+  println(isEmpty(""))
+  println(notEmpty("x"))
+  println(containsText("hello lumen", "lumen"))
+  println(prefixLine("hi ", "lumen"))
+  println(argOr(9, "fallback-arg"))
+  println(hasArgs())
+  println(includes(okResponse, '"ok":true'))
+  println(includes(errorResponse, "bad"))
+  println(includes(text, "hello"))
+  println(readTextOr("build/photon-more.json", "missing"))
+  println(isOk(requiredName))
+  println(mapValueOr(data, "missing", "fallback-map"))
+  println(listGet(nextItems, 0))
+  println(includes(now, "-"))
+  println(includes(note, "ready"))
+
+  return 0
+}

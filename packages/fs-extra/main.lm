@@ -1,0 +1,17 @@
+function readTextOr(path: string, fallback: string): string {
+  let value = readFile(path)
+
+  if stringEquals(value, "") {
+    return fallback
+  }
+
+  return value
+}
+
+function writeJsonText(path: string, jsonText: string): i32 {
+  return writeFile(path, jsonText)
+}
+
+function appendLine(path: string, message: string): i32 {
+  return appendFile(path, message)
+}

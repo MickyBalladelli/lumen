@@ -1,0 +1,19 @@
+function isEmpty(value: string): bool {
+  return stringEquals(value, "")
+}
+
+function notEmpty(value: string): bool {
+  if stringEquals(value, "") {
+    return false
+  }
+
+  return true
+}
+
+function containsText(value: string, needle: string): bool {
+  return includes(value, needle)
+}
+
+function prefixLine(prefix: string, value: string): string {
+  return stringBuilderAppend(prefix, value)
+}

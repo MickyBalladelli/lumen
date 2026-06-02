@@ -4,10 +4,18 @@
   "dependencies": {
     "auth": "./packages/auth",
     "config": "./packages/config",
+    "cli": "./packages/cli",
+    "collections": "./packages/collections",
+    "fs-extra": "./packages/fs-extra",
+    "http-kit": "./packages/http-kit",
     "jwt-lite": "./packages/jwt-lite",
     "logger": "./packages/logger",
+    "option": "./packages/option",
+    "result": "./packages/result",
     "router": "./packages/router",
+    "string-extra": "./packages/string-extra",
     "testing": "./packages/testing",
+    "time": "./packages/time",
     "url": "./packages/url",
     "validation": "./packages/validation"
   }
