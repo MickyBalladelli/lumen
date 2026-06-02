@@ -14,6 +14,8 @@
   ],
   "activationEvents": [
     "onLanguage:lumen",
+    "onDebugInitialConfigurations:lumen",
+    "onDebugResolve:lumen",
     "onCommand:lumen.compileCurrentFile",
     "onCommand:lumen.debugCurrentFile"
   ],
@@ -37,6 +39,58 @@
         "language": "lumen",
         "scopeName": "source.lumen",
         "path": "./syntaxes/lumen.tmLanguage.json"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "lumen",
+        "label": "Lumen Debugger",
+        "languages": [
+          "lumen"
+        ],
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "source"
+            ],
+            "properties": {
+              "source": {
+                "type": "string",
+                "description": "Lumen source file to compile and debug.",
+                "default": "${file}"
+              },
+              "args": {
+                "type": "array",
+                "description": "Arguments passed to the Lumen program.",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              },
+              "cwd": {
+                "type": "string",
+                "description": "Working directory for the Lumen program.",
+                "default": "${workspaceFolder}"
+              },
+              "stopAtEntry": {
+                "type": "boolean",
+                "description": "Stop at program entry.",
+                "default": false
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "name": "Debug Lumen File",
+            "type": "lumen",
+            "request": "launch",
+            "source": "${file}",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "stopAtEntry": false
+          }
+        ]
       }
     ],
     "breakpoints": [

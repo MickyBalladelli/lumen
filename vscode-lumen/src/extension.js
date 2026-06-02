@@ -4,7 +4,10 @@ const fs = require('fs/promises')
 const { spawn } = require('child_process')
 
 async function activate(context) {
+  const debugProvider = new LumenDebugConfigurationProvider(context)
+
   context.subscriptions.push(
+    vscode.debug.registerDebugConfigurationProvider('lumen', debugProvider),
     vscode.commands.registerCommand('lumen.compileCurrentFile', () => compileCurrentFile(context)),
     vscode.commands.registerCommand('lumen.debugCurrentFile', () => debugCurrentFile(context))
   )
@@ -22,12 +25,96 @@ async function debugCurrentFile(context) {
   const document = getLumenDocument()
   if (!document) return
 
-  const program = await compileDocument(context, document)
-  const config = vscode.workspace.getConfiguration('lumen')
-  const debuggerType = config.get('debuggerType', 'lldb')
-  const debugConfig = createDebugConfig(debuggerType, program, document.uri.fsPath)
+  const debugConfig = {
+    name: 'Debug Lumen File',
+    type: 'lumen',
+    request: 'launch',
+    source: document.uri.fsPath,
+    args: [],
+    cwd: path.dirname(document.uri.fsPath),
+    stopAtEntry: false
+  }
 
   await vscode.debug.startDebugging(vscode.workspace.getWorkspaceFolder(document.uri), debugConfig)
+}
+
+class LumenDebugConfigurationProvider {
+  constructor(context) {
+    this.context = context
+  }
+
+  provideDebugConfigurations() {
+    return [
+      {
+        name: 'Debug Lumen File',
+        type: 'lumen',
+        request: 'launch',
+        source: '${file}',
+        args: [],
+        cwd: '${workspaceFolder}',
+        stopAtEntry: false
+      }
+    ]
+  }
+
+  async resolveDebugConfiguration(folder, config) {
+    const sourcePath = this.resolveSourcePath(folder, config)
+    const document = await getLumenDocumentForPath(sourcePath)
+
+    if (!document) {
+      vscode.window.showWarningMessage('Open a Lumen .lm file first')
+      return null
+    }
+
+    const settings = vscode.workspace.getConfiguration('lumen')
+    const debuggerType = settings.get('debuggerType', 'lldb')
+    const nativeDebuggerType = resolveNativeDebuggerType(debuggerType)
+
+    if (!nativeDebuggerType) {
+      vscode.window.showWarningMessage('Install CodeLLDB or Microsoft C/C++ to debug Lumen files')
+      return null
+    }
+
+    const program = await compileDocument(this.context, document)
+
+    return createDebugConfig(nativeDebuggerType, program, document.uri.fsPath, config)
+  }
+
+  resolveSourcePath(folder, config) {
+    const editorPath = vscode.window.activeTextEditor?.document?.uri?.fsPath
+    const workspacePath = folder?.uri.fsPath
+    const source = config.source || config.program || editorPath
+
+    if (!source || source === '${file}') return editorPath
+    if (source === '${workspaceFolder}') return workspacePath
+    if (typeof source !== 'string') return editorPath
+    if (source.startsWith('${workspaceFolder}/') && workspacePath) {
+      return path.join(workspacePath, source.slice('${workspaceFolder}/'.length))
+    }
+    if (path.isAbsolute(source)) return source
+    if (workspacePath) return path.resolve(workspacePath, source)
+
+    return path.resolve(source)
+  }
+}
+
+function resolveNativeDebuggerType(debuggerType) {
+  const hasLldb = Boolean(vscode.extensions.getExtension('vadimcn.vscode-lldb'))
+  const hasCppdbg = Boolean(vscode.extensions.getExtension('ms-vscode.cpptools'))
+
+  if (debuggerType === 'lldb') {
+    if (hasLldb) return 'lldb'
+    if (hasCppdbg) return 'cppdbg'
+    return null
+  }
+
+  if (debuggerType === 'cppdbg') {
+    if (hasCppdbg) return 'cppdbg'
+    if (hasLldb) return 'lldb'
+    return null
+  }
+
+  return null
 }
 
 function getLumenDocument() {
@@ -68,16 +155,29 @@ async function compileDocument(context, document) {
   return output
 }
 
-function createDebugConfig(debuggerType, program, sourcePath) {
+async function getLumenDocumentForPath(sourcePath) {
+  const activeDocument = vscode.window.activeTextEditor?.document
+
+  if (!sourcePath && activeDocument?.languageId === 'lumen') return activeDocument
+  if (!sourcePath) return null
+  if (activeDocument?.uri.fsPath === sourcePath && activeDocument.languageId === 'lumen') return activeDocument
+
+  const document = await vscode.workspace.openTextDocument(vscode.Uri.file(sourcePath))
+  if (document.languageId !== 'lumen') return null
+
+  return document
+}
+
+function createDebugConfig(debuggerType, program, sourcePath, lumenConfig = {}) {
   if (debuggerType === 'cppdbg') {
     return {
       name: 'Debug Lumen File',
       type: 'cppdbg',
       request: 'launch',
       program,
-      args: [],
-      cwd: path.dirname(sourcePath),
-      stopAtEntry: false,
+      args: lumenConfig.args || [],
+      cwd: resolveCwd(lumenConfig.cwd, sourcePath),
+      stopAtEntry: lumenConfig.stopAtEntry || false,
       MIMode: 'lldb'
     }
   }
@@ -87,9 +187,26 @@ function createDebugConfig(debuggerType, program, sourcePath) {
     type: 'lldb',
     request: 'launch',
     program,
-    args: [],
-    cwd: path.dirname(sourcePath)
+    args: lumenConfig.args || [],
+    cwd: resolveCwd(lumenConfig.cwd, sourcePath),
+    stopOnEntry: lumenConfig.stopAtEntry || false
   }
+}
+
+function resolveCwd(cwd, sourcePath) {
+  const workspaceFolder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(sourcePath))
+  const workspacePath = workspaceFolder?.uri.fsPath
+
+  if (!cwd || cwd === '${fileDirname}') return path.dirname(sourcePath)
+  if (cwd === '${workspaceFolder}' && workspacePath) return workspacePath
+  if (typeof cwd !== 'string') return path.dirname(sourcePath)
+  if (cwd.startsWith('${workspaceFolder}/') && workspacePath) {
+    return path.join(workspacePath, cwd.slice('${workspaceFolder}/'.length))
+  }
+  if (path.isAbsolute(cwd)) return cwd
+  if (workspacePath) return path.resolve(workspacePath, cwd)
+
+  return path.resolve(path.dirname(sourcePath), cwd)
 }
 
 function run(command, args, options) {
