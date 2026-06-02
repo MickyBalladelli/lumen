@@ -1,0 +1,13 @@
+import { googleAuthorizeUrl, activeDirectoryAuthorizeUrl, authCallback, authCallbackCode } from "auth"
+
+function main(): i32 {
+  let google = googleAuthorizeUrl("google-client", "http://localhost:3000/auth/callback", "state-1", "nonce-1")
+  let microsoft = activeDirectoryAuthorizeUrl("common", "microsoft-client", "http://localhost:3000/auth/callback", "state-2", "nonce-2")
+  let callback = authCallback("code-123", "state-1")
+
+  println(includes(google, "accounts.google.com"))
+  println(includes(microsoft, "login.microsoftonline.com"))
+  println(authCallbackCode(callback))
+
+  return 0
+}

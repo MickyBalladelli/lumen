@@ -1,0 +1,32 @@
+function authNonce(): string {
+  return uuid()
+}
+
+function oidcAuthorizeUrl(issuer: string, clientId: string, redirectUri: string, scope: string, state: string, nonce: string): string {
+  return issuer + "/authorize?response_type=code&client_id=" + clientId + "&redirect_uri=" + redirectUri + "&scope=" + scope + "&state=" + state + "&nonce=" + nonce
+}
+
+function googleAuthorizeUrl(clientId: string, redirectUri: string, state: string, nonce: string): string {
+  return oidcAuthorizeUrl("https://accounts.google.com/o/oauth2/v2/auth", clientId, redirectUri, "openid profile email", state, nonce)
+}
+
+function appleAuthorizeUrl(clientId: string, redirectUri: string, state: string, nonce: string): string {
+  return oidcAuthorizeUrl("https://appleid.apple.com/auth", clientId, redirectUri, "openid name email", state, nonce)
+}
+
+function activeDirectoryAuthorizeUrl(tenant: string, clientId: string, redirectUri: string, state: string, nonce: string): string {
+  let issuer = "https://login.microsoftonline.com/" + tenant + "/oauth2/v2.0"
+  return oidcAuthorizeUrl(issuer, clientId, redirectUri, "openid profile email", state, nonce)
+}
+
+function authCallback(code: string, state: string): string {
+  return map("code", code, "state", state)
+}
+
+function authCallbackCode(callback: string): string {
+  return mapGet(callback, "code")
+}
+
+function authCallbackState(callback: string): string {
+  return mapGet(callback, "state")
+}
