@@ -325,6 +325,9 @@ export class LLVMEmitter {
   }
 
   emitIf(node) {
+    const selectedAssignment = this.emitSelectableIfAssignment(node)
+    if (selectedAssignment) return selectedAssignment
+
     const thenLabel = this.nextLabel('if.then')
     const elseLabel = this.nextLabel('if.else')
     const endLabel = this.nextLabel('if.end')
@@ -342,6 +345,96 @@ export class LLVMEmitter {
     }
 
     this.lines.push(`${endLabel}:`)
+  }
+
+  emitSelectableIfAssignment(node) {
+    const assignment = this.selectableIfAssignment(node, {
+      allowConditionRemainder: true
+    })
+    if (!assignment) return null
+
+    const targetPointer = this.emitAssignmentTargetPointer(assignment.targetTokens)
+    const value = this.emitSelectableIfValue(node, assignment.targetName)
+
+    this.lines.push(`  store ${this.llvmType(targetPointer.type)} ${this.cast(value, targetPointer.type)}, ptr ${targetPointer.pointer}`)
+    return {
+      type: targetPointer.type,
+      value: this.cast(value, targetPointer.type)
+    }
+  }
+
+  emitSelectableIfValue(node, targetName) {
+    const condition = this.emitExpression(node.test)
+    const consequent = this.emitSelectableBranchValue(node.consequent, targetName)
+    const alternate = this.emitSelectableBranchValue(node.alternate, targetName)
+    const type = this.typeSystem.widest(consequent.type, alternate.type)
+    const selected = this.nextTemp()
+
+    this.lines.push(`  ${selected} = select i1 ${this.cast(condition, LumenTypes.Bool)}, ${this.llvmType(type)} ${this.cast(consequent, type)}, ${this.llvmType(type)} ${this.cast(alternate, type)}`)
+    return {
+      type,
+      value: selected
+    }
+  }
+
+  emitSelectableBranchValue(branch, targetName) {
+    const statement = this.singleBlockStatement(branch)
+    if (statement.kind === 'IfStatement') return this.emitSelectableIfValue(statement, targetName)
+
+    const assignmentIndex = this.findTopLevelOperator(statement.expression.tokens, '=')
+    return this.emitExpression({
+      tokens: statement.expression.tokens.slice(assignmentIndex + 1),
+      location: statement.expression.location
+    })
+  }
+
+  selectableIfAssignment(node, { allowConditionRemainder = false } = {}) {
+    if (!node.alternate || !this.isSideEffectFreeExpression(node.test, { allowRemainder: allowConditionRemainder })) return null
+
+    const consequent = this.selectableBranchAssignment(node.consequent)
+    const alternate = this.selectableBranchAssignment(node.alternate)
+
+    if (!consequent || !alternate) return null
+    if (consequent.targetName !== alternate.targetName) return null
+
+    return consequent
+  }
+
+  selectableBranchAssignment(branch) {
+    const statement = this.singleBlockStatement(branch)
+    if (!statement) return null
+
+    if (statement.kind === 'IfStatement') return this.selectableIfAssignment(statement)
+    if (statement.kind !== 'ExpressionStatement') return null
+
+    const tokens = statement.expression.tokens
+    const assignmentIndex = this.findTopLevelOperator(tokens, '=')
+    if (assignmentIndex <= 0 || !this.isSideEffectFreeExpression(statement.expression)) return null
+
+    const targetTokens = tokens.slice(0, assignmentIndex)
+    if (targetTokens.length !== 1 || targetTokens[0].type !== TokenType.Identifier) return null
+
+    return {
+      targetName: targetTokens[0].lexeme,
+      targetTokens
+    }
+  }
+
+  singleBlockStatement(statement) {
+    if (!statement) return null
+    if (statement.kind === 'BlockStatement') return statement.body.length === 1 ? statement.body[0] : null
+
+    return statement
+  }
+
+  isSideEffectFreeExpression(expression, { allowRemainder = false } = {}) {
+    return expression?.tokens.every(token => {
+      if (token.type === TokenType.Operator && (token.lexeme === '/' || (!allowRemainder && token.lexeme === '%'))) return false
+      if ([TokenType.Number, TokenType.Identifier, TokenType.Operator, TokenType.Punctuation].includes(token.type)) return true
+      if (token.type === TokenType.Keyword && ['true', 'false'].includes(token.lexeme)) return true
+
+      return false
+    })
   }
 
   emitSwitch(node) {

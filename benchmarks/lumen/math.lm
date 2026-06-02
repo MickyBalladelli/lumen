@@ -1,0 +1,10 @@
+function main(): i32 {
+  let total: i64 = 0
+
+  for (let i: i64 = 0; i < 5000000; i++) {
+    total = (total + ((i * 31) % 1000000007)) % 1000000007
+  }
+
+  println(total)
+  return 0
+}

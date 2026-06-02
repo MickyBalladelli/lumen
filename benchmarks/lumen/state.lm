@@ -1,0 +1,19 @@
+function main(): i32 {
+  let a: i64 = 1
+  let b: i64 = 3
+  let total: i64 = 0
+
+  for (let i: i64 = 0; i < 5000000; i++) {
+    a = ((a * 1664525) + 1013904223) % 1000000007
+    b = (b + a + i) % 1000000007
+
+    if (b % 3) == 0 {
+      total = (total + a) % 1000000007
+    } else {
+      total = (total + b) % 1000000007
+    }
+  }
+
+  println(total)
+  return 0
+}

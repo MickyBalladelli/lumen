@@ -1,0 +1,12 @@
+function main(): i32 {
+  let total: i64 = 0
+
+  for (let i: i64 = 0; i < 2500; i++) {
+    for (let j: i64 = 0; j < 2000; j++) {
+      total = total + ((i * j) % 97)
+    }
+  }
+
+  println(total)
+  return 0
+}

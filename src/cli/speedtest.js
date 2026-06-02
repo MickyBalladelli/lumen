@@ -3,8 +3,8 @@ import { join } from 'node:path'
 import { spawn } from 'node:child_process'
 import { Compiler } from '../compiler/Compiler.js'
 
-const tests = ['sum', 'fib', 'branch']
-const languages = ['lumen', 'lmsh', 'rust', 'python', 'node']
+const tests = ['sum', 'fib', 'branch', 'math', 'nested', 'state']
+const languages = ['lumen', 'rust', 'node', 'lmsh', 'python']
 const runs = Number(process.env.LUMEN_SPEEDTEST_RUNS ?? '3')
 const outputDir = join('build', 'speedtest')
 const compiler = new Compiler()
@@ -45,6 +45,7 @@ async function runBenchmark(language, test) {
     test,
     language,
     bestMs: '-',
+    medianMs: '-',
     avgMs: '-',
     output: '',
     note: ''
@@ -72,6 +73,7 @@ async function runBenchmark(language, test) {
     }
 
     row.bestMs = formatMs(Math.min(...timings))
+    row.medianMs = formatMs(median(timings))
     row.avgMs = formatMs(timings.reduce((sum, value) => sum + value, 0) / timings.length)
     row.output = output
     return row
@@ -175,14 +177,14 @@ async function commandExists(command) {
 }
 
 function printTable(rows) {
-  const headers = ['test', 'language', 'best run ms', 'avg run ms', 'output', 'note']
+  const headers = ['test', 'language', 'rank', 'best run ms', 'median run ms']
+  const ranks = rankRows(rows)
   const body = rows.map(row => [
     row.test,
     row.language,
+    ranks.get(row) ?? '-',
     row.bestMs,
-    row.avgMs,
-    row.output,
-    row.note
+    row.medianMs
   ])
   const widths = headers.map((header, index) => Math.max(
     header.length,
@@ -192,6 +194,30 @@ function printTable(rows) {
   printRow(headers, widths)
   console.log(widths.map(width => '-'.repeat(width)).join(' | '))
   for (const row of body) printRow(row, widths)
+}
+
+function rankRows(rows) {
+  const ranks = new Map()
+
+  for (const test of tests) {
+    const testRows = rows
+      .filter(row => row.test === test && Number.isFinite(Number(row.bestMs)))
+      .sort((left, right) => Number(left.bestMs) - Number(right.bestMs))
+
+    testRows.forEach((row, index) => {
+      ranks.set(row, ordinal(index + 1))
+    })
+  }
+
+  return ranks
+}
+
+function ordinal(value) {
+  if (value === 1) return '1st'
+  if (value === 2) return '2nd'
+  if (value === 3) return '3rd'
+
+  return `${value}th`
 }
 
 function printRow(values, widths) {
@@ -204,6 +230,15 @@ function now() {
 
 function elapsed(started) {
   return Number(process.hrtime.bigint() - started) / 1_000_000
+}
+
+function median(values) {
+  const sorted = [...values].sort((left, right) => left - right)
+  const middle = Math.floor(sorted.length / 2)
+
+  if (sorted.length % 2 === 1) return sorted[middle]
+
+  return (sorted[middle - 1] + sorted[middle]) / 2
 }
 
 function formatMs(value) {
