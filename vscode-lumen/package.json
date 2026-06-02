@@ -4,7 +4,7 @@
   "description": "Lumen language support, build command, and native debug launcher",
   "version": "0.1.0",
   "publisher": "lumen",
-  "icon": "images/lumen-logo.png",
+  "icon": "images/lumen-logo-small.png",
   "engines": {
     "vscode": "^1.85.0"
   },
