@@ -43,6 +43,7 @@ export class ExpressionInspector {
     if (this.isCall(rawExpression, SystemFunctions.Ok)) return this.resultOkType(rawExpression.tokens)
     if (this.isCall(rawExpression, SystemFunctions.Err)) return 'Result<unknown>'
     if (this.isCall(rawExpression, SystemFunctions.IsOk)) return LumenTypes.Bool
+    if (this.isCall(rawExpression, SystemFunctions.ResultValue)) return this.resultValueType(rawExpression.tokens)
     if (this.isCall(rawExpression, SystemFunctions.ErrorMessage)) return LumenTypes.String
     if (this.isCall(rawExpression, SystemFunctions.Some)) return this.someType(rawExpression.tokens)
     if (this.isCall(rawExpression, SystemFunctions.None)) return LumenTypes.Unknown
@@ -467,6 +468,19 @@ export class ExpressionInspector {
       tokens: args[0]
     })
     return `Result<${valueType}>`
+  }
+
+  resultValueType(tokens) {
+    const args = this.callArguments(tokens)
+    if (args.length !== 1) return LumenTypes.Unknown
+    const resultType = this.infer({
+      tokens: args[0]
+    })
+    if (!this.typeSystem.isGeneric(resultType) || this.typeSystem.genericBase(resultType) !== 'Result') {
+      throw new Diagnostic('resultValue expects Result<T>', tokens[0].location, 'semantic')
+    }
+
+    return this.typeSystem.genericArgs(resultType)[0] ?? LumenTypes.Unknown
   }
 
   someType(tokens) {

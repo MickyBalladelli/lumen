@@ -1,0 +1,8 @@
+function echoText(value: string): string {
+  return value
+}
+
+function main(): i32 {
+  echoText(none())
+  return 0
+}

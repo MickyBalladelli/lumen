@@ -24,6 +24,7 @@ export class ModuleRegistry {
         'ok',
         'err',
         'isOk',
+        'resultValue',
         'errorMessage',
         'some',
         'none',

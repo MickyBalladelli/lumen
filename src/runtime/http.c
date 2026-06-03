@@ -1380,6 +1380,11 @@ int lumen_is_ok(const char *result) {
   return strncmp(result, "ok:", 3) == 0;
 }
 
+char *lumen_result_value(const char *result) {
+  if (strncmp(result, "ok:", 3) != 0) return "";
+  return (char *)result + 3;
+}
+
 char *lumen_error_message(const char *result) {
   if (strncmp(result, "err:", 4) != 0) return "";
   return (char *)result + 4;

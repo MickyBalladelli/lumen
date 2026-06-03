@@ -5,6 +5,9 @@
   "exports": [
     "someIf",
     "noneIfEmpty",
-    "valueOrEmpty"
+    "valueOrEmpty",
+    "unwrapOption",
+    "optionOr",
+    "mapOption"
   ]
 }

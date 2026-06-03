@@ -23,3 +23,33 @@ function errorOr(result: Result<string>, fallback: string): string {
 
   return errorMessage(result)
 }
+
+function unwrap(result: Result<string>): string {
+  return resultValue(result)
+}
+
+function unwrapOr(result: Result<string>, fallback: string): string {
+  if isOk(result) {
+    return resultValue(result)
+  }
+
+  return fallback
+}
+
+function mapOk(result: Result<string>, prefix: string): Result<string> {
+  if isOk(result) {
+    let value = resultValue(result)
+    let next = stringBuilderAppend(prefix, value)
+    return ok(next)
+  }
+
+  return result
+}
+
+function andThen(result: Result<string>, next: Result<string>): Result<string> {
+  if isOk(result) {
+    return next
+  }
+
+  return result
+}

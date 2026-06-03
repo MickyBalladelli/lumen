@@ -5,6 +5,10 @@
   "exports": [
     "okOr",
     "mapError",
-    "errorOr"
+    "errorOr",
+    "unwrap",
+    "unwrapOr",
+    "mapOk",
+    "andThen"
   ]
 }

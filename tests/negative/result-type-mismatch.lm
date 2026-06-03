@@ -1,0 +1,8 @@
+function describe(result: Result<string>): string {
+  return resultValue(result)
+}
+
+function main(): i32 {
+  describe(ok(7))
+  return 0
+}

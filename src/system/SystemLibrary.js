@@ -18,6 +18,7 @@ export const SystemFunctions = Object.freeze({
   Ok: 'ok',
   Err: 'err',
   IsOk: 'isOk',
+  ResultValue: 'resultValue',
   ErrorMessage: 'errorMessage',
   Some: 'some',
   None: 'none',

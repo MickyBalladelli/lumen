@@ -17,3 +17,20 @@ function noneIfEmpty(value: string): string? {
 function valueOrEmpty(value: string?): string {
   return valueOr(value, "")
 }
+
+function unwrapOption(value: string?): string {
+  return valueOr(value, "")
+}
+
+function optionOr(value: string?, fallback: string): string {
+  return valueOr(value, fallback)
+}
+
+function mapOption(value: string?, prefix: string): string? {
+  if hasValue(value) {
+    let next = stringBuilderAppend(prefix, value)
+    return some(next)
+  }
+
+  return none()
+}

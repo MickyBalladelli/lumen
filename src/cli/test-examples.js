@@ -149,7 +149,7 @@ const expectations = new Map([
     code: 10
   }],
   ['result-option-tools', {
-    stdout: 'ok\nbroken\nflow\n',
+    stdout: 'ok\nbroken\nfine\nfallback\nnice fine\nnext\nhi flow\nempty\nflow\n',
     code: 0
   }],
   ['self-host-parser', {

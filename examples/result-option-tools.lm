@@ -1,3 +1,6 @@
+import { andThen, mapOk, unwrap, unwrapOr } from "result"
+import { mapOption, optionOr, unwrapOption } from "option"
+
 function describe(result: Result<string>): string {
   if isOk(result) {
     return "ok"
@@ -14,9 +17,18 @@ function main(): i32 {
   let good = ok("fine")
   let bad: Result<string> = err("broken")
   let maybe: string? = some("flow")
+  let mapped = mapOk(good, "nice ")
+  let chained = andThen(good, ok("next"))
+  let mappedOption = mapOption(maybe, "hi ")
 
   println(describe(good))
   println(describe(bad))
+  println(unwrap(good))
+  println(unwrapOr(bad, "fallback"))
+  println(unwrap(mapped))
+  println(unwrap(chained))
+  println(unwrapOption(mappedOption))
+  println(optionOr(none(), "empty"))
 
   if hasValue(maybe) {
     println(echoText(maybe))

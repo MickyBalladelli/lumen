@@ -1,6 +1,6 @@
 # Lumen
 
-Foundation for the Lumen systems language.
+Foundation for the Lumen programming language.
 
 Lumen aims for JavaScript-like ergonomics with compiled output.
 

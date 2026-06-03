@@ -78,7 +78,6 @@ export class TypeSystem {
     const to = this.normalize(toType)
 
     if (from === to) return true
-    if (from === LumenTypes.Unknown) return true
     if (this.isNullable(to) && this.canAssign(from, this.nonNullable(to))) return true
     if (from === LumenTypes.Unknown && this.isNullable(to)) return true
     if (this.isArray(from) || this.isArray(to)) {

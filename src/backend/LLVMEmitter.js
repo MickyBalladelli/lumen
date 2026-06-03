@@ -102,6 +102,7 @@ export class LLVMEmitter {
       this.usesResults ? 'declare ptr @lumen_ok(ptr)' : '',
       this.usesResults ? 'declare ptr @lumen_err(ptr)' : '',
       this.usesResults ? 'declare i1 @lumen_is_ok(ptr)' : '',
+      this.usesResults ? 'declare ptr @lumen_result_value(ptr)' : '',
       this.usesResults ? 'declare ptr @lumen_error_message(ptr)' : '',
       this.usesOptions ? 'declare ptr @lumen_some(ptr)' : '',
       this.usesOptions ? 'declare ptr @lumen_none()' : '',
@@ -942,6 +943,7 @@ export class LLVMEmitter {
     if (this.isCall(expression.tokens, SystemFunctions.Ok)) return this.emitRuntimeCall(expression.tokens, 'lumen_ok', LumenTypes.String, 1, 'ok')
     if (this.isCall(expression.tokens, SystemFunctions.Err)) return this.emitRuntimeCall(expression.tokens, 'lumen_err', LumenTypes.String, 1, 'err')
     if (this.isCall(expression.tokens, SystemFunctions.IsOk)) return this.emitRuntimeCall(expression.tokens, 'lumen_is_ok', LumenTypes.Bool, 1, 'isOk')
+    if (this.isCall(expression.tokens, SystemFunctions.ResultValue)) return this.emitResultValue(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.ErrorMessage)) return this.emitRuntimeCall(expression.tokens, 'lumen_error_message', LumenTypes.String, 1, 'errorMessage')
     if (this.isCall(expression.tokens, SystemFunctions.Some)) return this.emitRuntimeCall(expression.tokens, 'lumen_some', LumenTypes.String, 1, 'some')
     if (this.isCall(expression.tokens, SystemFunctions.None)) return this.emitNone(expression.tokens)
@@ -1577,6 +1579,31 @@ export class LLVMEmitter {
 
     return {
       type: LumenTypes.String,
+      value: result
+    }
+  }
+
+  emitResultValue(tokens) {
+    this.usesResults = true
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 1) {
+      throw new Diagnostic('resultValue expects one result', tokens[0].location, 'backend')
+    }
+
+    const resultValue = this.emitExpression({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+    const result = this.nextTemp()
+    this.lines.push(`  ${result} = call ptr @lumen_result_value(ptr ${resultValue.value})`)
+
+    const innerType = this.typeSystem.isGeneric(resultValue.type) && this.typeSystem.genericBase(resultValue.type) === 'Result'
+      ? this.typeSystem.genericArgs(resultValue.type)[0]
+      : LumenTypes.String
+
+    return {
+      type: innerType,
       value: result
     }
   }
