@@ -8,7 +8,7 @@ function envOr(name: string, fallback: string): string {
   return value
 }
 
-function requireEnv(name: string): string {
+function requireEnv(name: string): Result<string> {
   let value = env(name)
 
   if stringEquals(value, "") {
@@ -28,7 +28,7 @@ function configFromEnv(name: string, fallback: string): string {
   return value
 }
 
-function configRequired(name: string): string {
+function configRequired(name: string): Result<string> {
   let value = env(name)
 
   if stringEquals(value, "") {

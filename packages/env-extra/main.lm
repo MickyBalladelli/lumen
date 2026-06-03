@@ -8,7 +8,7 @@ function envText(name: string, fallback: string): string {
   return value
 }
 
-function envRequired(name: string): string {
+function envRequired(name: string): Result<string> {
   let value = env(name)
 
   if stringEquals(value, "") {

@@ -1,4 +1,4 @@
-function okOr(value: string, fallbackError: string): string {
+function okOr(value: string, fallbackError: string): Result<string> {
   if stringEquals(value, "") {
     return err(fallbackError)
   }
@@ -6,7 +6,7 @@ function okOr(value: string, fallbackError: string): string {
   return ok(value)
 }
 
-function mapError(result: string, prefix: string): string {
+function mapError(result: Result<string>, prefix: string): Result<string> {
   if isOk(result) {
     return result
   }
@@ -16,7 +16,7 @@ function mapError(result: string, prefix: string): string {
   return err(next)
 }
 
-function errorOr(result: string, fallback: string): string {
+function errorOr(result: Result<string>, fallback: string): string {
   if isOk(result) {
     return fallback
   }

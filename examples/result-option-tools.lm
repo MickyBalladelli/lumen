@@ -1,0 +1,26 @@
+function describe(result: Result<string>): string {
+  if isOk(result) {
+    return "ok"
+  }
+
+  return errorMessage(result)
+}
+
+function echoText(value: string): string {
+  return value
+}
+
+function main(): i32 {
+  let good = ok("fine")
+  let bad: Result<string> = err("broken")
+  let maybe: string? = some("flow")
+
+  println(describe(good))
+  println(describe(bad))
+
+  if hasValue(maybe) {
+    println(echoText(maybe))
+  }
+
+  return 0
+}

@@ -1386,7 +1386,7 @@ char *lumen_error_message(const char *result) {
 }
 
 char *lumen_some(const char *value) {
-  return lumen_prefixed("some:", value);
+  return lumen_strdup(value);
 }
 
 char *lumen_none(void) {
@@ -1394,11 +1394,11 @@ char *lumen_none(void) {
 }
 
 int lumen_has_value(const char *option) {
-  return strncmp(option, "some:", 5) == 0;
+  return strlen(option) > 0;
 }
 
 char *lumen_value_or(const char *option, const char *fallback) {
-  if (strncmp(option, "some:", 5) == 0) return (char *)option + 5;
+  if (strlen(option) > 0) return (char *)option;
   return (char *)fallback;
 }
 

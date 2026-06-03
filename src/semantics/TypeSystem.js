@@ -78,6 +78,7 @@ export class TypeSystem {
     const to = this.normalize(toType)
 
     if (from === to) return true
+    if (from === LumenTypes.Unknown) return true
     if (this.isNullable(to) && this.canAssign(from, this.nonNullable(to))) return true
     if (from === LumenTypes.Unknown && this.isNullable(to)) return true
     if (this.isArray(from) || this.isArray(to)) {
@@ -85,7 +86,9 @@ export class TypeSystem {
         this.isArray(to) &&
         this.canAssign(this.elementType(from), this.elementType(to))
     }
+    if (this.isGeneric(from) && this.isGeneric(to)) return this.canAssignGeneric(from, to)
     if (this.isGeneric(to) && from === LumenTypes.String) return true
+    if (this.isGeneric(from) && to === LumenTypes.String) return true
     if (to === LumenTypes.Json && from === LumenTypes.String) return true
     if (to === LumenTypes.Error && from === LumenTypes.String) return true
     if (this.isGeneric(from) || this.isGeneric(to)) return from === to
@@ -143,6 +146,24 @@ export class TypeSystem {
   genericArgs(typeName) {
     if (!this.isGeneric(typeName)) return []
     return typeName.slice(typeName.indexOf('<') + 1, -1).split(',').map(type => type.trim())
+  }
+
+  genericBase(typeName) {
+    return this.isGeneric(typeName) ? typeName.slice(0, typeName.indexOf('<')) : null
+  }
+
+  canAssignGeneric(from, to) {
+    if (this.genericBase(from) !== this.genericBase(to)) return false
+
+    const fromArgs = this.genericArgs(from)
+    const toArgs = this.genericArgs(to)
+    if (fromArgs.length !== toArgs.length) return false
+
+    return fromArgs.every((arg, index) => {
+      return arg === LumenTypes.Unknown ||
+        toArgs[index] === LumenTypes.Unknown ||
+        this.canAssign(arg, toArgs[index])
+    })
   }
 
   nonNullable(typeName) {

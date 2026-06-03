@@ -1,4 +1,4 @@
-function mapRequire(data: string, key: string): string {
+function mapRequire(data: string, key: string): Result<string> {
   let value = mapGet(data, key)
 
   if stringEquals(value, "") {

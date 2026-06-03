@@ -1,4 +1,4 @@
-function requireString(name: string, value: string): string {
+function requireString(name: string, value: string): Result<string> {
   if stringEquals(value, "") {
     return err(name + " is required")
   }
@@ -6,7 +6,7 @@ function requireString(name: string, value: string): string {
   return ok(value)
 }
 
-function minI32(name: string, value: i32, min: i32): string {
+function minI32(name: string, value: i32, min: i32): Result<string> {
   if value < min {
     return err(name + " is too small")
   }
@@ -15,7 +15,7 @@ function minI32(name: string, value: i32, min: i32): string {
   return ok(text)
 }
 
-function maxI32(name: string, value: i32, max: i32): string {
+function maxI32(name: string, value: i32, max: i32): Result<string> {
   if value > max {
     return err(name + " is too large")
   }
@@ -24,7 +24,7 @@ function maxI32(name: string, value: i32, max: i32): string {
   return ok(text)
 }
 
-function emailLike(name: string, value: string): string {
+function emailLike(name: string, value: string): Result<string> {
   if includes(value, "@") {
     return ok(value)
   }

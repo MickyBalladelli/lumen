@@ -148,6 +148,10 @@ const expectations = new Map([
     stdout: 'total\n10\n',
     code: 10
   }],
+  ['result-option-tools', {
+    stdout: 'ok\nbroken\nflow\n',
+    code: 0
+  }],
   ['self-host-parser', {
     stdout: '7\n3\nlet\nnumber\nprintln\nidentifier\nreturn\nidentifier\n1\n',
     code: 0

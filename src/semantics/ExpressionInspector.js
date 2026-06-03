@@ -40,14 +40,14 @@ export class ExpressionInspector {
     if (this.isCall(rawExpression, SystemFunctions.Map)) return LumenTypes.String
     if (this.isCall(rawExpression, SystemFunctions.MapGet)) return LumenTypes.String
     if (this.isCall(rawExpression, SystemFunctions.MapHas)) return LumenTypes.Bool
-    if (this.isCall(rawExpression, SystemFunctions.Ok)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.Err)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.Ok)) return this.resultOkType(rawExpression.tokens)
+    if (this.isCall(rawExpression, SystemFunctions.Err)) return 'Result<unknown>'
     if (this.isCall(rawExpression, SystemFunctions.IsOk)) return LumenTypes.Bool
     if (this.isCall(rawExpression, SystemFunctions.ErrorMessage)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.Some)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.Some)) return this.someType(rawExpression.tokens)
     if (this.isCall(rawExpression, SystemFunctions.None)) return LumenTypes.Unknown
     if (this.isCall(rawExpression, SystemFunctions.HasValue)) return LumenTypes.Bool
-    if (this.isCall(rawExpression, SystemFunctions.ValueOr)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.ValueOr)) return this.valueOrType(rawExpression.tokens)
     if (this.isCall(rawExpression, SystemFunctions.Assert)) return LumenTypes.Void
     if (this.isCall(rawExpression, SystemFunctions.Channel)) return LumenTypes.String
     if (this.isCall(rawExpression, SystemFunctions.Send)) return LumenTypes.Void
@@ -363,7 +363,26 @@ export class ExpressionInspector {
   }
 
   userCallType(tokens) {
-    return this.scope.resolve(tokens[0].lexeme)?.type ?? LumenTypes.Unknown
+    const symbol = this.scope.resolve(tokens[0].lexeme)
+    const args = this.callArguments(tokens)
+    const params = symbol?.node?.params ?? []
+
+    if (args.length !== params.length) {
+      throw new Diagnostic(`Invalid call to ${tokens[0].lexeme}`, tokens[0].location, 'semantic')
+    }
+
+    for (const [index, arg] of args.entries()) {
+      const actual = this.infer({
+        tokens: arg
+      })
+      const expected = params[index].inferredType ?? params[index].typeAnnotation?.name ?? LumenTypes.I32
+
+      if (!this.typeSystem.canAssign(actual, expected)) {
+        throw new Diagnostic(`Cannot pass ${actual} to ${expected}`, tokens[0].location, 'semantic')
+      }
+    }
+
+    return symbol?.type ?? LumenTypes.Unknown
   }
 
   isUserCallName(tokens, token) {
@@ -439,6 +458,36 @@ export class ExpressionInspector {
     return this.typeSystem.isArray(collectionType)
       ? this.typeSystem.elementType(collectionType)
       : LumenTypes.Unknown
+  }
+
+  resultOkType(tokens) {
+    const args = this.callArguments(tokens)
+    if (args.length !== 1) return 'Result<unknown>'
+    const valueType = this.infer({
+      tokens: args[0]
+    })
+    return `Result<${valueType}>`
+  }
+
+  someType(tokens) {
+    const args = this.callArguments(tokens)
+    if (args.length !== 1) return LumenTypes.Unknown
+    const valueType = this.infer({
+      tokens: args[0]
+    })
+    return `${valueType}?`
+  }
+
+  valueOrType(tokens) {
+    const args = this.callArguments(tokens)
+    if (args.length !== 2) return LumenTypes.Unknown
+    const maybeType = this.infer({
+      tokens: args[0]
+    })
+    if (this.typeSystem.isNullable(maybeType)) return this.typeSystem.nonNullable(maybeType)
+    return this.infer({
+      tokens: args[1]
+    })
   }
 
   splitDelimited(tokens) {

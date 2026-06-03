@@ -251,9 +251,28 @@ export class TypeChecker {
 
   checkIf(node, parentScope, currentFunction) {
     this.checkExpression(node.test, parentScope)
-    this.checkNode(node.consequent, new Scope(parentScope), currentFunction)
+    this.checkNode(node.consequent, this.narrowedScope(node.test, parentScope), currentFunction)
     if (node.alternate) this.checkNode(node.alternate, new Scope(parentScope), currentFunction)
     return LumenTypes.Void
+  }
+
+  narrowedScope(test, parentScope) {
+    const scope = new Scope(parentScope)
+    const tokens = test?.tokens ?? []
+
+    if (tokens.length === 4 && tokens[0]?.lexeme === 'hasValue' && tokens[1]?.lexeme === '(' && tokens[3]?.lexeme === ')') {
+      const name = tokens[2]?.lexeme
+      const symbol = parentScope.resolve(name)
+
+      if (symbol?.type && this.typeSystem.isNullable(symbol.type)) {
+        scope.define(name, {
+          ...symbol,
+          type: this.typeSystem.nonNullable(symbol.type)
+        })
+      }
+    }
+
+    return scope
   }
 
   checkSwitch(node, parentScope, currentFunction) {
