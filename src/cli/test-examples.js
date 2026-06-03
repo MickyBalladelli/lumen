@@ -1,4 +1,4 @@
-import { readdir, readFile, unlink } from 'node:fs/promises'
+import { readdir, readFile, rename, unlink } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { spawn } from 'node:child_process'
 import { Compiler } from '../compiler/Compiler.js'
@@ -417,21 +417,49 @@ if (bootstrapCompile.code !== 0) {
     console.log('ok bootstrap invalid source rejection')
   }
 
+  const whileCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
+    join(examplesDir, 'while-do.lm'),
+    join(outputDir, 'while-do-self.ll')
+  ])
+
+  if (whileCompile.code !== 0) {
+    failures += 1
+    console.error('failed bootstrap while compiler output')
+  } else {
+    await compiler.buildExecutable(join(outputDir, 'while-do-self.ll'), join(outputDir, 'while-do-self'))
+    const whileDo = await runExecutable(join(outputDir, 'while-do-self'))
+
+    if (whileDo.stdout !== '6\n' || whileDo.code !== 6) {
+      failures += 1
+      console.error('failed bootstrap while executable behavior')
+    } else {
+      console.log('ok bootstrap self-host while')
+    }
+  }
+
   const unsupportedCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
     join('tests', 'bootstrap', 'unsupported-while.lm'),
     join(outputDir, 'unsupported-while-self.ll')
   ])
   if (unsupportedCompile.code === 0 || unsupportedCompile.stdout !== 'compile error: unsupported while\n') {
     failures += 1
-    console.error('failed bootstrap unsupported syntax diagnostic')
+    console.error('failed bootstrap unsupported while diagnostic')
   } else {
-    console.log('ok bootstrap unsupported syntax diagnostic')
+    console.log('ok bootstrap unsupported while diagnostic')
   }
 
-  const compilerSelfCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
-    join('compiler', 'main.lm'),
-    join(outputDir, 'lumen-compiler-self.ll')
-  ])
+  const compilerSeedPath = join(outputDir, 'lumen-compiler.ll')
+  const hiddenCompilerSeedPath = join(outputDir, 'lumen-compiler.seed-hidden.ll')
+  await rename(compilerSeedPath, hiddenCompilerSeedPath)
+  let compilerSelfCompile
+  try {
+    compilerSelfCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
+      join('compiler', 'main.lm'),
+      join(outputDir, 'lumen-compiler-self.ll')
+    ])
+  } finally {
+    await rename(hiddenCompilerSeedPath, compilerSeedPath)
+  }
 
   if (compilerSelfCompile.code !== 0) {
     failures += 1
@@ -531,15 +559,35 @@ if (bootstrapCompile.code !== 0) {
       console.log('ok second-stage invalid source rejection')
     }
 
+    const selfWhileCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
+      join(examplesDir, 'while-do.lm'),
+      join(outputDir, 'while-do-self2.ll')
+    ])
+
+    if (selfWhileCompile.code !== 0) {
+      failures += 1
+      console.error('failed second-stage while compiler output')
+    } else {
+      await compiler.buildExecutable(join(outputDir, 'while-do-self2.ll'), join(outputDir, 'while-do-self2'))
+      const whileDo2 = await runExecutable(join(outputDir, 'while-do-self2'))
+
+      if (whileDo2.stdout !== '6\n' || whileDo2.code !== 6) {
+        failures += 1
+        console.error('failed second-stage while executable behavior')
+      } else {
+        console.log('ok second-stage self-host while')
+      }
+    }
+
     const selfUnsupportedCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
       join('tests', 'bootstrap', 'unsupported-while.lm'),
       join(outputDir, 'unsupported-while-self2.ll')
     ])
     if (selfUnsupportedCompile.code === 0 || selfUnsupportedCompile.stdout !== 'compile error: unsupported while\n') {
       failures += 1
-      console.error('failed second-stage unsupported syntax diagnostic')
+      console.error('failed second-stage unsupported while diagnostic')
     } else {
-      console.log('ok second-stage unsupported syntax diagnostic')
+      console.log('ok second-stage unsupported while diagnostic')
     }
   }
 }

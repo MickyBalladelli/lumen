@@ -11,8 +11,8 @@ function compileTiny(input: string, output: string): i32 {
     return 1
   }
 
-  let whileKeyword = "while" + " "
-  if includes(source, whileKeyword) {
+  let unsupportedWhile = "while " + "1"
+  if includes(source, unsupportedWhile) {
     println("compile error: unsupported while")
     return 1
   }

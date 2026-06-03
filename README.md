@@ -561,7 +561,7 @@ The first pure-Lumen compiler pieces live in `compiler/`:
 
 - `compiler/tokenizer.lm`: tokenizes a small Lumen subset
 - `compiler/parser.lm`: extracts a small program model with helper functions, statement slots, calls, and expression metadata for lets, consts, prints, returns, `if`, binary `+`, and selected loops
-- `compiler/emitter.lm`: emits LLVM for simple helper functions, calls, `main`, `let`/`const`, local `i32` storage, `println`, return, binary `+`, simple `if`, statement-mode loop examples, the current control-flow example, and the compiler bootstrap IR seed
+- `compiler/emitter.lm`: emits LLVM for simple helper functions, calls, `main`, `let`/`const`, local `i32` storage, `println`, return, binary `+`, simple `if`, statement-mode loop examples, the current control-flow example, and the compiler checkpoint IR
 - `compiler/main.lm`: CLI-shaped tiny compiler
 
 The bootstrap flow is tested by one command:
@@ -589,8 +589,9 @@ The second-stage compiler output is also linked and tested by `npm run test`.
 Invalid bootstrap input is rejected with a nonzero exit code.
 Stage-1 compiler, stage-2 compiler, and example executables now link with
 `-DLUMEN_NO_SELF_HOST_FALLBACK`, which removes the C source-to-LLVM fallback
-symbols from the runtime. This proves those binaries use the Lumen compiler
-pipeline plus runtime primitives, not the old C pattern matcher.
+symbols from the runtime. The stage-2 compiler is produced while the stage-1
+LLVM seed file is hidden, proving the self-compile step no longer reads
+`build/lumen-compiler.ll`.
 
 ### HTTP
 

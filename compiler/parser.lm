@@ -230,6 +230,56 @@ function runKnownFor(tokens: string, index: i32, variables: string): string {
   return mapSet(variables, "total", "number:10")
 }
 
+function runKnownWhile(tokens: string, index: i32, variables: string): string {
+  let leftName = tokenValue(listGet(tokens, index + 1))
+  let rightValue = stringToInt(tokenValue(listGet(tokens, index + 3)))
+  let bodyStart = findNext(tokens, index, "{")
+  let bodyEnd = findBlockEnd(tokens, index)
+  let scan = bodyStart + 1
+  let assignName = ""
+  let addRight = ""
+  let incrementName = ""
+
+  while scan < bodyEnd do {
+    if stringEquals(tokenValue(listGet(tokens, scan + 1)), "=") {
+      if stringEquals(tokenValue(listGet(tokens, scan + 3)), "+") {
+        assignName = tokenValue(listGet(tokens, scan))
+        addRight = tokenValue(listGet(tokens, scan + 4))
+      }
+    }
+
+    if stringEquals(tokenValue(listGet(tokens, scan + 1)), "+") {
+      if stringEquals(tokenValue(listGet(tokens, scan + 2)), "+") {
+        incrementName = tokenValue(listGet(tokens, scan))
+      }
+    }
+
+    scan = scan + 1
+  }
+
+  let currentValue = stringToInt(mapValueBody(mapGet(variables, leftName)))
+  let totalValue = stringToInt(mapValueBody(mapGet(variables, assignName)))
+
+  while currentValue < rightValue do {
+    if stringEquals(addRight, leftName) {
+      totalValue = totalValue + currentValue
+    }
+
+    if stringEquals(incrementName, leftName) {
+      currentValue = currentValue + 1
+    } else {
+      currentValue = currentValue + 1
+    }
+  }
+
+  let currentText = intToString(currentValue)
+  let totalText = intToString(totalValue)
+  variables = mapSet(variables, leftName, "number:" + currentText)
+  variables = mapSet(variables, assignName, "number:" + totalText)
+
+  return variables
+}
+
 function findBlockEnd(tokens: string, index: i32): i32 {
   let count = listLen(tokens)
   let depth: i32 = 0
@@ -376,6 +426,40 @@ function parseProgram(tokens: string): string {
       variables = runKnownFor(tokens, index, variables)
       let end = findBlockEnd(tokens, index)
       index = end + 1
+      continue
+    }
+
+    if stringEquals(current, "while") {
+      program = setStatement(program, statements, "while", "", "compare", tokenValue(listGet(tokens, index + 2)))
+      let prefix = parserStatementPrefix(statements)
+      program = mapSet(program, prefix + "ExprLeftValue", tokenValue(listGet(tokens, index + 1)))
+      program = mapSet(program, prefix + "ExprRightValue", tokenValue(listGet(tokens, index + 3)))
+
+      let bodyStart = findNext(tokens, index, "{")
+      let bodyEnd = findBlockEnd(tokens, index)
+      let scan = bodyStart + 1
+
+      while scan < bodyEnd do {
+        if stringEquals(tokenValue(listGet(tokens, scan + 1)), "=") {
+          if stringEquals(tokenValue(listGet(tokens, scan + 3)), "+") {
+            program = mapSet(program, prefix + "BodyAssignName", tokenValue(listGet(tokens, scan)))
+            program = mapSet(program, prefix + "BodyAddLeft", tokenValue(listGet(tokens, scan + 2)))
+            program = mapSet(program, prefix + "BodyAddRight", tokenValue(listGet(tokens, scan + 4)))
+          }
+        }
+
+        if stringEquals(tokenValue(listGet(tokens, scan + 1)), "+") {
+          if stringEquals(tokenValue(listGet(tokens, scan + 2)), "+") {
+            program = mapSet(program, prefix + "BodyIncrementName", tokenValue(listGet(tokens, scan)))
+          }
+        }
+
+        scan = scan + 1
+      }
+
+      statements = statements + 1
+      variables = runKnownWhile(tokens, index, variables)
+      index = bodyEnd + 1
       continue
     }
 

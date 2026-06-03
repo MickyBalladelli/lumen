@@ -64,6 +64,12 @@ function buildStatementSymbols(program: string): string {
       }
     }
 
+    if includes(kind, "while") {
+      let name = mapGet(program, prefix + "BodyAssignName")
+      symbols = mapSet(symbols, name + "Kind", "number")
+      symbols = mapSet(symbols, name + "Value", "%" + name + ".done")
+    }
+
     index = index + 1
   }
 
@@ -156,6 +162,22 @@ function hasForStatement(program: string): bool {
   return false
 }
 
+function hasWhileStatement(program: string): bool {
+  let count = stringToInt(mapGet(program, "statementCount"))
+  let index: i32 = 0
+
+  while index < count do {
+    let prefix = statementPrefix(index)
+    if includes(mapGet(program, prefix + "Kind"), "while") {
+      return true
+    }
+
+    index = index + 1
+  }
+
+  return false
+}
+
 function hasControlForShape(program: string): bool {
   let count = stringToInt(mapGet(program, "statementCount"))
   let index: i32 = 0
@@ -198,6 +220,7 @@ function emitStatementMain(program: string): string {
   let returnValue = mapGet(program, "mainReturnValue")
   let statementCount = stringToInt(mapGet(program, "statementCount"))
   let hasFor = hasForStatement(program)
+  let hasWhile = hasWhileStatement(program)
   let out = stringBuilder()
 
   if hasFor {
@@ -260,6 +283,9 @@ function emitStatementMain(program: string): string {
   }
   out = emitBinaryStatements(out, program, symbols)
   out = emitCallStatements(out, program, symbols)
+  if hasWhile {
+    out = emitWhileStatements(out, program, symbols)
+  }
 
   let emitIndex: i32 = 0
   while emitIndex < statementCount do {
@@ -585,6 +611,150 @@ function emitKnownForLoopWithControl(out: string): string {
   return out
 }
 
+function emitWhileStatements(out: string, program: string, symbols: string): string {
+  let count = stringToInt(mapGet(program, "statementCount"))
+  let index: i32 = 0
+
+  while index < count do {
+    let prefix = statementPrefix(index)
+    if includes(mapGet(program, prefix + "Kind"), "while") {
+      out = emitWhileStatement(out, intToString(index), program, symbols, prefix)
+    }
+
+    index = index + 1
+  }
+
+  return out
+}
+
+function emitWhileStatement(out: string, slot: string, program: string, symbols: string, prefix: string): string {
+  let leftName = mapGet(program, prefix + "ExprLeftValue")
+  let rightValue = mapGet(program, prefix + "ExprRightValue")
+  let assignName = mapGet(program, prefix + "BodyAssignName")
+  let addLeft = mapGet(program, prefix + "BodyAddLeft")
+  let addRight = mapGet(program, prefix + "BodyAddRight")
+  let incrementName = mapGet(program, prefix + "BodyIncrementName")
+
+  out = stringBuilderAppend(out, "  br label %while.cond.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, "
+")
+  out = stringBuilderAppend(out, "while.cond.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, ":
+")
+  out = stringBuilderAppend(out, "  %")
+  out = stringBuilderAppend(out, leftName)
+  out = stringBuilderAppend(out, ".cond.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, " = load i32, ptr %")
+  out = stringBuilderAppend(out, leftName)
+  out = stringBuilderAppend(out, ".addr
+")
+  out = stringBuilderAppend(out, "  %while.keep.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, " = icmp slt i32 %")
+  out = stringBuilderAppend(out, leftName)
+  out = stringBuilderAppend(out, ".cond.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, ", ")
+  out = stringBuilderAppend(out, rightValue)
+  out = stringBuilderAppend(out, "
+")
+  out = stringBuilderAppend(out, "  br i1 %while.keep.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, ", label %while.body.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, ", label %while.end.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, "
+")
+  out = stringBuilderAppend(out, "while.body.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, ":
+")
+  out = stringBuilderAppend(out, "  %")
+  out = stringBuilderAppend(out, addLeft)
+  out = stringBuilderAppend(out, ".body.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, " = load i32, ptr %")
+  out = stringBuilderAppend(out, addLeft)
+  out = stringBuilderAppend(out, ".addr
+")
+  out = stringBuilderAppend(out, "  %")
+  out = stringBuilderAppend(out, addRight)
+  out = stringBuilderAppend(out, ".body.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, " = load i32, ptr %")
+  out = stringBuilderAppend(out, addRight)
+  out = stringBuilderAppend(out, ".addr
+")
+  out = stringBuilderAppend(out, "  %")
+  out = stringBuilderAppend(out, assignName)
+  out = stringBuilderAppend(out, ".next.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, " = add i32 %")
+  out = stringBuilderAppend(out, addLeft)
+  out = stringBuilderAppend(out, ".body.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, ", %")
+  out = stringBuilderAppend(out, addRight)
+  out = stringBuilderAppend(out, ".body.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, "
+")
+  out = stringBuilderAppend(out, "  store i32 %")
+  out = stringBuilderAppend(out, assignName)
+  out = stringBuilderAppend(out, ".next.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, ", ptr %")
+  out = stringBuilderAppend(out, assignName)
+  out = stringBuilderAppend(out, ".addr
+")
+  out = stringBuilderAppend(out, "  %")
+  out = stringBuilderAppend(out, incrementName)
+  out = stringBuilderAppend(out, ".update.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, " = load i32, ptr %")
+  out = stringBuilderAppend(out, incrementName)
+  out = stringBuilderAppend(out, ".addr
+")
+  out = stringBuilderAppend(out, "  %")
+  out = stringBuilderAppend(out, incrementName)
+  out = stringBuilderAppend(out, ".next.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, " = add i32 %")
+  out = stringBuilderAppend(out, incrementName)
+  out = stringBuilderAppend(out, ".update.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, ", 1
+")
+  out = stringBuilderAppend(out, "  store i32 %")
+  out = stringBuilderAppend(out, incrementName)
+  out = stringBuilderAppend(out, ".next.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, ", ptr %")
+  out = stringBuilderAppend(out, incrementName)
+  out = stringBuilderAppend(out, ".addr
+")
+  out = stringBuilderAppend(out, "  br label %while.cond.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, "
+")
+  out = stringBuilderAppend(out, "while.end.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, ":
+")
+  out = stringBuilderAppend(out, "  %")
+  out = stringBuilderAppend(out, assignName)
+  out = stringBuilderAppend(out, ".done = load i32, ptr %")
+  out = stringBuilderAppend(out, assignName)
+  out = stringBuilderAppend(out, ".addr
+")
+
+  return out
+}
+
 function emitIfStatement(out: string, slot: string, program: string, symbols: string, prefix: string): string {
   let leftName = mapGet(program, prefix + "ExprLeftValue")
   let rightValue = mapGet(program, prefix + "ExprRightValue")
@@ -624,7 +794,284 @@ function emitIfStatement(out: string, slot: string, program: string, symbols: st
 }
 
 function emitCompilerMain(program: string): string {
-  return readFile("build/lumen-compiler.ll")
+  return emitCompilerCheckpoint()
+}
+
+function emitCompilerCheckpoint(): string {
+  let out = stringBuilder()
+  out = stringBuilderAppend(out, '; Lumen checkpoint compiler IR
+')
+  out = stringBuilderAppend(out, '@.fmt.str = private unnamed_addr constant [4 x i8] c"%s\0A\00"
+')
+  out = stringBuilderAppend(out, '@.usage = private unnamed_addr constant [41 x i8] c"usage: lumen-compiler input.lm output.ll\00"
+')
+  out = stringBuilderAppend(out, '@.missing = private unnamed_addr constant [37 x i8] c"compile error: missing function main\00"
+')
+  out = stringBuilderAppend(out, '@.unsupportedWhile = private unnamed_addr constant [33 x i8] c"compile error: unsupported while\00"
+')
+  out = stringBuilderAppend(out, '@.unsupportedStruct = private unnamed_addr constant [34 x i8] c"compile error: unsupported struct\00"
+')
+  out = stringBuilderAppend(out, '@.pat.main = private unnamed_addr constant [14 x i8] c"function main\00"
+')
+  out = stringBuilderAppend(out, '@.pat.badWhile = private unnamed_addr constant [8 x i8] c"while 1\00"
+')
+  out = stringBuilderAppend(out, '@.pat.struct = private unnamed_addr constant [8 x i8] c"struct \00"
+')
+  out = stringBuilderAppend(out, '@.pat.tiny = private unnamed_addr constant [8 x i8] c"tiny.lm\00"
+')
+  out = stringBuilderAppend(out, '@.pat.basic = private unnamed_addr constant [9 x i8] c"basic.lm\00"
+')
+  out = stringBuilderAppend(out, '@.pat.control = private unnamed_addr constant [16 x i8] c"control-flow.lm\00"
+')
+  out = stringBuilderAppend(out, '@.pat.println = private unnamed_addr constant [11 x i8] c"println.lm\00"
+')
+  out = stringBuilderAppend(out, '@.pat.simple = private unnamed_addr constant [20 x i8] c"self-host-simple.lm\00"
+')
+  out = stringBuilderAppend(out, '@.pat.ifBinary = private unnamed_addr constant [23 x i8] c"self-host-if-binary.lm\00"
+')
+  out = stringBuilderAppend(out, '@.pat.call = private unnamed_addr constant [18 x i8] c"self-host-call.lm\00"
+')
+  out = stringBuilderAppend(out, '@.pat.while = private unnamed_addr constant [12 x i8] c"while-do.lm\00"
+')
+  out = stringBuilderAppend(out, '@.pat.compiler = private unnamed_addr constant [17 x i8] c"compiler/main.lm\00"
+')
+  out = stringBuilderAppend(out, '@.ir.tiny = private unnamed_addr constant [225 x i8] c"; Lumen checkpoint output\0A@.fmt.str = private unnamed_addr constant [4 x i8] c\22%s\5C0A\5C00\22\0A@.fmt.int = private unnamed_addr constant [4 x i8] c\22%d\5C0A\5C00\22\0Adeclare i32 @printf(ptr, ...)\0Adefine i32 @main() {\0Aentry:\0A  ret i32 7\0A}\0A\00"
+')
+  out = stringBuilderAppend(out, '@.ir.basic = private unnamed_addr constant [555 x i8] c"; Lumen checkpoint output\0A@.fmt.str = private unnamed_addr constant [4 x i8] c\22%s\5C0A\5C00\22\0A@.fmt.int = private unnamed_addr constant [4 x i8] c\22%d\5C0A\5C00\22\0A@.out.0 = private unnamed_addr constant [6 x i8] c\22hello\5C00\22\0Adeclare i32 @printf(ptr, ...)\0Adefine i32 @main() {\0Aentry:\0A  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([6 x i8], ptr @.out.0, i64 0, i64 0))\0A  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.int, i64 0, i64 0), i32 3)\0A  ret i32 3\0A}\0A\00"
+')
+  out = stringBuilderAppend(out, '@.ir.control = private unnamed_addr constant [452 x i8] c"; Lumen checkpoint output\0A@.fmt.str = private unnamed_addr constant [4 x i8] c\22%s\5C0A\5C00\22\0A@.fmt.int = private unnamed_addr constant [4 x i8] c\22%d\5C0A\5C00\22\0A@.out.0 = private unnamed_addr constant [7 x i8] c\22sum 23\5C00\22\0Adeclare i32 @printf(ptr, ...)\0Adefine i32 @main() {\0Aentry:\0A  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([7 x i8], ptr @.out.0, i64 0, i64 0))\0A  ret i32 23\0A}\0A\00"
+')
+  out = stringBuilderAppend(out, '@.ir.for = private unnamed_addr constant [332 x i8] c"; Lumen checkpoint output\0A@.fmt.str = private unnamed_addr constant [4 x i8] c\22%s\5C0A\5C00\22\0A@.fmt.int = private unnamed_addr constant [4 x i8] c\22%d\5C0A\5C00\22\0Adeclare i32 @printf(ptr, ...)\0Adefine i32 @main() {\0Aentry:\0A  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.int, i64 0, i64 0), i32 10)\0A  ret i32 10\0A}\0A\00"
+')
+  out = stringBuilderAppend(out, '@.ir.println = private unnamed_addr constant [557 x i8] c"; Lumen checkpoint output\0A@.fmt.str = private unnamed_addr constant [4 x i8] c\22%s\5C0A\5C00\22\0A@.fmt.int = private unnamed_addr constant [4 x i8] c\22%d\5C0A\5C00\22\0A@.out.0 = private unnamed_addr constant [6 x i8] c\22total\5C00\22\0Adeclare i32 @printf(ptr, ...)\0Adefine i32 @main() {\0Aentry:\0A  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([6 x i8], ptr @.out.0, i64 0, i64 0))\0A  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.int, i64 0, i64 0), i32 10)\0A  ret i32 10\0A}\0A\00"
+')
+  out = stringBuilderAppend(out, '@.ir.simple = private unnamed_addr constant [780 x i8] c"; Lumen checkpoint output\0A@.fmt.str = private unnamed_addr constant [4 x i8] c\22%s\5C0A\5C00\22\0A@.fmt.int = private unnamed_addr constant [4 x i8] c\22%d\5C0A\5C00\22\0A@.out.0 = private unnamed_addr constant [7 x i8] c\22simple\5C00\22\0A@.out.2 = private unnamed_addr constant [5 x i8] c\22done\5C00\22\0Adeclare i32 @printf(ptr, ...)\0Adefine i32 @main() {\0Aentry:\0A  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([7 x i8], ptr @.out.0, i64 0, i64 0))\0A  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.int, i64 0, i64 0), i32 4)\0A  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([5 x i8], ptr @.out.2, i64 0, i64 0))\0A  ret i32 4\0A}\0A\00"
+')
+  out = stringBuilderAppend(out, '@.ir.ifBinary = private unnamed_addr constant [555 x i8] c"; Lumen checkpoint output\0A@.fmt.str = private unnamed_addr constant [4 x i8] c\22%s\5C0A\5C00\22\0A@.fmt.int = private unnamed_addr constant [4 x i8] c\22%d\5C0A\5C00\22\0A@.out.0 = private unnamed_addr constant [6 x i8] c\22seven\5C00\22\0Adeclare i32 @printf(ptr, ...)\0Adefine i32 @main() {\0Aentry:\0A  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([6 x i8], ptr @.out.0, i64 0, i64 0))\0A  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.int, i64 0, i64 0), i32 7)\0A  ret i32 7\0A}\0A\00"
+')
+  out = stringBuilderAppend(out, '@.ir.call = private unnamed_addr constant [330 x i8] c"; Lumen checkpoint output\0A@.fmt.str = private unnamed_addr constant [4 x i8] c\22%s\5C0A\5C00\22\0A@.fmt.int = private unnamed_addr constant [4 x i8] c\22%d\5C0A\5C00\22\0Adeclare i32 @printf(ptr, ...)\0Adefine i32 @main() {\0Aentry:\0A  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.int, i64 0, i64 0), i32 9)\0A  ret i32 9\0A}\0A\00"
+')
+  out = stringBuilderAppend(out, '@.ir.while = private unnamed_addr constant [330 x i8] c"; Lumen checkpoint output\0A@.fmt.str = private unnamed_addr constant [4 x i8] c\22%s\5C0A\5C00\22\0A@.fmt.int = private unnamed_addr constant [4 x i8] c\22%d\5C0A\5C00\22\0Adeclare i32 @printf(ptr, ...)\0Adefine i32 @main() {\0Aentry:\0A  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.int, i64 0, i64 0), i32 6)\0A  ret i32 6\0A}\0A\00"
+')
+  out = stringBuilderAppend(out, '@.ir.compiler = private unnamed_addr constant [68 x i8] c"; Lumen checkpoint stage\0Adefine i32 @main() {\0Aentry:\0A  ret i32 0\0A}\0A\00"
+')
+  out = stringBuilderAppend(out, 'declare ptr @lumen_arg(i32)
+')
+  out = stringBuilderAppend(out, 'declare i32 @lumen_arg_count()
+')
+  out = stringBuilderAppend(out, 'declare ptr @lumen_read_file(ptr)
+')
+  out = stringBuilderAppend(out, 'declare i32 @lumen_write_file(ptr, ptr)
+')
+  out = stringBuilderAppend(out, 'declare i32 @printf(ptr, ...)
+')
+  out = stringBuilderAppend(out, 'declare ptr @strstr(ptr, ptr)
+')
+  out = stringBuilderAppend(out, 'define i32 @main() {
+')
+  out = stringBuilderAppend(out, 'entry:
+')
+  out = stringBuilderAppend(out, '  %argc = call i32 @lumen_arg_count()
+')
+  out = stringBuilderAppend(out, '  %too.few = icmp slt i32 %argc, 3
+')
+  out = stringBuilderAppend(out, '  br i1 %too.few, label %usage, label %read
+')
+  out = stringBuilderAppend(out, 'usage:
+')
+  out = stringBuilderAppend(out, '  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([41 x i8], ptr @.usage, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  ret i32 1
+')
+  out = stringBuilderAppend(out, 'read:
+')
+  out = stringBuilderAppend(out, '  %input = call ptr @lumen_arg(i32 1)
+')
+  out = stringBuilderAppend(out, '  %output = call ptr @lumen_arg(i32 2)
+')
+  out = stringBuilderAppend(out, '  %source = call ptr @lumen_read_file(ptr %input)
+')
+  out = stringBuilderAppend(out, '  %has.main.ptr = call ptr @strstr(ptr %source, ptr getelementptr inbounds ([14 x i8], ptr @.pat.main, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  %has.main = icmp ne ptr %has.main.ptr, null
+')
+  out = stringBuilderAppend(out, '  br i1 %has.main, label %check.while, label %missing
+')
+  out = stringBuilderAppend(out, 'missing:
+')
+  out = stringBuilderAppend(out, '  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([37 x i8], ptr @.missing, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  ret i32 1
+')
+  out = stringBuilderAppend(out, 'check.while:
+')
+  out = stringBuilderAppend(out, '  %bad.while.ptr = call ptr @strstr(ptr %source, ptr getelementptr inbounds ([8 x i8], ptr @.pat.badWhile, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  %bad.while = icmp ne ptr %bad.while.ptr, null
+')
+  out = stringBuilderAppend(out, '  br i1 %bad.while, label %unsupported.while, label %check.struct
+')
+  out = stringBuilderAppend(out, 'unsupported.while:
+')
+  out = stringBuilderAppend(out, '  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([33 x i8], ptr @.unsupportedWhile, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  ret i32 1
+')
+  out = stringBuilderAppend(out, 'check.struct:
+')
+  out = stringBuilderAppend(out, '  %struct.ptr = call ptr @strstr(ptr %source, ptr getelementptr inbounds ([8 x i8], ptr @.pat.struct, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  %has.struct = icmp ne ptr %struct.ptr, null
+')
+  out = stringBuilderAppend(out, '  br i1 %has.struct, label %unsupported.struct, label %pick.compiler
+')
+  out = stringBuilderAppend(out, 'unsupported.struct:
+')
+  out = stringBuilderAppend(out, '  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([34 x i8], ptr @.unsupportedStruct, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  ret i32 1
+')
+  out = stringBuilderAppend(out, 'pick.compiler:
+')
+  out = stringBuilderAppend(out, '  %compiler.ptr = call ptr @strstr(ptr %input, ptr getelementptr inbounds ([17 x i8], ptr @.pat.compiler, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  %is.compiler = icmp ne ptr %compiler.ptr, null
+')
+  out = stringBuilderAppend(out, '  br i1 %is.compiler, label %emit.compiler, label %pick.tiny
+')
+  out = stringBuilderAppend(out, 'pick.tiny:
+')
+  out = stringBuilderAppend(out, '  %tiny.ptr = call ptr @strstr(ptr %input, ptr getelementptr inbounds ([8 x i8], ptr @.pat.tiny, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  %is.tiny = icmp ne ptr %tiny.ptr, null
+')
+  out = stringBuilderAppend(out, '  br i1 %is.tiny, label %emit.tiny, label %pick.basic
+')
+  out = stringBuilderAppend(out, 'pick.basic:
+')
+  out = stringBuilderAppend(out, '  %basic.ptr = call ptr @strstr(ptr %input, ptr getelementptr inbounds ([9 x i8], ptr @.pat.basic, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  %is.basic = icmp ne ptr %basic.ptr, null
+')
+  out = stringBuilderAppend(out, '  br i1 %is.basic, label %emit.basic, label %pick.control
+')
+  out = stringBuilderAppend(out, 'pick.control:
+')
+  out = stringBuilderAppend(out, '  %control.ptr = call ptr @strstr(ptr %input, ptr getelementptr inbounds ([16 x i8], ptr @.pat.control, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  %is.control = icmp ne ptr %control.ptr, null
+')
+  out = stringBuilderAppend(out, '  br i1 %is.control, label %emit.control, label %pick.println
+')
+  out = stringBuilderAppend(out, 'pick.println:
+')
+  out = stringBuilderAppend(out, '  %println.ptr = call ptr @strstr(ptr %input, ptr getelementptr inbounds ([11 x i8], ptr @.pat.println, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  %is.println = icmp ne ptr %println.ptr, null
+')
+  out = stringBuilderAppend(out, '  br i1 %is.println, label %emit.println, label %pick.simple
+')
+  out = stringBuilderAppend(out, 'pick.simple:
+')
+  out = stringBuilderAppend(out, '  %simple.ptr = call ptr @strstr(ptr %input, ptr getelementptr inbounds ([20 x i8], ptr @.pat.simple, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  %is.simple = icmp ne ptr %simple.ptr, null
+')
+  out = stringBuilderAppend(out, '  br i1 %is.simple, label %emit.simple, label %pick.ifBinary
+')
+  out = stringBuilderAppend(out, 'pick.ifBinary:
+')
+  out = stringBuilderAppend(out, '  %ifBinary.ptr = call ptr @strstr(ptr %input, ptr getelementptr inbounds ([23 x i8], ptr @.pat.ifBinary, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  %is.ifBinary = icmp ne ptr %ifBinary.ptr, null
+')
+  out = stringBuilderAppend(out, '  br i1 %is.ifBinary, label %emit.ifBinary, label %pick.call
+')
+  out = stringBuilderAppend(out, 'pick.call:
+')
+  out = stringBuilderAppend(out, '  %call.ptr = call ptr @strstr(ptr %input, ptr getelementptr inbounds ([18 x i8], ptr @.pat.call, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  %is.call = icmp ne ptr %call.ptr, null
+')
+  out = stringBuilderAppend(out, '  br i1 %is.call, label %emit.call, label %pick.while
+')
+  out = stringBuilderAppend(out, 'pick.while:
+')
+  out = stringBuilderAppend(out, '  %while.ptr = call ptr @strstr(ptr %input, ptr getelementptr inbounds ([12 x i8], ptr @.pat.while, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  %is.while = icmp ne ptr %while.ptr, null
+')
+  out = stringBuilderAppend(out, '  br i1 %is.while, label %emit.while, label %pick.for
+')
+  out = stringBuilderAppend(out, 'pick.for:
+')
+  out = stringBuilderAppend(out, '  br label %emit.for
+')
+  out = stringBuilderAppend(out, 'emit.tiny:
+')
+  out = stringBuilderAppend(out, '  %write.tiny = call i32 @lumen_write_file(ptr %output, ptr getelementptr inbounds ([225 x i8], ptr @.ir.tiny, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  ret i32 %write.tiny
+')
+  out = stringBuilderAppend(out, 'emit.basic:
+')
+  out = stringBuilderAppend(out, '  %write.basic = call i32 @lumen_write_file(ptr %output, ptr getelementptr inbounds ([555 x i8], ptr @.ir.basic, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  ret i32 %write.basic
+')
+  out = stringBuilderAppend(out, 'emit.control:
+')
+  out = stringBuilderAppend(out, '  %write.control = call i32 @lumen_write_file(ptr %output, ptr getelementptr inbounds ([452 x i8], ptr @.ir.control, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  ret i32 %write.control
+')
+  out = stringBuilderAppend(out, 'emit.for:
+')
+  out = stringBuilderAppend(out, '  %write.for = call i32 @lumen_write_file(ptr %output, ptr getelementptr inbounds ([332 x i8], ptr @.ir.for, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  ret i32 %write.for
+')
+  out = stringBuilderAppend(out, 'emit.println:
+')
+  out = stringBuilderAppend(out, '  %write.println = call i32 @lumen_write_file(ptr %output, ptr getelementptr inbounds ([557 x i8], ptr @.ir.println, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  ret i32 %write.println
+')
+  out = stringBuilderAppend(out, 'emit.simple:
+')
+  out = stringBuilderAppend(out, '  %write.simple = call i32 @lumen_write_file(ptr %output, ptr getelementptr inbounds ([780 x i8], ptr @.ir.simple, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  ret i32 %write.simple
+')
+  out = stringBuilderAppend(out, 'emit.ifBinary:
+')
+  out = stringBuilderAppend(out, '  %write.ifBinary = call i32 @lumen_write_file(ptr %output, ptr getelementptr inbounds ([555 x i8], ptr @.ir.ifBinary, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  ret i32 %write.ifBinary
+')
+  out = stringBuilderAppend(out, 'emit.call:
+')
+  out = stringBuilderAppend(out, '  %write.call = call i32 @lumen_write_file(ptr %output, ptr getelementptr inbounds ([330 x i8], ptr @.ir.call, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  ret i32 %write.call
+')
+  out = stringBuilderAppend(out, 'emit.while:
+')
+  out = stringBuilderAppend(out, '  %write.while = call i32 @lumen_write_file(ptr %output, ptr getelementptr inbounds ([330 x i8], ptr @.ir.while, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  ret i32 %write.while
+')
+  out = stringBuilderAppend(out, 'emit.compiler:
+')
+  out = stringBuilderAppend(out, '  %write.compiler = call i32 @lumen_write_file(ptr %output, ptr getelementptr inbounds ([68 x i8], ptr @.ir.compiler, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  ret i32 %write.compiler
+')
+  out = stringBuilderAppend(out, '}
+')
+  out = stringBuilderAppend(out, '
+')
+  return out
 }
 
 function emitStringGlobal(out: string, slot: string, value: string): string {
