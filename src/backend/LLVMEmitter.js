@@ -110,8 +110,11 @@ export class LLVMEmitter {
       this.usesStringRuntime ? 'declare ptr @lumen_string_concat(ptr, ptr)' : '',
       this.usesJsonRuntime ? 'declare ptr @lumen_json(ptr)' : '',
       this.usesJsonRuntime ? 'declare ptr @lumen_json_get(ptr, ptr)' : '',
+      this.usesJsonRuntime ? 'declare ptr @lumen_json_get_raw(ptr, ptr)' : '',
       this.usesJsonRuntime ? 'declare ptr @lumen_json_set(ptr, ptr, ptr)' : '',
+      this.usesJsonRuntime ? 'declare ptr @lumen_json_set_path(ptr, ptr, ptr)' : '',
       this.usesJsonRuntime ? 'declare ptr @lumen_json_stringify(ptr)' : '',
+      this.usesJsonRuntime ? 'declare i1 @lumen_json_valid(ptr)' : '',
       this.usesErrorRuntime ? 'declare ptr @lumen_error_new(i32, ptr)' : '',
       this.usesErrorRuntime ? 'declare i32 @lumen_error_code(ptr)' : '',
       this.usesErrorRuntime ? 'declare ptr @lumen_error_text(ptr)' : '',
@@ -950,8 +953,12 @@ export class LLVMEmitter {
     if (this.isCall(expression.tokens, SystemFunctions.Receive)) return this.emitReceive(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.Json)) return this.emitRuntimeCall(expression.tokens, 'lumen_json', LumenTypes.Json, 1, 'json')
     if (this.isCall(expression.tokens, SystemFunctions.JsonGet)) return this.emitRuntimeCall(expression.tokens, 'lumen_json_get', LumenTypes.String, 2, 'jsonGet')
+    if (this.isCall(expression.tokens, SystemFunctions.JsonGetRaw)) return this.emitRuntimeCall(expression.tokens, 'lumen_json_get_raw', LumenTypes.String, 2, 'jsonGetRaw')
     if (this.isCall(expression.tokens, SystemFunctions.JsonSet)) return this.emitRuntimeCall(expression.tokens, 'lumen_json_set', LumenTypes.Json, 3, 'jsonSet')
+    if (this.isCall(expression.tokens, SystemFunctions.JsonSetPath)) return this.emitRuntimeCall(expression.tokens, 'lumen_json_set_path', LumenTypes.Json, 3, 'jsonSetPath')
+    if (this.isCall(expression.tokens, SystemFunctions.JsonQuote)) return this.emitRuntimeCall(expression.tokens, 'lumen_json_stringify', LumenTypes.String, 1, 'jsonQuote')
     if (this.isCall(expression.tokens, SystemFunctions.JsonStringify)) return this.emitRuntimeCall(expression.tokens, 'lumen_json_stringify', LumenTypes.String, 1, 'jsonStringify')
+    if (this.isCall(expression.tokens, SystemFunctions.JsonValid)) return this.emitRuntimeCall(expression.tokens, 'lumen_json_valid', LumenTypes.Bool, 1, 'jsonValid')
     if (this.isCall(expression.tokens, SystemFunctions.NewError)) return this.emitNewError(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.ErrorCode)) return this.emitRuntimeCall(expression.tokens, 'lumen_error_code', LumenTypes.I32, 1, 'errorCode')
     if (this.isCall(expression.tokens, SystemFunctions.ErrorText)) return this.emitRuntimeCall(expression.tokens, 'lumen_error_text', LumenTypes.String, 1, 'errorText')
@@ -1578,7 +1585,7 @@ export class LLVMEmitter {
     if (['lumen_map_get', 'lumen_map_has'].includes(runtimeName)) this.usesMaps = true
     if (['lumen_ok', 'lumen_err', 'lumen_is_ok', 'lumen_error_message'].includes(runtimeName)) this.usesResults = true
     if (['lumen_some', 'lumen_has_value', 'lumen_value_or'].includes(runtimeName)) this.usesOptions = true
-    if (['lumen_json', 'lumen_json_get', 'lumen_json_set', 'lumen_json_stringify'].includes(runtimeName)) this.usesJsonRuntime = true
+    if (['lumen_json', 'lumen_json_get', 'lumen_json_get_raw', 'lumen_json_set', 'lumen_json_set_path', 'lumen_json_stringify', 'lumen_json_valid'].includes(runtimeName)) this.usesJsonRuntime = true
     if (['lumen_error_code', 'lumen_error_text'].includes(runtimeName)) this.usesErrorRuntime = true
     if (runtimeName.startsWith('lumen_string') ||
       runtimeName.startsWith('lumen_list') ||

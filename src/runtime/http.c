@@ -1051,6 +1051,17 @@ static char *json_copy_value(const char *start) {
   return out;
 }
 
+static char *json_copy_raw_value(const char *start) {
+  start = json_skip_ws(start);
+  const char *end = json_value_end(start);
+  size_t length = (size_t)(end - start);
+  char *out = malloc(length + 1);
+  if (!out) return "";
+  memcpy(out, start, length);
+  out[length] = '\0';
+  return out;
+}
+
 static char *json_get_one(const char *json, const char *key) {
   size_t key_length = strlen(key);
   size_t pattern_length = key_length + 4;
@@ -1066,6 +1077,23 @@ static char *json_get_one(const char *json, const char *key) {
   if (!colon) return "";
   colon += 1;
   return json_copy_value(colon);
+}
+
+static char *json_get_one_raw(const char *json, const char *key) {
+  size_t key_length = strlen(key);
+  size_t pattern_length = key_length + 4;
+  char *pattern = malloc(pattern_length);
+  if (!pattern) return "";
+
+  snprintf(pattern, pattern_length, "\"%s\"", key);
+  char *found = strstr(json, pattern);
+  free(pattern);
+  if (!found) return "";
+
+  char *colon = strchr(found, ':');
+  if (!colon) return "";
+  colon += 1;
+  return json_copy_raw_value(colon);
 }
 
 static char *json_array_get(const char *json, int index) {
@@ -1089,7 +1117,28 @@ static char *json_array_get(const char *json, int index) {
   return "";
 }
 
-char *lumen_json_get(const char *json, const char *key) {
+static char *json_array_get_raw(const char *json, int index) {
+  const char *cursor = json_skip_ws(json);
+  if (*cursor != '[') return "";
+  cursor += 1;
+
+  int current = 0;
+  while (*cursor) {
+    cursor = json_skip_ws(cursor);
+    if (*cursor == ']') return "";
+
+    if (current == index) return json_copy_raw_value(cursor);
+
+    cursor = json_value_end(cursor);
+    cursor = json_skip_ws(cursor);
+    if (*cursor == ',') cursor += 1;
+    current += 1;
+  }
+
+  return "";
+}
+
+static char *json_path_get(const char *json, const char *key, int raw) {
   char *current = lumen_strdup(json);
   const char *cursor = key;
 
@@ -1102,14 +1151,14 @@ char *lumen_json_get(const char *json, const char *key) {
     }
     segment[length] = '\0';
 
-    if (length > 0) current = json_get_one(current, segment);
+    if (length > 0) current = raw ? json_get_one_raw(current, segment) : json_get_one(current, segment);
 
     while (*cursor == '[') {
       cursor += 1;
       int index = atoi(cursor);
       while (*cursor && *cursor != ']') cursor += 1;
       if (*cursor == ']') cursor += 1;
-      current = json_array_get(current, index);
+      current = raw ? json_array_get_raw(current, index) : json_array_get(current, index);
     }
 
     if (*cursor == '.') cursor += 1;
@@ -1118,9 +1167,47 @@ char *lumen_json_get(const char *json, const char *key) {
   return current;
 }
 
+char *lumen_json_get(const char *json, const char *key) {
+  return json_path_get(json, key, 0);
+}
+
+char *lumen_json_get_raw(const char *json, const char *key) {
+  return json_path_get(json, key, 1);
+}
+
 char *lumen_json_set(const char *json, const char *key, const char *value) {
   size_t json_length = strlen(json);
   int object = json_length >= 2 && json[0] == '{' && json[json_length - 1] == '}';
+
+  if (object) {
+    size_t key_length = strlen(key);
+    size_t pattern_length = key_length + 4;
+    char *pattern = malloc(pattern_length);
+    if (!pattern) return "";
+
+    snprintf(pattern, pattern_length, "\"%s\"", key);
+    char *found = strstr(json, pattern);
+    free(pattern);
+
+    if (found) {
+      char *colon = strchr(found, ':');
+      if (colon) {
+        const char *value_start = json_skip_ws(colon + 1);
+        const char *value_finish = json_value_end(value_start);
+        size_t prefix_length = (size_t)(value_start - json);
+        size_t value_length = strlen(value);
+        size_t suffix_length = strlen(value_finish);
+        char *out = malloc(prefix_length + value_length + suffix_length + 1);
+        if (!out) return "";
+
+        memcpy(out, json, prefix_length);
+        memcpy(out + prefix_length, value, value_length);
+        memcpy(out + prefix_length + value_length, value_finish, suffix_length + 1);
+        return out;
+      }
+    }
+  }
+
   size_t length = json_length + strlen(key) + strlen(value) + 8;
   char *out = malloc(length);
   if (!out) return "";
@@ -1131,6 +1218,25 @@ char *lumen_json_set(const char *json, const char *key, const char *value) {
   }
 
   snprintf(out, length, "%.*s,\"%s\":%s}", (int)(json_length - 1), json, key, value);
+  return out;
+}
+
+char *lumen_json_set_path(const char *json, const char *key, const char *value) {
+  const char *dot = strchr(key, '.');
+  if (!dot) return lumen_json_set(json, key, value);
+
+  size_t root_length = (size_t)(dot - key);
+  char *root = malloc(root_length + 1);
+  if (!root) return "";
+  memcpy(root, key, root_length);
+  root[root_length] = '\0';
+
+  const char *child = dot + 1;
+  char *current = lumen_json_get_raw(json, root);
+  if (strlen(current) == 0) current = lumen_strdup("{}");
+
+  char *next = lumen_json_set_path(current, child, value);
+  char *out = lumen_json_set(json, root, next);
   return out;
 }
 
@@ -1163,6 +1269,44 @@ char *lumen_json_stringify(const char *value) {
   *target++ = '"';
   *target = '\0';
   return out;
+}
+
+int lumen_json_valid(const char *value) {
+  const char *cursor = json_skip_ws(value);
+  char open = *cursor;
+  if (open != '{' && open != '[' && open != '"') return 0;
+
+  int depth = 0;
+  int in_string = 0;
+  int escaped = 0;
+  char stack[128];
+  int stack_length = 0;
+
+  while (*cursor) {
+    if (in_string) {
+      if (escaped) escaped = 0;
+      else if (*cursor == '\\') escaped = 1;
+      else if (*cursor == '"') in_string = 0;
+      cursor += 1;
+      continue;
+    }
+
+    if (*cursor == '"') in_string = 1;
+    else if (*cursor == '{' || *cursor == '[') {
+      if (stack_length >= 128) return 0;
+      stack[stack_length++] = *cursor;
+      depth += 1;
+    } else if (*cursor == '}' || *cursor == ']') {
+      if (stack_length == 0) return 0;
+      char expected = *cursor == '}' ? '{' : '[';
+      if (stack[--stack_length] != expected) return 0;
+      depth -= 1;
+    }
+
+    cursor += 1;
+  }
+
+  return depth == 0 && !in_string;
 }
 
 char *lumen_error_new(int code, const char *message) {

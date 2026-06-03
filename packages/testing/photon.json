@@ -1,5 +1,9 @@
 {
   "name": "testing",
   "version": "0.1.0",
-  "main": "main.lm"
+  "main": "main.lm",
+  "exports": [
+    "expectString",
+    "expectI32"
+  ]
 }

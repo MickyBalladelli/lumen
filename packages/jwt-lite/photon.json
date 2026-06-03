@@ -1,5 +1,9 @@
 {
   "name": "jwt-lite",
   "version": "0.1.0",
-  "main": "main.lm"
+  "main": "main.lm",
+  "exports": [
+    "jwtLooksLikeToken",
+    "jwtNeedsVerification"
+  ]
 }

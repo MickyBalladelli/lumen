@@ -1,11 +1,19 @@
 function main(): i32 {
   let payload: json = json('{"user":{"name":"lumen"},"items":["one","two"],"count":3}')
   let quoted = jsonStringify('hello "lumen"')
+  let quotedAlias = jsonQuote("hi")
+  let micky = jsonQuote("micky")
+  let next = jsonSetPath(payload, "user.name", micky)
 
   println(jsonGet(payload, "user.name"))
+  println(jsonGetRaw(payload, "user"))
   println(jsonGet(payload, "items[1]"))
   println(jsonGet(payload, 'count'))
   println(quoted)
+  println(quotedAlias)
+  println(jsonValid(payload))
+  println(jsonValid("nope"))
+  println(jsonGet(next, "user.name"))
 
   return 0
 }

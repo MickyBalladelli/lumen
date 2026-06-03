@@ -1,5 +1,12 @@
 {
   "name": "http-client",
   "version": "0.1.0",
-  "main": "main.lm"
+  "main": "main.lm",
+  "exports": [
+    "getRequest",
+    "postJsonRequest",
+    "putJsonRequest",
+    "deleteRequest",
+    "clientNeedsTransport"
+  ]
 }

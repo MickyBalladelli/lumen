@@ -54,8 +54,12 @@ export class ExpressionInspector {
     if (this.isCall(rawExpression, SystemFunctions.Receive)) return LumenTypes.String
     if (this.isCall(rawExpression, SystemFunctions.Json)) return LumenTypes.Json
     if (this.isCall(rawExpression, SystemFunctions.JsonGet)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.JsonGetRaw)) return LumenTypes.String
     if (this.isCall(rawExpression, SystemFunctions.JsonSet)) return LumenTypes.Json
+    if (this.isCall(rawExpression, SystemFunctions.JsonSetPath)) return LumenTypes.Json
+    if (this.isCall(rawExpression, SystemFunctions.JsonQuote)) return LumenTypes.String
     if (this.isCall(rawExpression, SystemFunctions.JsonStringify)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.JsonValid)) return LumenTypes.Bool
     if (this.isCall(rawExpression, SystemFunctions.NewError)) return LumenTypes.Error
     if (this.isCall(rawExpression, SystemFunctions.ErrorCode)) return LumenTypes.I32
     if (this.isCall(rawExpression, SystemFunctions.ErrorText)) return LumenTypes.String

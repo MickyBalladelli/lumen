@@ -105,7 +105,7 @@ const expectations = new Map([
     code: 0
   }],
   ['json-tools', {
-    stdout: 'lumen\ntwo\n3\n"hello \\"lumen\\""\n',
+    stdout: 'lumen\n{"name":"lumen"}\ntwo\n3\n"hello \\"lumen\\""\n"hi"\n1\n0\nmicky\n',
     code: 0
   }],
   ['native-main', {

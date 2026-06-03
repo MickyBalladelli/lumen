@@ -1,5 +1,12 @@
 {
   "name": "math-extra",
   "version": "0.1.0",
-  "main": "main.lm"
+  "main": "main.lm",
+  "exports": [
+    "clampI32",
+    "absI32",
+    "minI32Value",
+    "maxI32Value",
+    "betweenI32"
+  ]
 }
