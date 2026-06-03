@@ -61,7 +61,7 @@ export class TypeSystem {
     if (normalized === LumenTypes.Semaphore) return 'ptr'
     if (normalized === LumenTypes.Thread) return 'ptr'
     if (normalized === LumenTypes.Void) return 'void'
-    if (this.isNullable(normalized)) return this.llvm(this.nonNullable(normalized))
+    if (this.isNullable(normalized)) return 'ptr'
     if (this.isGeneric(normalized)) return 'ptr'
     if (this.enums.has(normalized)) return 'i32'
     if (this.structs.has(normalized)) return `%${normalized}`

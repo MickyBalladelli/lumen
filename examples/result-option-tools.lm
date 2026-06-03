@@ -13,10 +13,21 @@ function echoText(value: string): string {
   return value
 }
 
+function addOne(result: Result<i32>): i32 {
+  if isOk(result) {
+    let value = resultValue(result)
+    return value + 1
+  }
+
+  return 0
+}
+
 function main(): i32 {
   let good = ok("fine")
   let bad: Result<string> = err("broken")
   let maybe: string? = some("flow")
+  let count = ok(41)
+  let maybeCount: i32? = some(9)
   let mapped = mapOk(good, "nice ")
   let chained = andThen(good, ok("next"))
   let mappedOption = mapOption(maybe, "hi ")
@@ -29,6 +40,9 @@ function main(): i32 {
   println(unwrap(chained))
   println(unwrapOption(mappedOption))
   println(optionOr(none(), "empty"))
+  println(addOne(count))
+  let countValue = valueOr(maybeCount, 0)
+  println(countValue + 1)
 
   if hasValue(maybe) {
     println(echoText(maybe))

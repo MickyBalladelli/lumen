@@ -940,15 +940,15 @@ export class LLVMEmitter {
     if (this.isCall(expression.tokens, SystemFunctions.Map)) return this.emitMap(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.MapGet)) return this.emitRuntimeCall(expression.tokens, 'lumen_map_get', LumenTypes.String, 2, 'mapGet')
     if (this.isCall(expression.tokens, SystemFunctions.MapHas)) return this.emitRuntimeCall(expression.tokens, 'lumen_map_has', LumenTypes.Bool, 2, 'mapHas')
-    if (this.isCall(expression.tokens, SystemFunctions.Ok)) return this.emitRuntimeCall(expression.tokens, 'lumen_ok', LumenTypes.String, 1, 'ok')
-    if (this.isCall(expression.tokens, SystemFunctions.Err)) return this.emitRuntimeCall(expression.tokens, 'lumen_err', LumenTypes.String, 1, 'err')
+    if (this.isCall(expression.tokens, SystemFunctions.Ok)) return this.emitOk(expression.tokens)
+    if (this.isCall(expression.tokens, SystemFunctions.Err)) return this.emitErr(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.IsOk)) return this.emitRuntimeCall(expression.tokens, 'lumen_is_ok', LumenTypes.Bool, 1, 'isOk')
     if (this.isCall(expression.tokens, SystemFunctions.ResultValue)) return this.emitResultValue(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.ErrorMessage)) return this.emitRuntimeCall(expression.tokens, 'lumen_error_message', LumenTypes.String, 1, 'errorMessage')
-    if (this.isCall(expression.tokens, SystemFunctions.Some)) return this.emitRuntimeCall(expression.tokens, 'lumen_some', LumenTypes.String, 1, 'some')
+    if (this.isCall(expression.tokens, SystemFunctions.Some)) return this.emitSome(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.None)) return this.emitNone(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.HasValue)) return this.emitRuntimeCall(expression.tokens, 'lumen_has_value', LumenTypes.Bool, 1, 'hasValue')
-    if (this.isCall(expression.tokens, SystemFunctions.ValueOr)) return this.emitRuntimeCall(expression.tokens, 'lumen_value_or', LumenTypes.String, 2, 'valueOr')
+    if (this.isCall(expression.tokens, SystemFunctions.ValueOr)) return this.emitValueOr(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.Assert)) return this.emitAssert(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.Channel)) return this.emitChannel(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.Send)) return this.emitSend(expression.tokens)
@@ -1529,6 +1529,101 @@ export class LLVMEmitter {
     }
   }
 
+  emitOk(tokens) {
+    this.usesResults = true
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 1) {
+      throw new Diagnostic('ok expects one value', tokens[0].location, 'backend')
+    }
+
+    const value = this.emitExpression({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+    const encoded = this.encodeValueAsString(value, tokens[0].location)
+    const result = this.nextTemp()
+    this.lines.push(`  ${result} = call ptr @lumen_ok(ptr ${encoded.value})`)
+
+    return {
+      type: `Result<${value.type}>`,
+      value: result
+    }
+  }
+
+  emitErr(tokens) {
+    this.usesResults = true
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 1) {
+      throw new Diagnostic('err expects one message', tokens[0].location, 'backend')
+    }
+
+    const message = this.emitExpression({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+    const encoded = this.encodeValueAsString(message, tokens[0].location)
+    const result = this.nextTemp()
+    this.lines.push(`  ${result} = call ptr @lumen_err(ptr ${encoded.value})`)
+
+    return {
+      type: 'Result<unknown>',
+      value: result
+    }
+  }
+
+  emitSome(tokens) {
+    this.usesOptions = true
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 1) {
+      throw new Diagnostic('some expects one value', tokens[0].location, 'backend')
+    }
+
+    const value = this.emitExpression({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+    const encoded = this.encodeValueAsString(value, tokens[0].location)
+    const result = this.nextTemp()
+    this.lines.push(`  ${result} = call ptr @lumen_some(ptr ${encoded.value})`)
+
+    return {
+      type: `${value.type}?`,
+      value: result
+    }
+  }
+
+  emitValueOr(tokens) {
+    this.usesOptions = true
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 2) {
+      throw new Diagnostic('valueOr expects option and fallback', tokens[0].location, 'backend')
+    }
+
+    const option = this.emitExpression({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+    const fallback = this.emitExpression({
+      tokens: args[1],
+      location: tokens[0].location
+    })
+    const valueType = this.typeSystem.isNullable(option.type)
+      ? this.typeSystem.nonNullable(option.type)
+      : fallback.type
+    const encodedFallback = this.encodeValueAsString(fallback, tokens[0].location)
+    const raw = this.nextTemp()
+    this.lines.push(`  ${raw} = call ptr @lumen_value_or(ptr ${option.value}, ptr ${encodedFallback.value})`)
+
+    return this.decodeStringValue({
+      type: LumenTypes.String,
+      value: raw
+    }, valueType)
+  }
+
   emitStringCountCall(tokens, runtimeName, displayName) {
     this.usesStringRuntime = true
     const args = this.callArguments(tokens)
@@ -1602,9 +1697,66 @@ export class LLVMEmitter {
       ? this.typeSystem.genericArgs(resultValue.type)[0]
       : LumenTypes.String
 
-    return {
+    return this.decodeStringValue({
       type: innerType,
       value: result
+    }, innerType)
+  }
+
+  encodeValueAsString(value, location) {
+    if (value.type === LumenTypes.String || value.type === LumenTypes.Json || this.typeSystem.isGeneric(value.type) || this.typeSystem.isNullable(value.type)) {
+      return {
+        type: LumenTypes.String,
+        value: value.value
+      }
+    }
+
+    if (value.type === LumenTypes.I32 || value.type === LumenTypes.Bool) {
+      this.usesStringRuntime = true
+      const result = this.nextTemp()
+      this.lines.push(`  ${result} = call ptr @lumen_int_to_string(i32 ${this.cast(value, LumenTypes.I32)})`)
+      return {
+        type: LumenTypes.String,
+        value: result
+      }
+    }
+
+    throw new Diagnostic(`Cannot encode ${value.type} as string payload yet`, location, 'backend')
+  }
+
+  decodeStringValue(value, targetType) {
+    if (targetType === LumenTypes.String || targetType === LumenTypes.Json || targetType === LumenTypes.Unknown || this.typeSystem.isGeneric(targetType) || this.typeSystem.isNullable(targetType)) {
+      return {
+        type: targetType,
+        value: value.value
+      }
+    }
+
+    if (targetType === LumenTypes.I32) {
+      this.usesStringRuntime = true
+      const result = this.nextTemp()
+      this.lines.push(`  ${result} = call i32 @lumen_string_to_int(ptr ${value.value})`)
+      return {
+        type: LumenTypes.I32,
+        value: result
+      }
+    }
+
+    if (targetType === LumenTypes.Bool) {
+      this.usesStringRuntime = true
+      const parsed = this.nextTemp()
+      const result = this.nextTemp()
+      this.lines.push(`  ${parsed} = call i32 @lumen_string_to_int(ptr ${value.value})`)
+      this.lines.push(`  ${result} = icmp ne i32 ${parsed}, 0`)
+      return {
+        type: LumenTypes.Bool,
+        value: result
+      }
+    }
+
+    return {
+      type: targetType,
+      value: value.value
     }
   }
 
