@@ -4,6 +4,14 @@
       "source": "./packages/auth",
       "resolved": "local"
     },
+    "assert": {
+      "source": "./packages/assert",
+      "resolved": "local"
+    },
+    "cache": {
+      "source": "./packages/cache",
+      "resolved": "local"
+    },
     "config": {
       "source": "./packages/config",
       "resolved": "local"
@@ -16,12 +24,40 @@
       "source": "./packages/collections",
       "resolved": "local"
     },
+    "crypto-extra": {
+      "source": "./packages/crypto-extra",
+      "resolved": "local"
+    },
+    "csv": {
+      "source": "./packages/csv",
+      "resolved": "local"
+    },
+    "date-extra": {
+      "source": "./packages/date-extra",
+      "resolved": "local"
+    },
+    "env-extra": {
+      "source": "./packages/env-extra",
+      "resolved": "local"
+    },
     "fs-extra": {
       "source": "./packages/fs-extra",
       "resolved": "local"
     },
+    "html": {
+      "source": "./packages/html",
+      "resolved": "local"
+    },
+    "http-client": {
+      "source": "./packages/http-client",
+      "resolved": "local"
+    },
     "http-kit": {
       "source": "./packages/http-kit",
+      "resolved": "local"
+    },
+    "json-extra": {
+      "source": "./packages/json-extra",
       "resolved": "local"
     },
     "jwt-lite": {
@@ -32,8 +68,24 @@
       "source": "./packages/logger",
       "resolved": "local"
     },
+    "math-extra": {
+      "source": "./packages/math-extra",
+      "resolved": "local"
+    },
+    "middleware": {
+      "source": "./packages/middleware",
+      "resolved": "local"
+    },
     "option": {
       "source": "./packages/option",
+      "resolved": "local"
+    },
+    "path": {
+      "source": "./packages/path",
+      "resolved": "local"
+    },
+    "process": {
+      "source": "./packages/process",
       "resolved": "local"
     },
     "result": {
@@ -44,8 +96,16 @@
       "source": "./packages/router",
       "resolved": "local"
     },
+    "slug": {
+      "source": "./packages/slug",
+      "resolved": "local"
+    },
     "string-extra": {
       "source": "./packages/string-extra",
+      "resolved": "local"
+    },
+    "template": {
+      "source": "./packages/template",
       "resolved": "local"
     },
     "testing": {
@@ -58,6 +118,10 @@
     },
     "url": {
       "source": "./packages/url",
+      "resolved": "local"
+    },
+    "uuid": {
+      "source": "./packages/uuid",
       "resolved": "local"
     },
     "validation": {

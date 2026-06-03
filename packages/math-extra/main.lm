@@ -1,0 +1,47 @@
+function clampI32(value: i32, low: i32, high: i32): i32 {
+  if value < low {
+    return low
+  }
+
+  if value > high {
+    return high
+  }
+
+  return value
+}
+
+function absI32(value: i32): i32 {
+  if value < 0 {
+    return 0 - value
+  }
+
+  return value
+}
+
+function minI32Value(left: i32, right: i32): i32 {
+  if left < right {
+    return left
+  }
+
+  return right
+}
+
+function maxI32Value(left: i32, right: i32): i32 {
+  if left > right {
+    return left
+  }
+
+  return right
+}
+
+function betweenI32(value: i32, low: i32, high: i32): bool {
+  if value < low {
+    return false
+  }
+
+  if value > high {
+    return false
+  }
+
+  return true
+}

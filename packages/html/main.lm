@@ -1,0 +1,15 @@
+function htmlText(value: string): string {
+  return value
+}
+
+function htmlTag(name: string, body: string): string {
+  return "<" + name + ">" + body + "</" + name + ">"
+}
+
+function htmlAttr(name: string, value: string): string {
+  return name + '="' + value + '"'
+}
+
+function htmlElement(name: string, attrs: string, body: string): string {
+  return "<" + name + " " + attrs + ">" + body + "</" + name + ">"
+}

@@ -1,0 +1,13 @@
+function todayText(): string {
+  return date()
+}
+
+function datedId(prefix: string): string {
+  let now = date()
+  return prefix + "-" + now
+}
+
+function dateLine(label: string): string {
+  let now = date()
+  return now + " " + label
+}

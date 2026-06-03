@@ -1,0 +1,12 @@
+function slugPair(left: string, right: string): string {
+  return left + "-" + right
+}
+
+function slug3(first: string, second: string, third: string): string {
+  return first + "-" + second + "-" + third
+}
+
+function slugId(prefix: string): string {
+  let id = uuid()
+  return prefix + "-" + id
+}

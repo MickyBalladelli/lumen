@@ -1,0 +1,12 @@
+function csv2(first: string, second: string): string {
+  return first + "," + second
+}
+
+function csv3(first: string, second: string, third: string): string {
+  return first + "," + second + "," + third
+}
+
+function csvLine2(first: string, second: string): string {
+  let line = csv2(first, second)
+  return line + "\n"
+}

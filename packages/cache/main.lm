@@ -1,0 +1,21 @@
+function cacheEmpty(): string {
+  return ""
+}
+
+function cacheSet(cache: string, key: string, value: string): string {
+  return mapSet(cache, key, value)
+}
+
+function cacheGet(cache: string, key: string, fallback: string): string {
+  let value = mapGet(cache, key)
+
+  if stringEquals(value, "") {
+    return fallback
+  }
+
+  return value
+}
+
+function cacheHas(cache: string, key: string): bool {
+  return mapHas(cache, key)
+}

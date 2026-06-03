@@ -1,0 +1,12 @@
+function templatePair(name: string, value: string): string {
+  return "{{" + name + "}}=" + value
+}
+
+function renderLine(label: string, value: string): string {
+  return label + ": " + value
+}
+
+function render3(prefix: string, middle: string, suffix: string): string {
+  let start = stringBuilderAppend(prefix, middle)
+  return stringBuilderAppend(start, suffix)
+}

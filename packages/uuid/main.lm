@@ -1,0 +1,12 @@
+function newUuid(): string {
+  return uuid()
+}
+
+function uuidPrefix(prefix: string): string {
+  let id = uuid()
+  return prefix + "-" + id
+}
+
+function uuidLooksValid(value: string): bool {
+  return includes(value, "-")
+}

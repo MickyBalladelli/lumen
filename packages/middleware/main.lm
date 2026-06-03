@@ -1,0 +1,15 @@
+function corsHeaders(): string {
+  return '{"access-control-allow-origin":"*","access-control-allow-headers":"content-type"}'
+}
+
+function bearerToken(value: string): string {
+  return "Bearer " + value
+}
+
+function requireBearer(expected: string, actual: string): bool {
+  return stringEquals(bearerToken(expected), actual)
+}
+
+function requestLog(method: string, path: string): string {
+  return method + " " + path
+}

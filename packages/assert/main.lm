@@ -1,0 +1,24 @@
+function assertTrue(name: string, value: bool): i32 {
+  if value {
+    println("ok " + name)
+    return 0
+  }
+
+  println("failed " + name)
+  return 1
+}
+
+function assertString(name: string, actual: string, expected: string): i32 {
+  if stringEquals(actual, expected) {
+    println("ok " + name)
+    return 0
+  }
+
+  println("failed " + name)
+  println(actual)
+  return 1
+}
+
+function assertContains(name: string, value: string, needle: string): i32 {
+  return assertTrue(name, includes(value, needle))
+}

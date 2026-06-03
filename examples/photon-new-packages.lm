@@ -1,0 +1,56 @@
+import { assertContains, assertString, assertTrue } from "assert"
+import { cacheEmpty, cacheGet, cacheHas, cacheSet } from "cache"
+import { randomToken, secretsMatch } from "crypto-extra"
+import { csv3 } from "csv"
+import { datedId, todayText } from "date-extra"
+import { envBool, envText } from "env-extra"
+import { htmlElement, htmlTag } from "html"
+import { getRequest, postJsonRequest } from "http-client"
+import { jsonBoolSet, jsonHas, jsonStringSet, jsonValueOr } from "json-extra"
+import { betweenI32, clampI32 } from "math-extra"
+import { corsHeaders, requestLog } from "middleware"
+import { pathExt, pathJoin } from "path"
+import { processArg, processHasArgs } from "process"
+import { slugPair } from "slug"
+import { renderLine } from "template"
+import { newUuid, uuidLooksValid } from "uuid"
+
+function main(): i32 {
+  let cache = cacheSet(cacheEmpty(), "name", "lumen")
+  let data: json = json('{"name":"lumen"}')
+  let next = jsonBoolSet(jsonStringSet(data, "mode", "debug"), "ready", true)
+  let token = randomToken("tok")
+  let id = newUuid()
+
+  println(clampI32(12, 1, 10))
+  println(betweenI32(5, 1, 10))
+  println(jsonValueOr(next, "name", "missing"))
+  println(jsonHas(next, "ready"))
+  println(getRequest("/health"))
+  println(postJsonRequest("/items", '{"name":"lumen"}'))
+  println(envText("LUMEN_MISSING_ENV", "fallback"))
+  println(envBool("LUMEN_MISSING_BOOL", true))
+  println(pathJoin("build", pathExt("report", "txt")))
+  println(processArg(99, "arg-fallback"))
+  println(processHasArgs())
+  println(secretsMatch("a", "a"))
+  println(includes(token, "tok-"))
+  println(includes(datedId("item"), "item-"))
+  println(includes(todayText(), "-"))
+  println(renderLine("name", "lumen"))
+  println(csv3("a", "b", "c"))
+  println(cacheGet(cache, "name", "missing"))
+  println(cacheHas(cache, "name"))
+  println(requestLog("GET", "/health"))
+  println(includes(corsHeaders(), "content-type"))
+  println(htmlTag("strong", "lumen"))
+  println(htmlElement("a", 'href="/"', "home"))
+  println(slugPair("hello", "lumen"))
+  println(uuidLooksValid(id))
+
+  assertString("cache", cacheGet(cache, "name", "missing"), "lumen")
+  assertTrue("json", jsonHas(next, "ready"))
+  assertContains("slug", slugPair("hello", "lumen"), "-")
+
+  return 0
+}

@@ -1,0 +1,19 @@
+function pathJoin(left: string, right: string): string {
+  if stringEquals(left, "") {
+    return right
+  }
+
+  if stringEquals(right, "") {
+    return left
+  }
+
+  return left + "/" + right
+}
+
+function pathExt(name: string, ext: string): string {
+  return name + "." + ext
+}
+
+function pathUnder(root: string, name: string): string {
+  return pathJoin(root, name)
+}

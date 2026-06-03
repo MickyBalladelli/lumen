@@ -1,0 +1,19 @@
+function getRequest(path: string): string {
+  return httpRequest("GET", path, "")
+}
+
+function postJsonRequest(path: string, body: string): string {
+  return httpRequest("POST", path, body)
+}
+
+function putJsonRequest(path: string, body: string): string {
+  return httpRequest("PUT", path, body)
+}
+
+function deleteRequest(path: string): string {
+  return httpRequest("DELETE", path, "")
+}
+
+function clientNeedsTransport(): string {
+  return "Photon http-client builds request payloads; outbound HTTPS transport is not available yet"
+}

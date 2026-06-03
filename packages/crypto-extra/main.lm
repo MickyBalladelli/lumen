@@ -1,0 +1,16 @@
+function randomToken(prefix: string): string {
+  let id = uuid()
+  return prefix + "-" + id
+}
+
+function encryptText(value: string, key: string): string {
+  return encrypt(value, key)
+}
+
+function decryptText(value: string, key: string): string {
+  return decrypt(value, key)
+}
+
+function secretsMatch(left: string, right: string): bool {
+  return stringEquals(left, right)
+}

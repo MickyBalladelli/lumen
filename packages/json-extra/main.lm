@@ -1,0 +1,29 @@
+function jsonValueOr(data: json, key: string, fallback: string): string {
+  let value = jsonGet(data, key)
+
+  if stringEquals(value, "") {
+    return fallback
+  }
+
+  return value
+}
+
+function jsonHas(data: json, key: string): bool {
+  if stringEquals(jsonGet(data, key), "") {
+    return false
+  }
+
+  return true
+}
+
+function jsonStringSet(data: json, key: string, value: string): json {
+  return jsonSet(data, key, '"' + value + '"')
+}
+
+function jsonBoolSet(data: json, key: string, value: bool): json {
+  if value {
+    return jsonSet(data, key, "true")
+  }
+
+  return jsonSet(data, key, "false")
+}

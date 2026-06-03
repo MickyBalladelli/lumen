@@ -132,6 +132,10 @@ const expectations = new Map([
     stdout: 'bad empty\nvalue\n0\n1\n1\n1\nhi lumen\nfallback-arg\n0\n1\n1\n1\n{"ok":true}\n1\nfallback-map\nfirst\n1\n1\n',
     code: 0
   }],
+  ['photon-new-packages', {
+    stdout: '10\n1\nlumen\n1\n{"method":"GET","path":"/health","body":}\n{"method":"POST","path":"/items","body":{"name":"lumen"}}\nfallback\n1\nbuild/report.txt\narg-fallback\n0\n1\n1\n1\n1\nname: lumen\na,b,c\nlumen\n1\nGET /health\n1\n<strong>lumen</strong>\n<a href="/">home</a>\nhello-lumen\n1\nok cache\nok json\nok slug\n',
+    code: 0
+  }],
   ['println', {
     stdout: 'total\n10\n',
     code: 10

@@ -1,0 +1,33 @@
+function envText(name: string, fallback: string): string {
+  let value = env(name)
+
+  if stringEquals(value, "") {
+    return fallback
+  }
+
+  return value
+}
+
+function envRequired(name: string): string {
+  let value = env(name)
+
+  if stringEquals(value, "") {
+    return err("missing env " + name)
+  }
+
+  return ok(value)
+}
+
+function envBool(name: string, fallback: bool): bool {
+  let value = env(name)
+
+  if stringEquals(value, "true") {
+    return true
+  }
+
+  if stringEquals(value, "false") {
+    return false
+  }
+
+  return fallback
+}
