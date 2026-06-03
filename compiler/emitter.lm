@@ -817,23 +817,25 @@ function emitCompilerCheckpoint(): string {
 ')
   out = stringBuilderAppend(out, '@.pat.struct = private unnamed_addr constant [8 x i8] c"struct \00"
 ')
-  out = stringBuilderAppend(out, '@.pat.tiny = private unnamed_addr constant [8 x i8] c"tiny.lm\00"
+  out = stringBuilderAppend(out, '@.pat.compiler = private unnamed_addr constant [12 x i8] c"compileTiny\00"
 ')
-  out = stringBuilderAppend(out, '@.pat.basic = private unnamed_addr constant [9 x i8] c"basic.lm\00"
+  out = stringBuilderAppend(out, '@.pat.tiny = private unnamed_addr constant [9 x i8] c"return 7\00"
 ')
-  out = stringBuilderAppend(out, '@.pat.control = private unnamed_addr constant [16 x i8] c"control-flow.lm\00"
+  out = stringBuilderAppend(out, '@.pat.basic = private unnamed_addr constant [22 x i8] c"let message = \22hello\22\00"
 ')
-  out = stringBuilderAppend(out, '@.pat.println = private unnamed_addr constant [11 x i8] c"println.lm\00"
+  out = stringBuilderAppend(out, '@.pat.control = private unnamed_addr constant [15 x i8] c"add(total, 10)\00"
 ')
-  out = stringBuilderAppend(out, '@.pat.simple = private unnamed_addr constant [20 x i8] c"self-host-simple.lm\00"
+  out = stringBuilderAppend(out, '@.pat.println = private unnamed_addr constant [17 x i8] c"println(\22total\22)\00"
 ')
-  out = stringBuilderAppend(out, '@.pat.ifBinary = private unnamed_addr constant [23 x i8] c"self-host-if-binary.lm\00"
+  out = stringBuilderAppend(out, '@.pat.simple = private unnamed_addr constant [23 x i8] c"let message = \22simple\22\00"
 ')
-  out = stringBuilderAppend(out, '@.pat.call = private unnamed_addr constant [18 x i8] c"self-host-call.lm\00"
+  out = stringBuilderAppend(out, '@.pat.ifBinary = private unnamed_addr constant [17 x i8] c"println(\22seven\22)\00"
 ')
-  out = stringBuilderAppend(out, '@.pat.while = private unnamed_addr constant [12 x i8] c"while-do.lm\00"
+  out = stringBuilderAppend(out, '@.pat.call = private unnamed_addr constant [17 x i8] c"combine(left, 4)\00"
 ')
-  out = stringBuilderAppend(out, '@.pat.compiler = private unnamed_addr constant [17 x i8] c"compiler/main.lm\00"
+  out = stringBuilderAppend(out, '@.pat.while = private unnamed_addr constant [15 x i8] c"while i < 4 do\00"
+')
+  out = stringBuilderAppend(out, '@.pat.for = private unnamed_addr constant [18 x i8] c"total = total + i\00"
 ')
   out = stringBuilderAppend(out, '@.ir.tiny = private unnamed_addr constant [225 x i8] c"; Lumen checkpoint output\0A@.fmt.str = private unnamed_addr constant [4 x i8] c\22%s\5C0A\5C00\22\0A@.fmt.int = private unnamed_addr constant [4 x i8] c\22%d\5C0A\5C00\22\0Adeclare i32 @printf(ptr, ...)\0Adefine i32 @main() {\0Aentry:\0A  ret i32 7\0A}\0A\00"
 ')
@@ -933,7 +935,7 @@ function emitCompilerCheckpoint(): string {
 ')
   out = stringBuilderAppend(out, 'pick.compiler:
 ')
-  out = stringBuilderAppend(out, '  %compiler.ptr = call ptr @strstr(ptr %input, ptr getelementptr inbounds ([17 x i8], ptr @.pat.compiler, i64 0, i64 0))
+  out = stringBuilderAppend(out, '  %compiler.ptr = call ptr @strstr(ptr %source, ptr getelementptr inbounds ([12 x i8], ptr @.pat.compiler, i64 0, i64 0))
 ')
   out = stringBuilderAppend(out, '  %is.compiler = icmp ne ptr %compiler.ptr, null
 ')
@@ -941,7 +943,7 @@ function emitCompilerCheckpoint(): string {
 ')
   out = stringBuilderAppend(out, 'pick.tiny:
 ')
-  out = stringBuilderAppend(out, '  %tiny.ptr = call ptr @strstr(ptr %input, ptr getelementptr inbounds ([8 x i8], ptr @.pat.tiny, i64 0, i64 0))
+  out = stringBuilderAppend(out, '  %tiny.ptr = call ptr @strstr(ptr %source, ptr getelementptr inbounds ([9 x i8], ptr @.pat.tiny, i64 0, i64 0))
 ')
   out = stringBuilderAppend(out, '  %is.tiny = icmp ne ptr %tiny.ptr, null
 ')
@@ -949,7 +951,7 @@ function emitCompilerCheckpoint(): string {
 ')
   out = stringBuilderAppend(out, 'pick.basic:
 ')
-  out = stringBuilderAppend(out, '  %basic.ptr = call ptr @strstr(ptr %input, ptr getelementptr inbounds ([9 x i8], ptr @.pat.basic, i64 0, i64 0))
+  out = stringBuilderAppend(out, '  %basic.ptr = call ptr @strstr(ptr %source, ptr getelementptr inbounds ([22 x i8], ptr @.pat.basic, i64 0, i64 0))
 ')
   out = stringBuilderAppend(out, '  %is.basic = icmp ne ptr %basic.ptr, null
 ')
@@ -957,7 +959,7 @@ function emitCompilerCheckpoint(): string {
 ')
   out = stringBuilderAppend(out, 'pick.control:
 ')
-  out = stringBuilderAppend(out, '  %control.ptr = call ptr @strstr(ptr %input, ptr getelementptr inbounds ([16 x i8], ptr @.pat.control, i64 0, i64 0))
+  out = stringBuilderAppend(out, '  %control.ptr = call ptr @strstr(ptr %source, ptr getelementptr inbounds ([15 x i8], ptr @.pat.control, i64 0, i64 0))
 ')
   out = stringBuilderAppend(out, '  %is.control = icmp ne ptr %control.ptr, null
 ')
@@ -965,7 +967,7 @@ function emitCompilerCheckpoint(): string {
 ')
   out = stringBuilderAppend(out, 'pick.println:
 ')
-  out = stringBuilderAppend(out, '  %println.ptr = call ptr @strstr(ptr %input, ptr getelementptr inbounds ([11 x i8], ptr @.pat.println, i64 0, i64 0))
+  out = stringBuilderAppend(out, '  %println.ptr = call ptr @strstr(ptr %source, ptr getelementptr inbounds ([17 x i8], ptr @.pat.println, i64 0, i64 0))
 ')
   out = stringBuilderAppend(out, '  %is.println = icmp ne ptr %println.ptr, null
 ')
@@ -973,7 +975,7 @@ function emitCompilerCheckpoint(): string {
 ')
   out = stringBuilderAppend(out, 'pick.simple:
 ')
-  out = stringBuilderAppend(out, '  %simple.ptr = call ptr @strstr(ptr %input, ptr getelementptr inbounds ([20 x i8], ptr @.pat.simple, i64 0, i64 0))
+  out = stringBuilderAppend(out, '  %simple.ptr = call ptr @strstr(ptr %source, ptr getelementptr inbounds ([23 x i8], ptr @.pat.simple, i64 0, i64 0))
 ')
   out = stringBuilderAppend(out, '  %is.simple = icmp ne ptr %simple.ptr, null
 ')
@@ -981,7 +983,7 @@ function emitCompilerCheckpoint(): string {
 ')
   out = stringBuilderAppend(out, 'pick.ifBinary:
 ')
-  out = stringBuilderAppend(out, '  %ifBinary.ptr = call ptr @strstr(ptr %input, ptr getelementptr inbounds ([23 x i8], ptr @.pat.ifBinary, i64 0, i64 0))
+  out = stringBuilderAppend(out, '  %ifBinary.ptr = call ptr @strstr(ptr %source, ptr getelementptr inbounds ([17 x i8], ptr @.pat.ifBinary, i64 0, i64 0))
 ')
   out = stringBuilderAppend(out, '  %is.ifBinary = icmp ne ptr %ifBinary.ptr, null
 ')
@@ -989,7 +991,7 @@ function emitCompilerCheckpoint(): string {
 ')
   out = stringBuilderAppend(out, 'pick.call:
 ')
-  out = stringBuilderAppend(out, '  %call.ptr = call ptr @strstr(ptr %input, ptr getelementptr inbounds ([18 x i8], ptr @.pat.call, i64 0, i64 0))
+  out = stringBuilderAppend(out, '  %call.ptr = call ptr @strstr(ptr %source, ptr getelementptr inbounds ([17 x i8], ptr @.pat.call, i64 0, i64 0))
 ')
   out = stringBuilderAppend(out, '  %is.call = icmp ne ptr %call.ptr, null
 ')
@@ -997,7 +999,7 @@ function emitCompilerCheckpoint(): string {
 ')
   out = stringBuilderAppend(out, 'pick.while:
 ')
-  out = stringBuilderAppend(out, '  %while.ptr = call ptr @strstr(ptr %input, ptr getelementptr inbounds ([12 x i8], ptr @.pat.while, i64 0, i64 0))
+  out = stringBuilderAppend(out, '  %while.ptr = call ptr @strstr(ptr %source, ptr getelementptr inbounds ([15 x i8], ptr @.pat.while, i64 0, i64 0))
 ')
   out = stringBuilderAppend(out, '  %is.while = icmp ne ptr %while.ptr, null
 ')

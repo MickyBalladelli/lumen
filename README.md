@@ -591,7 +591,9 @@ Stage-1 compiler, stage-2 compiler, and example executables now link with
 `-DLUMEN_NO_SELF_HOST_FALLBACK`, which removes the C source-to-LLVM fallback
 symbols from the runtime. The stage-2 compiler is produced while the stage-1
 LLVM seed file is hidden, proving the self-compile step no longer reads
-`build/lumen-compiler.ll`.
+`build/lumen-compiler.ll`. The checkpoint also compiles a renamed copy of the
+basic example, proving the current bootstrap dispatch is based on source shape
+rather than the input path.
 
 ### HTTP
 

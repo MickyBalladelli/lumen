@@ -1,4 +1,4 @@
-import { readdir, readFile, rename, unlink } from 'node:fs/promises'
+import { readdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { spawn } from 'node:child_process'
 import { Compiler } from '../compiler/Compiler.js'
@@ -477,6 +477,12 @@ if (bootstrapCompile.code !== 0) {
       join(examplesDir, 'basic.lm'),
       join(outputDir, 'basic-self2.ll')
     ])
+    const renamedBasicPath = join(outputDir, 'renamed-bootstrap-source.lm')
+    await writeFile(renamedBasicPath, await readFile(join(examplesDir, 'basic.lm'), 'utf8'))
+    const selfRenamedBasicCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
+      renamedBasicPath,
+      join(outputDir, 'renamed-basic-self2.ll')
+    ])
     const selfControlCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
       join(examplesDir, 'control-flow.lm'),
       join(outputDir, 'control-flow-self2.ll')
@@ -510,11 +516,12 @@ if (bootstrapCompile.code !== 0) {
       join(outputDir, 'lumen-compiler-self2.ll')
     ])
 
-    if (selfBasicCompile.code !== 0 || selfControlCompile.code !== 0 || selfForLoopCompile.code !== 0 || selfNativeMainCompile.code !== 0 || selfPrintlnCompile.code !== 0 || selfSimpleCompile.code !== 0 || selfIfBinaryCompile.code !== 0 || selfCallCompile.code !== 0 || selfCompilerCompile.code !== 0) {
+    if (selfBasicCompile.code !== 0 || selfRenamedBasicCompile.code !== 0 || selfControlCompile.code !== 0 || selfForLoopCompile.code !== 0 || selfNativeMainCompile.code !== 0 || selfPrintlnCompile.code !== 0 || selfSimpleCompile.code !== 0 || selfIfBinaryCompile.code !== 0 || selfCallCompile.code !== 0 || selfCompilerCompile.code !== 0) {
       failures += 1
       console.error('failed second-stage compiler output')
     } else {
       await compiler.buildExecutable(join(outputDir, 'basic-self2.ll'), join(outputDir, 'basic-self2'))
+      await compiler.buildExecutable(join(outputDir, 'renamed-basic-self2.ll'), join(outputDir, 'renamed-basic-self2'))
       await compiler.buildExecutable(join(outputDir, 'control-flow-self2.ll'), join(outputDir, 'control-flow-self2'))
       await compiler.buildExecutable(join(outputDir, 'for-loop-self2.ll'), join(outputDir, 'for-loop-self2'))
       await compiler.buildExecutable(join(outputDir, 'native-main-self2.ll'), join(outputDir, 'native-main-self2'))
@@ -525,6 +532,7 @@ if (bootstrapCompile.code !== 0) {
       await compiler.buildExecutable(join(outputDir, 'lumen-compiler-self2.ll'), join(outputDir, 'lumen-compiler-self2'))
 
       const basic2 = await runExecutable(join(outputDir, 'basic-self2'))
+      const renamedBasic2 = await runExecutable(join(outputDir, 'renamed-basic-self2'))
       const control2 = await runExecutable(join(outputDir, 'control-flow-self2'))
       const forLoop2 = await runExecutable(join(outputDir, 'for-loop-self2'))
       const nativeMain2 = await runExecutable(join(outputDir, 'native-main-self2'))
@@ -534,6 +542,7 @@ if (bootstrapCompile.code !== 0) {
       const call2 = await runExecutable(join(outputDir, 'self-host-call-self2'))
 
       if (basic2.stdout !== 'hello\n3\n' || basic2.code !== 3 ||
+        renamedBasic2.stdout !== 'hello\n3\n' || renamedBasic2.code !== 3 ||
         control2.stdout !== 'sum 23\n' || control2.code !== 23 ||
         forLoop2.stdout !== '10\n' || forLoop2.code !== 10 ||
         nativeMain2.stdout !== '10\n' || nativeMain2.code !== 10 ||
@@ -547,6 +556,7 @@ if (bootstrapCompile.code !== 0) {
         console.log('ok bootstrap second-stage compiler')
       }
     }
+    await unlink(renamedBasicPath)
 
     const selfInvalidCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
       join('tests', 'bootstrap', 'invalid.lm'),
