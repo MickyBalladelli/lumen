@@ -8,6 +8,7 @@
 #include <crt_externs.h>
 #endif
 #include <errno.h>
+#include <ctype.h>
 #include <netinet/in.h>
 #include <pthread.h>
 #include <stdarg.h>
@@ -27,6 +28,8 @@ typedef int CCOperation;
 #endif
 
 static char *lumen_strdup(const char *value);
+char *lumen_list(void);
+char *lumen_list_push(const char *list, const char *value);
 
 char *lumen_uuid(void) {
   static int seeded = 0;
@@ -604,6 +607,99 @@ int lumen_string_equals(const char *left, const char *right) {
   return strcmp(left, right) == 0;
 }
 
+char *lumen_string_trim(const char *value) {
+  const char *start = value;
+  while (*start && isspace((unsigned char)*start)) start += 1;
+
+  const char *end = value + strlen(value);
+  while (end > start && isspace((unsigned char)*(end - 1))) end -= 1;
+
+  size_t length = (size_t)(end - start);
+  char *out = malloc(length + 1);
+  if (!out) return "";
+  memcpy(out, start, length);
+  out[length] = '\0';
+  return out;
+}
+
+char *lumen_string_lower(const char *value) {
+  size_t length = strlen(value);
+  char *out = malloc(length + 1);
+  if (!out) return "";
+
+  for (size_t index = 0; index < length; index += 1) {
+    out[index] = (char)tolower((unsigned char)value[index]);
+  }
+
+  out[length] = '\0';
+  return out;
+}
+
+char *lumen_string_upper(const char *value) {
+  size_t length = strlen(value);
+  char *out = malloc(length + 1);
+  if (!out) return "";
+
+  for (size_t index = 0; index < length; index += 1) {
+    out[index] = (char)toupper((unsigned char)value[index]);
+  }
+
+  out[length] = '\0';
+  return out;
+}
+
+int lumen_string_starts_with(const char *value, const char *prefix) {
+  size_t prefix_length = strlen(prefix);
+  return strncmp(value, prefix, prefix_length) == 0;
+}
+
+int lumen_string_ends_with(const char *value, const char *suffix) {
+  size_t value_length = strlen(value);
+  size_t suffix_length = strlen(suffix);
+  if (suffix_length > value_length) return 0;
+  return strcmp(value + value_length - suffix_length, suffix) == 0;
+}
+
+char *lumen_string_replace(const char *value, const char *needle, const char *replacement) {
+  size_t needle_length = strlen(needle);
+  if (needle_length == 0) return lumen_strdup(value);
+
+  const char *match = strstr(value, needle);
+  if (!match) return lumen_strdup(value);
+
+  size_t prefix_length = (size_t)(match - value);
+  size_t replacement_length = strlen(replacement);
+  size_t suffix_length = strlen(match + needle_length);
+  char *out = malloc(prefix_length + replacement_length + suffix_length + 1);
+  if (!out) return "";
+
+  memcpy(out, value, prefix_length);
+  memcpy(out + prefix_length, replacement, replacement_length);
+  memcpy(out + prefix_length + replacement_length, match + needle_length, suffix_length + 1);
+  return out;
+}
+
+char *lumen_string_split(const char *value, const char *separator) {
+  size_t separator_length = strlen(separator);
+  char *items = lumen_list();
+  if (separator_length == 0) return lumen_list_push(items, value);
+
+  const char *cursor = value;
+  const char *match = NULL;
+
+  while ((match = strstr(cursor, separator))) {
+    size_t length = (size_t)(match - cursor);
+    char *item = malloc(length + 1);
+    if (!item) return items;
+    memcpy(item, cursor, length);
+    item[length] = '\0';
+    items = lumen_list_push(items, item);
+    cursor = match + separator_length;
+  }
+
+  return lumen_list_push(items, cursor);
+}
+
 char *lumen_int_to_string(int value) {
   char *out = malloc(32);
   if (!out) return "";
@@ -613,6 +709,10 @@ char *lumen_int_to_string(int value) {
 
 int lumen_string_to_int(const char *value) {
   return atoi(value);
+}
+
+float lumen_parse_f32(const char *value) {
+  return strtof(value, NULL);
 }
 
 char *lumen_list(void) {

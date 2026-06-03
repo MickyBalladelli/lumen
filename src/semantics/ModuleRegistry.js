@@ -1,3 +1,6 @@
+import { readdir, readFile } from 'node:fs/promises'
+import { join } from 'node:path'
+
 export class ModuleRegistry {
   constructor() {
     this.modules = new Map([
@@ -46,8 +49,17 @@ export class ModuleRegistry {
         'stringBuilderAppend',
         'stringLen',
         'stringEquals',
+        'trim',
+        'lower',
+        'upper',
+        'startsWith',
+        'endsWith',
+        'replace',
+        'split',
         'intToString',
         'stringToInt',
+        'parseI32',
+        'parseF32',
         'list',
         'listPush',
         'listGet',
@@ -71,6 +83,41 @@ export class ModuleRegistry {
     ])
   }
 
+  static async fromPackageRoot(packageRoot = '.photon/packages') {
+    const registry = new ModuleRegistry()
+
+    let names = []
+    try {
+      names = await readdir(packageRoot)
+    } catch {
+      return registry
+    }
+
+    for (const name of names) {
+      const packagePath = join(packageRoot, name)
+      let manifest = { main: 'main.lm' }
+
+      try {
+        manifest = JSON.parse(await readFile(join(packagePath, 'photon.json'), 'utf8'))
+      } catch {
+        manifest = { main: 'main.lm' }
+      }
+
+      try {
+        const source = await readFile(join(packagePath, manifest.main ?? 'main.lm'), 'utf8')
+        registry.addModule(name, exportedFunctions(source))
+      } catch {
+        registry.addModule(name, [])
+      }
+    }
+
+    return registry
+  }
+
+  addModule(moduleName, names) {
+    this.modules.set(moduleName, new Set(names))
+  }
+
   has(moduleName, name) {
     return this.modules.get(moduleName)?.has(name) ?? false
   }
@@ -78,4 +125,9 @@ export class ModuleRegistry {
   hasModule(moduleName) {
     return this.modules.has(moduleName)
   }
+}
+
+function exportedFunctions(source) {
+  return [...source.matchAll(/^\s*function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/gm)]
+    .map(match => match[1])
 }

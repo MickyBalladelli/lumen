@@ -1,0 +1,23 @@
+function main(): i32 {
+  let value = "  Hello Lumen  "
+  let clean = trim(value)
+  let lowerValue = lower(clean)
+  let upperValue = upper(clean)
+  let replaced = replace(lowerValue, "lumen", "compiler")
+  let parts = split("red,green,blue", ",")
+  let count = parseI32("7")
+  let ratio = parseF32("2.5")
+
+  println(clean)
+  println(lowerValue)
+  println(upperValue)
+  println(startsWith(clean, "Hello"))
+  println(endsWith(clean, "Lumen"))
+  println(replaced)
+  println(listLen(parts))
+  println(listGet(parts, 1))
+  println(count)
+  println(ratio)
+
+  return count
+}

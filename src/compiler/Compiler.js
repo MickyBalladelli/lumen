@@ -11,6 +11,7 @@ import { IRBuilder } from '../ir/IRBuilder.js'
 import { LLVMEmitter } from '../backend/LLVMEmitter.js'
 import { Diagnostic } from '../diagnostics/Diagnostic.js'
 import { ModuleLoader } from '../modules/ModuleLoader.js'
+import { ModuleRegistry } from '../semantics/ModuleRegistry.js'
 
 const runtimePath = fileURLToPath(new URL('../runtime/http.c', import.meta.url))
 
@@ -32,12 +33,12 @@ export class Compiler {
     this.backend = backend
   }
 
-  compileSource(source, { sourcePath = null } = {}) {
+  compileSource(source, { sourcePath = null, semanticAnalyzer = this.semanticAnalyzer } = {}) {
     try {
       const tokens = new this.tokenizer(source).tokenize()
       const ast = new this.parser(tokens).parseProgram()
 
-      this.semanticAnalyzer.analyze(ast)
+      semanticAnalyzer.analyze(ast)
       this.typeChecker.check(ast)
 
       const ir = this.irBuilder.build(ast)
@@ -64,7 +65,16 @@ export class Compiler {
 
   async writeLLVMFile(inputPath, outputPath) {
     const source = await new ModuleLoader().load(inputPath)
-    return this.writeLLVM(source, outputPath, { sourcePath: resolve(inputPath) })
+    const moduleRegistry = await ModuleRegistry.fromPackageRoot()
+    const semanticAnalyzer = new SemanticAnalyzer({ moduleRegistry })
+    const result = this.compileSource(source, {
+      sourcePath: resolve(inputPath),
+      semanticAnalyzer
+    })
+
+    await mkdir(dirname(outputPath), { recursive: true })
+    await writeFile(outputPath, result.llvm)
+    return result
   }
 
   async buildExecutable(llvmPath, outputPath, { clang = 'clang', selfHostFallback = false, optimize = false } = {}) {

@@ -117,8 +117,16 @@ export class LLVMEmitter {
       this.usesStringRuntime ? 'declare ptr @lumen_string_builder_append(ptr, ptr)' : '',
       this.usesStringRuntime ? 'declare i32 @lumen_string_len(ptr)' : '',
       this.usesStringRuntime ? 'declare i1 @lumen_string_equals(ptr, ptr)' : '',
+      this.usesStringRuntime ? 'declare ptr @lumen_string_trim(ptr)' : '',
+      this.usesStringRuntime ? 'declare ptr @lumen_string_lower(ptr)' : '',
+      this.usesStringRuntime ? 'declare ptr @lumen_string_upper(ptr)' : '',
+      this.usesStringRuntime ? 'declare i1 @lumen_string_starts_with(ptr, ptr)' : '',
+      this.usesStringRuntime ? 'declare i1 @lumen_string_ends_with(ptr, ptr)' : '',
+      this.usesStringRuntime ? 'declare ptr @lumen_string_replace(ptr, ptr, ptr)' : '',
+      this.usesStringRuntime ? 'declare ptr @lumen_string_split(ptr, ptr)' : '',
       this.usesStringRuntime ? 'declare ptr @lumen_int_to_string(i32)' : '',
       this.usesStringRuntime ? 'declare i32 @lumen_string_to_int(ptr)' : '',
+      this.usesStringRuntime ? 'declare float @lumen_parse_f32(ptr)' : '',
       this.usesStringRuntime ? 'declare ptr @lumen_list()' : '',
       this.usesStringRuntime ? 'declare ptr @lumen_list_push(ptr, ptr)' : '',
       this.usesStringRuntime ? 'declare ptr @lumen_list_get(ptr, i32)' : '',
@@ -939,8 +947,17 @@ export class LLVMEmitter {
     if (this.isCall(expression.tokens, SystemFunctions.StringBuilderAppend)) return this.emitRuntimeCall(expression.tokens, 'lumen_string_builder_append', LumenTypes.String, 2, 'stringBuilderAppend')
     if (this.isCall(expression.tokens, SystemFunctions.StringLen)) return this.emitRuntimeCall(expression.tokens, 'lumen_string_len', LumenTypes.I32, 1, 'stringLen')
     if (this.isCall(expression.tokens, SystemFunctions.StringEquals)) return this.emitRuntimeCall(expression.tokens, 'lumen_string_equals', LumenTypes.Bool, 2, 'stringEquals')
+    if (this.isCall(expression.tokens, SystemFunctions.Trim)) return this.emitRuntimeCall(expression.tokens, 'lumen_string_trim', LumenTypes.String, 1, 'trim')
+    if (this.isCall(expression.tokens, SystemFunctions.Lower)) return this.emitRuntimeCall(expression.tokens, 'lumen_string_lower', LumenTypes.String, 1, 'lower')
+    if (this.isCall(expression.tokens, SystemFunctions.Upper)) return this.emitRuntimeCall(expression.tokens, 'lumen_string_upper', LumenTypes.String, 1, 'upper')
+    if (this.isCall(expression.tokens, SystemFunctions.StartsWith)) return this.emitRuntimeCall(expression.tokens, 'lumen_string_starts_with', LumenTypes.Bool, 2, 'startsWith')
+    if (this.isCall(expression.tokens, SystemFunctions.EndsWith)) return this.emitRuntimeCall(expression.tokens, 'lumen_string_ends_with', LumenTypes.Bool, 2, 'endsWith')
+    if (this.isCall(expression.tokens, SystemFunctions.Replace)) return this.emitRuntimeCall(expression.tokens, 'lumen_string_replace', LumenTypes.String, 3, 'replace')
+    if (this.isCall(expression.tokens, SystemFunctions.Split)) return this.emitRuntimeCall(expression.tokens, 'lumen_string_split', LumenTypes.String, 2, 'split')
     if (this.isCall(expression.tokens, SystemFunctions.IntToString)) return this.emitIntToString(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.StringToInt)) return this.emitRuntimeCall(expression.tokens, 'lumen_string_to_int', LumenTypes.I32, 1, 'stringToInt')
+    if (this.isCall(expression.tokens, SystemFunctions.ParseI32)) return this.emitRuntimeCall(expression.tokens, 'lumen_string_to_int', LumenTypes.I32, 1, 'parseI32')
+    if (this.isCall(expression.tokens, SystemFunctions.ParseF32)) return this.emitRuntimeCall(expression.tokens, 'lumen_parse_f32', LumenTypes.F32, 1, 'parseF32')
     if (this.isCall(expression.tokens, SystemFunctions.List)) return this.emitRuntimeCall(expression.tokens, 'lumen_list', LumenTypes.String, 0, 'list')
     if (this.isCall(expression.tokens, SystemFunctions.ListPush)) return this.emitRuntimeCall(expression.tokens, 'lumen_list_push', LumenTypes.String, 2, 'listPush')
     if (this.isCall(expression.tokens, SystemFunctions.ListGet)) return this.emitListGet(expression.tokens)

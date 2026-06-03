@@ -168,6 +168,10 @@ const expectations = new Map([
     stdout: '11\n',
     code: 11
   }],
+  ['string-tools', {
+    stdout: 'Hello Lumen\nhello lumen\nHELLO LUMEN\n1\n1\nhello compiler\n3\ngreen\n7\n2.500000\n',
+    code: 7
+  }],
   ['system', {
     stdout: '5\n1\n0\n1\n0\n1\n1\n4\n9\n3\n4\n5\n12\n',
     code: 12
