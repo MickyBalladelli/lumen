@@ -1,0 +1,11 @@
+function main(): i32 {
+  let payload: json = json('{"user":{"name":"lumen"},"items":["one","two"],"count":3}')
+  let quoted = jsonStringify('hello "lumen"')
+
+  println(jsonGet(payload, "user.name"))
+  println(jsonGet(payload, "items[1]"))
+  println(jsonGet(payload, 'count'))
+  println(quoted)
+
+  return 0
+}

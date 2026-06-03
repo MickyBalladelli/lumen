@@ -36,6 +36,7 @@ export class ModuleRegistry {
         'json',
         'jsonGet',
         'jsonSet',
+        'jsonStringify',
         'newError',
         'errorCode',
         'errorText',
@@ -56,6 +57,12 @@ export class ModuleRegistry {
         'endsWith',
         'replace',
         'split',
+        'indexOf',
+        'lastIndexOf',
+        'contains',
+        'repeat',
+        'padStart',
+        'padEnd',
         'intToString',
         'stringToInt',
         'parseI32',
@@ -101,6 +108,11 @@ export class ModuleRegistry {
         manifest = JSON.parse(await readFile(join(packagePath, 'photon.json'), 'utf8'))
       } catch {
         manifest = { main: 'main.lm' }
+      }
+
+      if (Array.isArray(manifest.exports)) {
+        registry.addModule(name, manifest.exports)
+        continue
       }
 
       try {

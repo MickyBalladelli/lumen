@@ -23,8 +23,11 @@ export class IRBuilder {
     const functions = program.body
       .filter(node => node.kind === 'FunctionDeclaration')
       .map(node => this.buildFunction(node))
+    const externs = program.body
+      .filter(node => node.kind === 'ExternFunctionDeclaration')
+      .map(node => this.buildExtern(node))
 
-    return new IRModule(functions, structs, enums)
+    return new IRModule(functions, structs, enums, externs)
   }
 
   buildFunction(node) {
@@ -37,6 +40,19 @@ export class IRBuilder {
       })),
       node.inferredType,
       node.body.body
+    )
+  }
+
+  buildExtern(node) {
+    return new IRFunction(
+      node.name.name,
+      node.params.map(param => ({
+        name: param.name,
+        type: param.inferredType,
+        location: param.location
+      })),
+      node.inferredType,
+      []
     )
   }
 }

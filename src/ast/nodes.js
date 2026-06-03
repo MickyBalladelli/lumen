@@ -90,6 +90,15 @@ export class FunctionDeclarationNode extends AstNode {
   }
 }
 
+export class ExternFunctionDeclarationNode extends AstNode {
+  constructor(name, params, location = null, returnType = null) {
+    super('ExternFunctionDeclaration', location)
+    this.name = name
+    this.params = params
+    this.returnType = returnType
+  }
+}
+
 export class BlockStatementNode extends AstNode {
   constructor(body = [], location = null) {
     super('BlockStatement', location)

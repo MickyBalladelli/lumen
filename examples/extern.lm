@@ -1,0 +1,6 @@
+extern function puts(value: string): i32
+
+function main(): i32 {
+  puts("hello extern")
+  return 0
+}

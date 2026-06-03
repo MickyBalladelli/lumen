@@ -8,6 +8,7 @@ import {
   DeferStatementNode,
   DoUntilStatementNode,
   EnumDeclarationNode,
+  ExternFunctionDeclarationNode,
   ExpressionStatementNode,
   ForOfStatementNode,
   ForRangeStatementNode,
@@ -60,6 +61,7 @@ export class Parser {
     // This is the main extension point for future syntax families:
     // imports, structs, traits, modules, extern blocks, etc.
     if (this.matchKeyword('import')) return this.importDeclaration()
+    if (this.matchKeyword('extern')) return this.externFunctionDeclaration()
     if (this.matchKeyword('enum')) return this.enumDeclaration()
     if (this.matchKeyword('struct')) return this.structDeclaration()
     if (this.matchKeyword('async')) return this.asyncFunctionDeclaration()
@@ -138,6 +140,23 @@ export class Parser {
 
     const body = this.blockStatement()
     return new FunctionDeclarationNode(name, params, body, keyword.location, returnType)
+  }
+
+  externFunctionDeclaration() {
+    const keyword = this.previous()
+    this.consumeKeyword('function', 'Expected function after extern')
+    const name = this.identifier()
+
+    this.consumePunctuation('(', 'Expected "(" after function name')
+    const params = this.parameterList()
+    this.consumePunctuation(')', 'Expected ")" after function parameters')
+
+    const returnType = this.matchOperator(':')
+      ? this.typeAnnotation()
+      : null
+
+    this.consumeOptionalTopLevelTerminator()
+    return new ExternFunctionDeclarationNode(name, params, keyword.location, returnType)
   }
 
   asyncFunctionDeclaration() {

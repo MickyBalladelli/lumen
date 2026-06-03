@@ -20,6 +20,9 @@ export class SemanticAnalyzer {
       if (node.kind === 'FunctionDeclaration') {
         this.defineFunction(scope, node)
       }
+      if (node.kind === 'ExternFunctionDeclaration') {
+        this.defineFunction(scope, node)
+      }
     }
 
     for (const node of program.body) {
@@ -73,6 +76,7 @@ export class SemanticAnalyzer {
     if (node.kind === 'ImportDeclaration') return this.visitImport(node, scope)
     if (node.kind === 'StructDeclaration') return
     if (node.kind === 'EnumDeclaration') return
+    if (node.kind === 'ExternFunctionDeclaration') return
     if (node.kind === 'FunctionDeclaration') return this.visitFunction(node, scope)
     if (node.kind === 'BlockStatement') return this.visitBlock(node, scope)
     if (node.kind === 'VariableDeclaration') return this.visitVariableDeclaration(node, scope)

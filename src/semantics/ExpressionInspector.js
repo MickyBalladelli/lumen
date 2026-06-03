@@ -55,6 +55,7 @@ export class ExpressionInspector {
     if (this.isCall(rawExpression, SystemFunctions.Json)) return LumenTypes.Json
     if (this.isCall(rawExpression, SystemFunctions.JsonGet)) return LumenTypes.String
     if (this.isCall(rawExpression, SystemFunctions.JsonSet)) return LumenTypes.Json
+    if (this.isCall(rawExpression, SystemFunctions.JsonStringify)) return LumenTypes.String
     if (this.isCall(rawExpression, SystemFunctions.NewError)) return LumenTypes.Error
     if (this.isCall(rawExpression, SystemFunctions.ErrorCode)) return LumenTypes.I32
     if (this.isCall(rawExpression, SystemFunctions.ErrorText)) return LumenTypes.String
@@ -75,6 +76,12 @@ export class ExpressionInspector {
     if (this.isCall(rawExpression, SystemFunctions.EndsWith)) return LumenTypes.Bool
     if (this.isCall(rawExpression, SystemFunctions.Replace)) return LumenTypes.String
     if (this.isCall(rawExpression, SystemFunctions.Split)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.IndexOf)) return LumenTypes.I32
+    if (this.isCall(rawExpression, SystemFunctions.LastIndexOf)) return LumenTypes.I32
+    if (this.isCall(rawExpression, SystemFunctions.Contains)) return LumenTypes.Bool
+    if (this.isCall(rawExpression, SystemFunctions.Repeat)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.PadStart)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.PadEnd)) return LumenTypes.String
     if (this.isCall(rawExpression, SystemFunctions.IntToString)) return LumenTypes.String
     if (this.isCall(rawExpression, SystemFunctions.StringToInt)) return LumenTypes.I32
     if (this.isCall(rawExpression, SystemFunctions.ParseI32)) return LumenTypes.I32

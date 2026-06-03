@@ -51,7 +51,10 @@ export class LLVMEmitter {
     this.usesErrorRuntime = false
     this.usesArrayRuntime = false
     this.usesThread = false
-    this.functionSignatures = new Map(irModule.functions.map(func => [func.name, func]))
+    this.functionSignatures = new Map([
+      ...irModule.functions.map(func => [func.name, func]),
+      ...(irModule.externs ?? []).map(func => [func.name, func])
+    ])
     this.enumConstants = new Map()
     for (const enumType of irModule.enums ?? []) {
       for (const variant of enumType.variants) {
@@ -62,6 +65,7 @@ export class LLVMEmitter {
       }
     }
     const typeDefinitions = irModule.structs.map(struct => this.emitStructType(struct))
+    const externs = (irModule.externs ?? []).map(func => this.emitExtern(func))
     const functions = irModule.functions.flatMap(func => this.emitFunction(func))
 
     return [
@@ -107,6 +111,7 @@ export class LLVMEmitter {
       this.usesJsonRuntime ? 'declare ptr @lumen_json(ptr)' : '',
       this.usesJsonRuntime ? 'declare ptr @lumen_json_get(ptr, ptr)' : '',
       this.usesJsonRuntime ? 'declare ptr @lumen_json_set(ptr, ptr, ptr)' : '',
+      this.usesJsonRuntime ? 'declare ptr @lumen_json_stringify(ptr)' : '',
       this.usesErrorRuntime ? 'declare ptr @lumen_error_new(i32, ptr)' : '',
       this.usesErrorRuntime ? 'declare i32 @lumen_error_code(ptr)' : '',
       this.usesErrorRuntime ? 'declare ptr @lumen_error_text(ptr)' : '',
@@ -124,6 +129,12 @@ export class LLVMEmitter {
       this.usesStringRuntime ? 'declare i1 @lumen_string_ends_with(ptr, ptr)' : '',
       this.usesStringRuntime ? 'declare ptr @lumen_string_replace(ptr, ptr, ptr)' : '',
       this.usesStringRuntime ? 'declare ptr @lumen_string_split(ptr, ptr)' : '',
+      this.usesStringRuntime ? 'declare i32 @lumen_string_index_of(ptr, ptr)' : '',
+      this.usesStringRuntime ? 'declare i32 @lumen_string_last_index_of(ptr, ptr)' : '',
+      this.usesStringRuntime ? 'declare i1 @lumen_string_contains(ptr, ptr)' : '',
+      this.usesStringRuntime ? 'declare ptr @lumen_string_repeat(ptr, i32)' : '',
+      this.usesStringRuntime ? 'declare ptr @lumen_string_pad_start(ptr, i32, ptr)' : '',
+      this.usesStringRuntime ? 'declare ptr @lumen_string_pad_end(ptr, i32, ptr)' : '',
       this.usesStringRuntime ? 'declare ptr @lumen_int_to_string(i32)' : '',
       this.usesStringRuntime ? 'declare i32 @lumen_string_to_int(ptr)' : '',
       this.usesStringRuntime ? 'declare float @lumen_parse_f32(ptr)' : '',
@@ -150,6 +161,7 @@ export class LLVMEmitter {
       this.usesThread ? 'declare ptr @lumen_thread_start(ptr, ptr, ptr, ptr)' : '',
       this.usesThread ? 'declare i32 @lumen_thread_join(ptr)' : '',
       this.usesThread ? 'declare i32 @lumen_append_file(ptr, ptr)' : '',
+      ...externs,
       this.debug ? 'declare void @llvm.dbg.declare(metadata, metadata, metadata)' : '',
       '',
       ...functions,
@@ -161,6 +173,11 @@ export class LLVMEmitter {
   emitStructType(struct) {
     const fields = struct.fields.map(field => this.llvmType(field.type)).join(', ')
     return `%${struct.name} = type { ${fields} }`
+  }
+
+  emitExtern(func) {
+    const params = func.params.map(param => this.llvmType(param.type)).join(', ')
+    return `declare ${this.llvmType(func.returnType)} @${func.name}(${params})`
   }
 
   emitFunction(func) {
@@ -934,6 +951,7 @@ export class LLVMEmitter {
     if (this.isCall(expression.tokens, SystemFunctions.Json)) return this.emitRuntimeCall(expression.tokens, 'lumen_json', LumenTypes.Json, 1, 'json')
     if (this.isCall(expression.tokens, SystemFunctions.JsonGet)) return this.emitRuntimeCall(expression.tokens, 'lumen_json_get', LumenTypes.String, 2, 'jsonGet')
     if (this.isCall(expression.tokens, SystemFunctions.JsonSet)) return this.emitRuntimeCall(expression.tokens, 'lumen_json_set', LumenTypes.Json, 3, 'jsonSet')
+    if (this.isCall(expression.tokens, SystemFunctions.JsonStringify)) return this.emitRuntimeCall(expression.tokens, 'lumen_json_stringify', LumenTypes.String, 1, 'jsonStringify')
     if (this.isCall(expression.tokens, SystemFunctions.NewError)) return this.emitNewError(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.ErrorCode)) return this.emitRuntimeCall(expression.tokens, 'lumen_error_code', LumenTypes.I32, 1, 'errorCode')
     if (this.isCall(expression.tokens, SystemFunctions.ErrorText)) return this.emitRuntimeCall(expression.tokens, 'lumen_error_text', LumenTypes.String, 1, 'errorText')
@@ -954,6 +972,12 @@ export class LLVMEmitter {
     if (this.isCall(expression.tokens, SystemFunctions.EndsWith)) return this.emitRuntimeCall(expression.tokens, 'lumen_string_ends_with', LumenTypes.Bool, 2, 'endsWith')
     if (this.isCall(expression.tokens, SystemFunctions.Replace)) return this.emitRuntimeCall(expression.tokens, 'lumen_string_replace', LumenTypes.String, 3, 'replace')
     if (this.isCall(expression.tokens, SystemFunctions.Split)) return this.emitRuntimeCall(expression.tokens, 'lumen_string_split', LumenTypes.String, 2, 'split')
+    if (this.isCall(expression.tokens, SystemFunctions.IndexOf)) return this.emitRuntimeCall(expression.tokens, 'lumen_string_index_of', LumenTypes.I32, 2, 'indexOf')
+    if (this.isCall(expression.tokens, SystemFunctions.LastIndexOf)) return this.emitRuntimeCall(expression.tokens, 'lumen_string_last_index_of', LumenTypes.I32, 2, 'lastIndexOf')
+    if (this.isCall(expression.tokens, SystemFunctions.Contains)) return this.emitRuntimeCall(expression.tokens, 'lumen_string_contains', LumenTypes.Bool, 2, 'contains')
+    if (this.isCall(expression.tokens, SystemFunctions.Repeat)) return this.emitStringCountCall(expression.tokens, 'lumen_string_repeat', 'repeat')
+    if (this.isCall(expression.tokens, SystemFunctions.PadStart)) return this.emitStringPadCall(expression.tokens, 'lumen_string_pad_start', 'padStart')
+    if (this.isCall(expression.tokens, SystemFunctions.PadEnd)) return this.emitStringPadCall(expression.tokens, 'lumen_string_pad_end', 'padEnd')
     if (this.isCall(expression.tokens, SystemFunctions.IntToString)) return this.emitIntToString(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.StringToInt)) return this.emitRuntimeCall(expression.tokens, 'lumen_string_to_int', LumenTypes.I32, 1, 'stringToInt')
     if (this.isCall(expression.tokens, SystemFunctions.ParseI32)) return this.emitRuntimeCall(expression.tokens, 'lumen_string_to_int', LumenTypes.I32, 1, 'parseI32')
@@ -1496,11 +1520,65 @@ export class LLVMEmitter {
     }
   }
 
+  emitStringCountCall(tokens, runtimeName, displayName) {
+    this.usesStringRuntime = true
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 2) {
+      throw new Diagnostic(`${displayName} expects value and count`, tokens[0].location, 'backend')
+    }
+
+    const value = this.emitExpression({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+    const count = this.emitExpression({
+      tokens: args[1],
+      location: tokens[0].location
+    })
+    const result = this.nextTemp()
+    this.lines.push(`  ${result} = call ptr @${runtimeName}(ptr ${value.value}, i32 ${this.cast(count, LumenTypes.I32)})`)
+
+    return {
+      type: LumenTypes.String,
+      value: result
+    }
+  }
+
+  emitStringPadCall(tokens, runtimeName, displayName) {
+    this.usesStringRuntime = true
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 3) {
+      throw new Diagnostic(`${displayName} expects value, length, and fill`, tokens[0].location, 'backend')
+    }
+
+    const value = this.emitExpression({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+    const length = this.emitExpression({
+      tokens: args[1],
+      location: tokens[0].location
+    })
+    const fill = this.emitExpression({
+      tokens: args[2],
+      location: tokens[0].location
+    })
+    const result = this.nextTemp()
+    this.lines.push(`  ${result} = call ptr @${runtimeName}(ptr ${value.value}, i32 ${this.cast(length, LumenTypes.I32)}, ptr ${fill.value})`)
+
+    return {
+      type: LumenTypes.String,
+      value: result
+    }
+  }
+
   emitRuntimeCall(tokens, runtimeName, returnType, expectedCount, displayName) {
     if (['lumen_map_get', 'lumen_map_has'].includes(runtimeName)) this.usesMaps = true
     if (['lumen_ok', 'lumen_err', 'lumen_is_ok', 'lumen_error_message'].includes(runtimeName)) this.usesResults = true
     if (['lumen_some', 'lumen_has_value', 'lumen_value_or'].includes(runtimeName)) this.usesOptions = true
-    if (['lumen_json', 'lumen_json_get', 'lumen_json_set'].includes(runtimeName)) this.usesJsonRuntime = true
+    if (['lumen_json', 'lumen_json_get', 'lumen_json_set', 'lumen_json_stringify'].includes(runtimeName)) this.usesJsonRuntime = true
     if (['lumen_error_code', 'lumen_error_text'].includes(runtimeName)) this.usesErrorRuntime = true
     if (runtimeName.startsWith('lumen_string') ||
       runtimeName.startsWith('lumen_list') ||

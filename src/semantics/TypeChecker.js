@@ -27,6 +27,13 @@ export class TypeChecker {
           type: node.returnType?.name ?? LumenTypes.I32
         })
       }
+      if (node.kind === 'ExternFunctionDeclaration') {
+        scope.define(node.name.name, {
+          kind: 'function',
+          node,
+          type: node.returnType?.name ?? LumenTypes.I32
+        })
+      }
     }
 
     for (const node of program.body) this.checkNode(node, scope, null)
@@ -64,6 +71,7 @@ export class TypeChecker {
     if (node.kind === 'ImportDeclaration') return LumenTypes.Void
     if (node.kind === 'StructDeclaration') return LumenTypes.Void
     if (node.kind === 'EnumDeclaration') return LumenTypes.Void
+    if (node.kind === 'ExternFunctionDeclaration') return this.checkExternFunction(node)
     if (node.kind === 'FunctionDeclaration') return this.checkFunction(node, scope)
     if (node.kind === 'BlockStatement') return this.checkBlock(node, scope, currentFunction)
     if (node.kind === 'VariableDeclaration') return this.checkVariableDeclaration(node, scope)
@@ -103,6 +111,17 @@ export class TypeChecker {
     }
 
     this.checkNode(node.body, scope, node)
+    return returnType
+  }
+
+  checkExternFunction(node) {
+    const returnType = this.resolveType(node.returnType, LumenTypes.I32)
+    node.inferredType = returnType
+
+    for (const param of node.params) {
+      param.inferredType = this.resolveType(param.typeAnnotation, LumenTypes.I32)
+    }
+
     return returnType
   }
 

@@ -76,6 +76,10 @@ const expectations = new Map([
     stdout: 'from-env\nfrom-dotenv\n\n1\n1\n',
     code: 0
   }],
+  ['extern', {
+    stdout: 'hello extern\n',
+    code: 0
+  }],
   ['error-type', {
     stdout: '7\ndisk locked\ndisk locked\n',
     code: 7
@@ -98,6 +102,10 @@ const expectations = new Map([
   }],
   ['json', {
     stdout: 'lumen\n3\ntrue\n',
+    code: 0
+  }],
+  ['json-tools', {
+    stdout: 'lumen\ntwo\n3\n"hello \\"lumen\\""\n',
     code: 0
   }],
   ['native-main', {
@@ -169,7 +177,7 @@ const expectations = new Map([
     code: 11
   }],
   ['string-tools', {
-    stdout: 'Hello Lumen\nhello lumen\nHELLO LUMEN\n1\n1\nhello compiler\n3\ngreen\n7\n2.500000\n',
+    stdout: 'Hello Lumen\nhello lumen\nHELLO LUMEN\n1\n1\nhello compiler\n6\n8\n1\nhahaha\n007\nx..\n3\ngreen\n7\n2.500000\n',
     code: 7
   }],
   ['system', {
