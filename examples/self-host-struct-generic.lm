@@ -1,0 +1,14 @@
+struct Box {
+  width: i32
+  height: i32
+  depth: i32
+}
+
+function main(): i32 {
+  let box = Box { width: 2, height: 5, depth: 4 }
+  let total: i32 = box.width + box.height + box.depth
+
+  println(total)
+
+  return total
+}

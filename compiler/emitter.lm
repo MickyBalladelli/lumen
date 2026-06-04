@@ -37,6 +37,59 @@ function callValueName(slot: string): string {
   return out
 }
 
+function addStructFieldSymbols(symbols: string, name: string, value: string): string {
+  let index: i32 = 0
+  let length = stringLen(value)
+
+  while index < length do {
+    let ch = value[index..index + 1]
+
+    if stringEquals(ch, ":") {
+      let fieldStart = index + 1
+      let cursor = fieldStart
+
+      while cursor < length do {
+        let current = value[cursor..cursor + 1]
+        if stringEquals(current, "=") {
+          let fieldName = value[fieldStart..cursor]
+          let valueStart = cursor + 1
+          let valueEnd = valueStart
+
+          while valueEnd < length do {
+            let next = value[valueEnd..valueEnd + 1]
+            if stringEquals(next, ":") {
+              let fieldKey = name + "." + fieldName
+              symbols = mapSet(symbols, fieldKey + "Kind", "number")
+              symbols = mapSet(symbols, fieldKey + "Value", value[valueStart..valueEnd])
+              index = valueEnd
+              break
+            }
+
+            valueEnd = valueEnd + 1
+          }
+
+          if valueEnd >= length {
+            let fieldKey = name + "." + fieldName
+            symbols = mapSet(symbols, fieldKey + "Kind", "number")
+            symbols = mapSet(symbols, fieldKey + "Value", value[valueStart..length])
+            index = length
+          }
+        }
+
+        if stringEquals(current, ":") {
+          break
+        }
+
+        cursor = cursor + 1
+      }
+    }
+
+    index = index + 1
+  }
+
+  return symbols
+}
+
 function buildStatementSymbols(program: string): string {
   let symbols = map("unused", "unused")
   let count = stringToInt(mapGet(program, "statementCount"))
@@ -54,6 +107,10 @@ function buildStatementSymbols(program: string): string {
       } else if includes(mapGet(program, prefix + "ExprKind"), "call") {
         symbols = mapSet(symbols, name + "Kind", "number")
         symbols = mapSet(symbols, name + "Value", callValueName(intToString(index)))
+      } else if includes(mapGet(program, prefix + "ResolvedKind"), "struct") {
+        symbols = mapSet(symbols, name + "Kind", "struct")
+        symbols = mapSet(symbols, name + "Value", mapGet(program, prefix + "ResolvedValue"))
+        symbols = addStructFieldSymbols(symbols, name, mapGet(program, prefix + "ResolvedValue"))
       } else {
         symbols = mapSet(symbols, name + "Kind", resolvedExprKind(program, symbols, prefix))
         symbols = mapSet(symbols, name + "Value", resolvedExprValue(program, symbols, prefix))
@@ -68,6 +125,10 @@ function buildStatementSymbols(program: string): string {
       } else if includes(mapGet(program, prefix + "ExprKind"), "call") {
         symbols = mapSet(symbols, name + "Kind", "number")
         symbols = mapSet(symbols, name + "Value", callValueName(intToString(index)))
+      } else if includes(mapGet(program, prefix + "ResolvedKind"), "struct") {
+        symbols = mapSet(symbols, name + "Kind", "struct")
+        symbols = mapSet(symbols, name + "Value", mapGet(program, prefix + "ResolvedValue"))
+        symbols = addStructFieldSymbols(symbols, name, mapGet(program, prefix + "ResolvedValue"))
       } else {
         symbols = mapSet(symbols, name + "Kind", resolvedExprKind(program, symbols, prefix))
         symbols = mapSet(symbols, name + "Value", resolvedExprValue(program, symbols, prefix))

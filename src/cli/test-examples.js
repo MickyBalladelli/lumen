@@ -168,6 +168,10 @@ const expectations = new Map([
     stdout: 'simple\n4\ndone\n',
     code: 4
   }],
+  ['self-host-struct-generic', {
+    stdout: '11\n',
+    code: 11
+  }],
   ['self-host-control', {
     stdout: '23\nsum 23\n1\n',
     code: 0
@@ -371,6 +375,10 @@ if (bootstrapCompile.code !== 0) {
     join(examplesDir, 'module-app.lm'),
     join(outputDir, 'module-app-self.ll')
   ])
+  const genericStructCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
+    join(examplesDir, 'self-host-struct-generic.lm'),
+    join(outputDir, 'self-host-struct-generic-self.ll')
+  ])
   const simpleCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
     join(examplesDir, 'self-host-simple.lm'),
     join(outputDir, 'self-host-simple-self.ll')
@@ -384,7 +392,7 @@ if (bootstrapCompile.code !== 0) {
     join(outputDir, 'self-host-call-self.ll')
   ])
 
-  if (forLoopCompile.code !== 0 || nativeMainCompile.code !== 0 || printlnCompile.code !== 0 || structCompile.code !== 0 || moduleCompile.code !== 0 || simpleCompile.code !== 0 || ifBinaryCompile.code !== 0 || callCompile.code !== 0) {
+  if (forLoopCompile.code !== 0 || nativeMainCompile.code !== 0 || printlnCompile.code !== 0 || structCompile.code !== 0 || moduleCompile.code !== 0 || genericStructCompile.code !== 0 || simpleCompile.code !== 0 || ifBinaryCompile.code !== 0 || callCompile.code !== 0) {
     failures += 1
     console.error('failed bootstrap loop compiler output')
   } else {
@@ -393,6 +401,7 @@ if (bootstrapCompile.code !== 0) {
     await compiler.buildExecutable(join(outputDir, 'println-self.ll'), join(outputDir, 'println-self'))
     await compiler.buildExecutable(join(outputDir, 'struct-self.ll'), join(outputDir, 'struct-self'))
     await compiler.buildExecutable(join(outputDir, 'module-app-self.ll'), join(outputDir, 'module-app-self'))
+    await compiler.buildExecutable(join(outputDir, 'self-host-struct-generic-self.ll'), join(outputDir, 'self-host-struct-generic-self'))
     await compiler.buildExecutable(join(outputDir, 'self-host-simple-self.ll'), join(outputDir, 'self-host-simple-self'))
     await compiler.buildExecutable(join(outputDir, 'self-host-if-binary-self.ll'), join(outputDir, 'self-host-if-binary-self'))
     await compiler.buildExecutable(join(outputDir, 'self-host-call-self.ll'), join(outputDir, 'self-host-call-self'))
@@ -401,6 +410,7 @@ if (bootstrapCompile.code !== 0) {
     const println = await runExecutable(join(outputDir, 'println-self'))
     const struct = await runExecutable(join(outputDir, 'struct-self'))
     const moduleApp = await runExecutable(join(outputDir, 'module-app-self'))
+    const genericStruct = await runExecutable(join(outputDir, 'self-host-struct-generic-self'))
     const simple = await runExecutable(join(outputDir, 'self-host-simple-self'))
     const ifBinary = await runExecutable(join(outputDir, 'self-host-if-binary-self'))
     const call = await runExecutable(join(outputDir, 'self-host-call-self'))
@@ -410,6 +420,7 @@ if (bootstrapCompile.code !== 0) {
       println.stdout !== 'total\n10\n' || println.code !== 10 ||
       struct.stdout !== '11\n' || struct.code !== 11 ||
       moduleApp.stdout !== '12\n' || moduleApp.code !== 12 ||
+      genericStruct.stdout !== '11\n' || genericStruct.code !== 11 ||
       simple.stdout !== 'simple\n4\ndone\n' || simple.code !== 4 ||
       ifBinary.stdout !== 'seven\n7\n' || ifBinary.code !== 7 ||
       call.stdout !== '9\n' || call.code !== 9) {

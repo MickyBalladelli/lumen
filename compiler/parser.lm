@@ -45,6 +45,16 @@ function readValue(tokens: string, index: i32, variables: string): string {
   let kind = tokenKind(token)
   let value = tokenValue(token)
 
+  if stringEquals(tokenValue(listGet(tokens, index + 1)), ".") {
+    let resolved = mapGet(variables, value)
+    if includes(resolved, "struct") {
+      let field = tokenValue(listGet(tokens, index + 2))
+      let fieldValue = structFieldValue(resolved, field)
+      let text = intToString(fieldValue)
+      return "number:" + text
+    }
+  }
+
   if stringEquals(kind, "number") {
     return "number:" + value
   }
@@ -119,32 +129,63 @@ function evalNumber(tokens: string, index: i32, variables: string): i32 {
 }
 
 function structFieldValue(value: string, field: string): i32 {
-  if stringEquals(field, "x") {
-    return stringToInt(mapValueBody(value))
-  }
+  let needle = ":" + field + "="
+  let index: i32 = 0
+  let length = stringLen(value)
+  let needleLength = stringLen(needle)
 
-  if stringEquals(field, "y") {
-    let index: i32 = 0
-    let seenFirst: bool = false
-    let length = stringLen(value)
+  while index + needleLength < length do {
+    if stringEquals(value[index..index + needleLength], needle) {
+      let start = index + needleLength
+      let end = start
 
-    while index < length do {
-      let ch = value[index..index + 1]
-      if includes(":", ch) {
-        if seenFirst {
-          return stringToInt(value[index + 1..length])
+      while end < length do {
+        let ch = value[end..end + 1]
+        if stringEquals(ch, ":") {
+          return stringToInt(value[start..end])
         }
 
-        seenFirst = true
+        end = end + 1
       }
 
-      index = index + 1
+      return stringToInt(value[start..length])
     }
 
-    return 0
+    index = index + 1
   }
 
   return 0
+}
+
+function readStructInitializer(tokens: string, index: i32, variables: string): string {
+  let equals = findNext(tokens, index, "=")
+  let structName = tokenValue(listGet(tokens, equals + 1))
+  let cursor = equals + 3
+  let count = listLen(tokens)
+  let out = "struct:" + structName
+
+  while cursor < count do {
+    let current = tokenValue(listGet(tokens, cursor))
+
+    if stringEquals(current, "}") {
+      return out
+    }
+
+    if stringEquals(tokenValue(listGet(tokens, cursor + 1)), ":") {
+      let fieldName = current
+      let value = evalNumber(tokens, cursor + 2, variables)
+      let valueText = intToString(value)
+      out = out + ":" + fieldName
+      out = out + "="
+      out = out + valueText
+      cursor = cursor + 3
+      continue
+    }
+
+    cursor = cursor + 1
+  }
+
+  return out
 }
 
 function readInitializer(tokens: string, index: i32, variables: string): string {
@@ -156,11 +197,8 @@ function readInitializer(tokens: string, index: i32, variables: string): string 
     return readValue(tokens, equals + 1, variables)
   }
 
-  if stringEquals(value, "Point") {
-    let x = tokenValue(listGet(tokens, equals + 5))
-    let y = tokenValue(listGet(tokens, equals + 9))
-    let prefix = "struct:" + x
-    return prefix + ":" + y
+  if stringEquals(tokenValue(listGet(tokens, equals + 2)), "{") {
+    return readStructInitializer(tokens, index, variables)
   }
 
   let number = evalNumber(tokens, equals + 1, variables)
@@ -172,6 +210,10 @@ function expressionKind(tokens: string, index: i32): string {
   let value = tokenValue(listGet(tokens, index))
   let kind = tokenKind(listGet(tokens, index))
   let next = tokenValue(listGet(tokens, index + 1))
+
+  if stringEquals(next, ".") {
+    return "identifier"
+  }
 
   if stringEquals(next, "+") {
     return "binary"
@@ -200,6 +242,15 @@ function expressionValue(tokens: string, index: i32): string {
   let value = tokenValue(listGet(tokens, index))
   let next = tokenValue(listGet(tokens, index + 1))
 
+  if stringEquals(next, ".") {
+    if stringEquals(tokenValue(listGet(tokens, index + 3)), "+") {
+      return "+"
+    }
+
+    let field = tokenValue(listGet(tokens, index + 2))
+    return value + "." + field
+  }
+
   if stringEquals(next, "+") {
     return next
   }
@@ -212,11 +263,29 @@ function expressionValue(tokens: string, index: i32): string {
 }
 
 function expressionLeftValue(tokens: string, index: i32): string {
+  if stringEquals(tokenValue(listGet(tokens, index + 1)), ".") {
+    let base = tokenValue(listGet(tokens, index))
+    let field = tokenValue(listGet(tokens, index + 2))
+    return base + "." + field
+  }
+
   return tokenValue(listGet(tokens, index))
 }
 
 function expressionRightValue(tokens: string, index: i32): string {
   let next = tokenValue(listGet(tokens, index + 1))
+
+  if stringEquals(next, ".") {
+    if stringEquals(tokenValue(listGet(tokens, index + 3)), "+") {
+      if stringEquals(tokenValue(listGet(tokens, index + 5)), ".") {
+        let base = tokenValue(listGet(tokens, index + 4))
+        let field = tokenValue(listGet(tokens, index + 6))
+        return base + "." + field
+      }
+
+      return tokenValue(listGet(tokens, index + 4))
+    }
+  }
 
   if stringEquals(next, "+") {
     return tokenValue(listGet(tokens, index + 2))

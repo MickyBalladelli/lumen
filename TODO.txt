@@ -7,7 +7,7 @@ DONE Self-host type checker
 DONE Self-host IR builder
 DONE Self-host LLVM emitter for whole language
 DONE Real module/import loading in self-host path
-Real struct support, not only Point smoke case
+DONE Real struct support, not only Point smoke case
 Arrays, enums, match, switch, try/catch, async in self-host path
 Better source-location diagnostics
 True bootstrap equality: stage 2 output same as stage 1

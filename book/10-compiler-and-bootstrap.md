@@ -38,7 +38,7 @@ Useful files:
 - Grow the self-host IR builder beyond module facts and statement flags
 - Grow the self-host semantic analyzer beyond symbol and control-flow checks
 - Grow the self-host type checker beyond simple annotations and first-argument calls
-- Generalize self-host struct support beyond the first fixed smoke case
+- Lower self-host struct literals to real storage instead of resolved field values
 - Grow self-host module loading beyond local/package source concatenation
 - Make diagnostics source-located
 
@@ -52,8 +52,9 @@ async functions, `let` / `const`, `if`, classic `for`, for-of, range loops,
 
 The stage compiler can emit the tiny bootstrap input, simple `let` / `println`
 / `return` programs, helper function calls, `if`, classic loop smoke cases,
-while-loop smoke cases, and the first struct smoke case from `examples/struct.lm`.
-That emit path still uses a compatibility map produced from the AST shape.
+while-loop smoke cases, and struct literals with named integer fields and field
+access. That emit path still uses a compatibility map produced from the AST
+shape.
 
 The self-host semantic analyzer has a `SemanticResult` and checks for `main`,
 duplicate top-level symbols, unsupported bootstrap `while 1`, and `break` /
