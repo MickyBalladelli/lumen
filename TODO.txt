@@ -14,6 +14,6 @@ DONE True bootstrap equality: stage 2 output same as stage 1
 DONE Formatter, LSP, install/init polish
 DONE Package CLI install path: make npm link / global install smooth for lmsh, photon, lumen-format, lumen-lsp
 DONE VS Code package check: make sure copy-compiler includes formatter/LSP and extension works from packaged .vsix
-Add small formatter tests so it does not drift
+DONE Add small formatter tests so it does not drift
 Add LSP diagnostics tests
 DONE Update README with “install Lumen” path

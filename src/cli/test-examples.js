@@ -2,6 +2,7 @@ import { readdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { spawn } from 'node:child_process'
 import { Compiler } from '../compiler/Compiler.js'
+import { formatSource } from '../formatter/Formatter.js'
 
 const examplesDir = 'examples'
 const negativeDir = 'tests/negative'
@@ -239,6 +240,25 @@ const files = (await readdir(examplesDir))
   .sort()
 
 let failures = 0
+
+const formatterCases = [
+  ['indent blocks', 'function main(): i32 {\nprintln("x")\nreturn 0\n}\n', 'function main(): i32 {\n  println("x")\n  return 0\n}\n'],
+  ['compact else', 'function main(): i32 {\nif true {\nprintln("yes")\n}\nelse {\nprintln("no")\n}\nreturn 0\n}\n', 'function main(): i32 {\n  if true {\n    println("yes")\n  } else {\n    println("no")\n  }\n  return 0\n}\n'],
+  ['keep for semicolons', 'function main(): i32 {\nfor (let i: i32 = 0; i < 3; i++) {\nprintln(i)\n}\nreturn 0\n}\n', 'function main(): i32 {\n  for (let i: i32 = 0; i < 3; i++) {\n    println(i)\n  }\n  return 0\n}\n']
+]
+
+for (const [name, source, expected] of formatterCases) {
+  const formatted = formatSource(source)
+  const reformatted = formatSource(formatted)
+
+  if (formatted !== expected || reformatted !== expected) {
+    failures += 1
+    console.error(`failed formatter ${name}`)
+    console.error(`expected ${JSON.stringify(expected)}, got ${JSON.stringify(formatted)}`)
+  } else {
+    console.log(`ok formatter ${name}`)
+  }
+}
 
 for (const file of files) {
   const name = basename(file, '.lm')
