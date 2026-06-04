@@ -1,23 +1,21 @@
 import { tokenize } from "./tokenizer.lm"
-import { parseProgram } from "./parser.lm"
+import { parseAst, parseProgram } from "./parser.lm"
+import { analyzeSemantics } from "./semantics.lm"
 import { emitMain } from "./emitter.lm"
 
 function compileTiny(input: string, output: string): i32 {
   let source = readFile(input)
-  if includes(source, "function main") {
+  let tokens = tokenize(source)
+  let ast = parseAst(tokens)
+  let semanticResult = analyzeSemantics(ast, tokens)
+
+  if semanticResult.ok {
     let checked = 1
   } else {
-    println("compile error: missing function main")
+    println(semanticResult.message)
     return 1
   }
 
-  let unsupportedWhile = "while " + "1"
-  if includes(source, unsupportedWhile) {
-    println("compile error: unsupported while")
-    return 1
-  }
-
-  let tokens = tokenize(source)
   let program = parseProgram(tokens)
   let llvm = emitMain(program)
 

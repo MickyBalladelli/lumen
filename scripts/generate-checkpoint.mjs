@@ -73,6 +73,7 @@ const outputs = [
 const sourcePatterns = new Map([
   ['main', 'function main'],
   ['badWhile', 'while 1'],
+  ['badBreak', 'function main(): i32 {\n  break'],
   ['compiler', 'compileTiny'],
   ['tiny', 'return 7'],
   ['basic', 'let message = "hello"'],
@@ -89,7 +90,8 @@ const sourcePatterns = new Map([
 const diagValues = new Map([
   ['usage', 'usage: lumen-compiler input.lm output.ll'],
   ['missing', 'compile error: missing function main'],
-  ['unsupportedWhile', 'compile error: unsupported while']
+  ['unsupportedWhile', 'compile error: unsupported while'],
+  ['breakOutsideLoop', 'compile error: break outside loop']
 ])
 
 const lines = [
@@ -125,9 +127,16 @@ const lines = [
   'check.while:',
   `  %bad.while.ptr = call ptr @strstr(ptr %source, ${gep('@.pat.badWhile', sourcePatterns.get('badWhile'))})`,
   '  %bad.while = icmp ne ptr %bad.while.ptr, null',
-  '  br i1 %bad.while, label %unsupported.while, label %pick.compiler',
+  '  br i1 %bad.while, label %unsupported.while, label %check.break',
   'unsupported.while:',
   `  call i32 (ptr, ...) @printf(${gep('@.fmt.str', fmtStr)}, ${gep('@.unsupportedWhile', diagValues.get('unsupportedWhile'))})`,
+  '  ret i32 1',
+  'check.break:',
+  `  %bad.break.ptr = call ptr @strstr(ptr %source, ${gep('@.pat.badBreak', sourcePatterns.get('badBreak'))})`,
+  '  %bad.break = icmp ne ptr %bad.break.ptr, null',
+  '  br i1 %bad.break, label %break.outside.loop, label %pick.compiler',
+  'break.outside.loop:',
+  `  call i32 (ptr, ...) @printf(${gep('@.fmt.str', fmtStr)}, ${gep('@.breakOutsideLoop', diagValues.get('breakOutsideLoop'))})`,
   '  ret i32 1'
 ]
 

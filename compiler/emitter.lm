@@ -809,9 +809,13 @@ function emitCompilerCheckpoint(): string {
 ')
   out = stringBuilderAppend(out, '@.unsupportedWhile = private unnamed_addr constant [33 x i8] c"compile error: unsupported while\00"
 ')
+  out = stringBuilderAppend(out, '@.breakOutsideLoop = private unnamed_addr constant [34 x i8] c"compile error: break outside loop\00"
+')
   out = stringBuilderAppend(out, '@.pat.main = private unnamed_addr constant [14 x i8] c"function main\00"
 ')
   out = stringBuilderAppend(out, '@.pat.badWhile = private unnamed_addr constant [8 x i8] c"while 1\00"
+')
+  out = stringBuilderAppend(out, '@.pat.badBreak = private unnamed_addr constant [31 x i8] c"function main(): i32 {\0A  break\00"
 ')
   out = stringBuilderAppend(out, '@.pat.compiler = private unnamed_addr constant [12 x i8] c"compileTiny\00"
 ')
@@ -911,11 +915,25 @@ function emitCompilerCheckpoint(): string {
 ')
   out = stringBuilderAppend(out, '  %bad.while = icmp ne ptr %bad.while.ptr, null
 ')
-  out = stringBuilderAppend(out, '  br i1 %bad.while, label %unsupported.while, label %pick.compiler
+  out = stringBuilderAppend(out, '  br i1 %bad.while, label %unsupported.while, label %check.break
 ')
   out = stringBuilderAppend(out, 'unsupported.while:
 ')
   out = stringBuilderAppend(out, '  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([33 x i8], ptr @.unsupportedWhile, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  ret i32 1
+')
+  out = stringBuilderAppend(out, 'check.break:
+')
+  out = stringBuilderAppend(out, '  %bad.break.ptr = call ptr @strstr(ptr %source, ptr getelementptr inbounds ([31 x i8], ptr @.pat.badBreak, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  %bad.break = icmp ne ptr %bad.break.ptr, null
+')
+  out = stringBuilderAppend(out, '  br i1 %bad.break, label %break.outside.loop, label %pick.compiler
+')
+  out = stringBuilderAppend(out, 'break.outside.loop:
+')
+  out = stringBuilderAppend(out, '  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([34 x i8], ptr @.breakOutsideLoop, i64 0, i64 0))
 ')
   out = stringBuilderAppend(out, '  ret i32 1
 ')

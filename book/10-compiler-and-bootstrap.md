@@ -22,6 +22,7 @@ Useful files:
 - `compiler/ast.lm`
 - `compiler/tokenizer.lm`
 - `compiler/parser.lm`
+- `compiler/semantics.lm`
 - `compiler/emitter.lm`
 - `compiler/main.lm`
 - `src/cli/test-examples.js`
@@ -30,6 +31,8 @@ Useful files:
 
 - Replace checkpoint source-shape dispatch with real tiny AST emission
 - Move emitter off the legacy AST-to-map bridge
+- Grow the self-host semantic analyzer beyond symbol and control-flow checks
+- Add self-host type checking
 - Generalize self-host struct support beyond the first fixed smoke case
 - Support imports/modules in self-host compiler
 - Make diagnostics source-located
@@ -46,3 +49,7 @@ The stage compiler can emit the tiny bootstrap input, simple `let` / `println`
 / `return` programs, helper function calls, `if`, classic loop smoke cases,
 while-loop smoke cases, and the first struct smoke case from `examples/struct.lm`.
 That emit path still uses a compatibility map produced from the AST shape.
+
+The self-host semantic analyzer has a `SemanticResult` and checks for `main`,
+duplicate top-level symbols, unsupported bootstrap `while 1`, and `break` /
+`continue` outside valid control-flow regions.

@@ -153,7 +153,7 @@ const expectations = new Map([
     code: 0
   }],
   ['self-host-parser', {
-    stdout: '7\n3\nlet\nnumber\nprintln\nidentifier\nreturn\nidentifier\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n',
+    stdout: '7\n3\nlet\nnumber\nprintln\nidentifier\nreturn\nidentifier\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n5\n0\ncompile error: break outside loop\n',
     code: 0
   }],
   ['self-host-if-binary', {
@@ -455,6 +455,17 @@ if (bootstrapCompile.code !== 0) {
     console.log('ok bootstrap unsupported while diagnostic')
   }
 
+  const breakCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
+    join('tests', 'negative', 'break-outside-loop.lm'),
+    join(outputDir, 'break-outside-loop-self.ll')
+  ])
+  if (breakCompile.code === 0 || breakCompile.stdout !== 'compile error: break outside loop\n') {
+    failures += 1
+    console.error('failed bootstrap break semantic diagnostic')
+  } else {
+    console.log('ok bootstrap break semantic diagnostic')
+  }
+
   const compilerSeedPath = join(outputDir, 'lumen-compiler.ll')
   const hiddenCompilerSeedPath = join(outputDir, 'lumen-compiler.seed-hidden.ll')
   await rename(compilerSeedPath, hiddenCompilerSeedPath)
@@ -612,6 +623,17 @@ if (bootstrapCompile.code !== 0) {
       console.error('failed second-stage unsupported while diagnostic')
     } else {
       console.log('ok second-stage unsupported while diagnostic')
+    }
+
+    const selfBreakCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
+      join('tests', 'negative', 'break-outside-loop.lm'),
+      join(outputDir, 'break-outside-loop-self2.ll')
+    ])
+    if (selfBreakCompile.code === 0 || selfBreakCompile.stdout !== 'compile error: break outside loop\n') {
+      failures += 1
+      console.error('failed second-stage break semantic diagnostic')
+    } else {
+      console.log('ok second-stage break semantic diagnostic')
     }
   }
 }

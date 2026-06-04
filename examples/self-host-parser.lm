@@ -1,5 +1,6 @@
 import { tokenize } from "../compiler/tokenizer.lm"
 import { parseAst, parseProgram } from "../compiler/parser.lm"
+import { analyzeSemantics } from "../compiler/semantics.lm"
 import { emitMain } from "../compiler/emitter.lm"
 
 function main(): i32 {
@@ -20,6 +21,7 @@ function main(): i32 {
   let syntaxSource = 'import { println } from "system" struct Point { x: i32 y: i32 } enum Status { Ok Missing } extern function native(value: i32): i32 async function load(): i32 { return 1 } function main(): i32 { defer cleanup() let status: Status = Missing let label = match status { Ok => "ok" _ => "unknown" } for item in 0..2 { continue } for (let value of values) { break } switch status { case Missing { println(label) } default { println("x") } } do { status = Ok } until status == Ok try { throw "boom" } catch error { println(error) } return 0 }'
   let syntaxTokens = tokenize(syntaxSource)
   let syntaxAst = parseAst(syntaxTokens)
+  let syntaxSemantics = analyzeSemantics(syntaxAst, syntaxTokens)
 
   println(syntaxAst.importCount)
   println(syntaxAst.structCount)
@@ -33,6 +35,14 @@ function main(): i32 {
   println(syntaxAst.switchCount)
   println(syntaxAst.doUntilCount)
   println(syntaxAst.tryCatchCount)
+  println(syntaxSemantics.ok)
+  println(syntaxSemantics.symbolCount)
+
+  let badTokens = tokenize("function main(): i32 { break return 0 }")
+  let badAst = parseAst(badTokens)
+  let badSemantics = analyzeSemantics(badAst, badTokens)
+  println(badSemantics.ok)
+  println(badSemantics.message)
 
   return 0
 }

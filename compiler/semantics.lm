@@ -1,0 +1,246 @@
+import { AstProgram } from "./ast.lm"
+
+struct SemanticResult {
+  ok: bool
+  message: string
+  symbolCount: i32
+}
+
+function semanticOk(symbolCount: i32): SemanticResult {
+  let result = SemanticResult {
+    ok: true,
+    message: "",
+    symbolCount: symbolCount
+  }
+
+  return result
+}
+
+function semanticError(message: string, symbolCount: i32): SemanticResult {
+  let result = SemanticResult {
+    ok: false,
+    message: message,
+    symbolCount: symbolCount
+  }
+
+  return result
+}
+
+function semanticTokenValue(token: string): string {
+  let index: i32 = 0
+  let length = stringLen(token)
+
+  while index < length do {
+    let ch = token[index..index + 1]
+    if includes(":", ch) {
+      return token[index + 1..length]
+    }
+
+    index = index + 1
+  }
+
+  return token
+}
+
+function semanticFindNext(tokens: string, index: i32, wanted: string): i32 {
+  let count = listLen(tokens)
+
+  while index < count do {
+    if stringEquals(semanticTokenValue(listGet(tokens, index)), wanted) {
+      return index
+    }
+
+    index = index + 1
+  }
+
+  return index
+}
+
+function semanticFindBlockEnd(tokens: string, index: i32): i32 {
+  let count = listLen(tokens)
+  let depth: i32 = 0
+  let seen: bool = false
+
+  while index < count do {
+    let value = semanticTokenValue(listGet(tokens, index))
+
+    if stringEquals(value, "{") {
+      depth = depth + 1
+      seen = true
+    }
+
+    if stringEquals(value, "}") {
+      depth = depth - 1
+      if seen {
+        if depth == 0 {
+          return index
+        }
+      }
+    }
+
+    index = index + 1
+  }
+
+  return index
+}
+
+function semanticBlockContains(tokens: string, blockStart: i32, target: i32): bool {
+  let bodyStart = semanticFindNext(tokens, blockStart, "{")
+  let bodyEnd = semanticFindBlockEnd(tokens, blockStart)
+
+  if target > bodyStart {
+    if target < bodyEnd {
+      return true
+    }
+  }
+
+  return false
+}
+
+function semanticIsInLoop(tokens: string, target: i32): bool {
+  let index: i32 = 0
+  let count = listLen(tokens)
+
+  while index < target do {
+    let current = semanticTokenValue(listGet(tokens, index))
+
+    if stringEquals(current, "for") {
+      if semanticBlockContains(tokens, index, target) {
+        return true
+      }
+    }
+
+    if stringEquals(current, "while") {
+      if semanticBlockContains(tokens, index, target) {
+        return true
+      }
+    }
+
+    if stringEquals(current, "do") {
+      if semanticBlockContains(tokens, index, target) {
+        return true
+      }
+    }
+
+    index = index + 1
+  }
+
+  return false
+}
+
+function semanticIsInSwitch(tokens: string, target: i32): bool {
+  let index: i32 = 0
+  let count = listLen(tokens)
+
+  while index < target do {
+    let current = semanticTokenValue(listGet(tokens, index))
+
+    if stringEquals(current, "switch") {
+      if semanticBlockContains(tokens, index, target) {
+        return true
+      }
+    }
+
+    index = index + 1
+  }
+
+  return false
+}
+
+function semanticSymbolName(tokens: string, index: i32): string {
+  let current = semanticTokenValue(listGet(tokens, index))
+
+  if stringEquals(current, "async") {
+    return semanticTokenValue(listGet(tokens, index + 2))
+  }
+
+  return semanticTokenValue(listGet(tokens, index + 1))
+}
+
+function semanticIsNamedDeclaration(tokens: string, index: i32): bool {
+  let current = semanticTokenValue(listGet(tokens, index))
+
+  if stringEquals(current, "function") {
+    return true
+  }
+
+  if stringEquals(current, "struct") {
+    return true
+  }
+
+  if stringEquals(current, "enum") {
+    return true
+  }
+
+  if stringEquals(current, "async") {
+    if stringEquals(semanticTokenValue(listGet(tokens, index + 1)), "function") {
+      return true
+    }
+  }
+
+  return false
+}
+
+function analyzeSemantics(ast: AstProgram, tokens: string): SemanticResult {
+  let symbols = map("unused", "unused")
+  let count = listLen(tokens)
+  let index: i32 = 0
+  let symbolCount: i32 = 0
+  let hasMain: bool = false
+
+  while index < count do {
+    let current = semanticTokenValue(listGet(tokens, index))
+
+    if semanticIsNamedDeclaration(tokens, index) {
+      let name = semanticSymbolName(tokens, index)
+
+      if stringEquals(name, "main") {
+        hasMain = true
+      }
+
+      if includes(mapGet(symbols, name), "declared") {
+        return semanticError("compile error: duplicate symbol " + name, symbolCount)
+      }
+
+      symbols = mapSet(symbols, name, "declared")
+      symbolCount = symbolCount + 1
+
+      if stringEquals(current, "async") {
+        index = index + 1
+      }
+    }
+
+    if stringEquals(current, "while") {
+      let condition = semanticTokenValue(listGet(tokens, index + 1))
+      if stringEquals(condition, "1") {
+        return semanticError("compile error: unsupported while", symbolCount)
+      }
+    }
+
+    if stringEquals(current, "break") {
+      if semanticIsInLoop(tokens, index) {
+        let okLoopBreak = 1
+      } else if semanticIsInSwitch(tokens, index) {
+        let okSwitchBreak = 1
+      } else {
+        return semanticError("compile error: break outside loop", symbolCount)
+      }
+    }
+
+    if stringEquals(current, "continue") {
+      if semanticIsInLoop(tokens, index) {
+        let okContinue = 1
+      } else {
+        return semanticError("compile error: continue outside loop", symbolCount)
+      }
+    }
+
+    index = index + 1
+  }
+
+  if hasMain {
+    return semanticOk(symbolCount)
+  }
+
+  return semanticError("compile error: missing function main", symbolCount)
+}

@@ -1,7 +1,7 @@
 Still missing big things:
 
 DONE Real self-host parser for all syntax
-Real self-host AST, not map/string records
+DONE Real self-host AST, not map/string records
 Self-host semantic analyzer
 Self-host type checker
 Self-host IR builder
