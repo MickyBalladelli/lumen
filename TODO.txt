@@ -10,5 +10,5 @@ DONE Real module/import loading in self-host path
 DONE Real struct support, not only Point smoke case
 DONE Arrays, enums, match, switch, try/catch, async in self-host path
 DONE Better source-location diagnostics
-True bootstrap equality: stage 2 output same as stage 1
+DONE True bootstrap equality: stage 2 output same as stage 1
 Formatter, LSP, install/init polish

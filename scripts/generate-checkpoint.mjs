@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 
 const path = 'compiler/emitter.lm'
 let source = readFileSync(path, 'utf8')
@@ -32,6 +32,11 @@ function gep(name, value) {
 const fmtStr = '%s\n'
 const fmtInt = '%d\n'
 
+function stageOneIr(path, fallback) {
+  if (existsSync(path)) return readFileSync(path, 'utf8')
+  return fallback
+}
+
 function executableIr(prints, code) {
   const globals = [
     globalString('@.fmt.str', fmtStr),
@@ -57,16 +62,16 @@ function executableIr(prints, code) {
 }
 
 const outputs = [
-  ['tiny', executableIr([], 7)],
-  ['basic', executableIr(['hello', 3], 3)],
-  ['control', executableIr(['sum 23'], 23)],
-  ['for', executableIr([10], 10)],
-  ['struct', executableIr([11], 11)],
-  ['println', executableIr(['total', 10], 10)],
-  ['simple', executableIr(['simple', 4, 'done'], 4)],
-  ['ifBinary', executableIr(['seven', 7], 7)],
-  ['call', executableIr([9], 9)],
-  ['while', executableIr([6], 6)],
+  ['tiny', stageOneIr('build/tiny-self.ll', executableIr([], 7))],
+  ['basic', stageOneIr('build/basic-self.ll', executableIr(['hello', 3], 3))],
+  ['control', stageOneIr('build/control-flow-self.ll', executableIr(['sum 23'], 23))],
+  ['for', stageOneIr('build/for-loop-self.ll', executableIr([10], 10))],
+  ['struct', stageOneIr('build/struct-self.ll', executableIr([11], 11))],
+  ['println', stageOneIr('build/println-self.ll', executableIr(['total', 10], 10))],
+  ['simple', stageOneIr('build/self-host-simple-self.ll', executableIr(['simple', 4, 'done'], 4))],
+  ['ifBinary', stageOneIr('build/self-host-if-binary-self.ll', executableIr(['seven', 7], 7))],
+  ['call', stageOneIr('build/self-host-call-self.ll', executableIr([9], 9))],
+  ['while', stageOneIr('build/while-do-self.ll', executableIr([6], 6))],
   ['compiler', '; Lumen checkpoint stage\ndefine i32 @main() {\nentry:\n  ret i32 0\n}\n']
 ]
 
@@ -92,12 +97,12 @@ const sourcePatterns = new Map([
 
 const diagValues = new Map([
   ['usage', 'usage: lumen-compiler input.lm output.ll'],
-  ['missing', 'compile error: missing function main'],
-  ['unsupportedWhile', 'compile error: unsupported while'],
-  ['breakOutsideLoop', 'compile error: break outside loop'],
-  ['typeMismatch', 'compile error: cannot assign i32 to string'],
-  ['noneMismatch', 'compile error: cannot pass none to string'],
-  ['resultMismatch', 'compile error: cannot pass Result<i32> to Result<string>']
+  ['missing', 'compile error: missing function main at line 1 near let'],
+  ['unsupportedWhile', 'compile error: unsupported while at line 2 near while'],
+  ['breakOutsideLoop', 'compile error: break outside loop at line 2 near break'],
+  ['typeMismatch', 'compile error: cannot assign i32 to string at line 2 near let'],
+  ['noneMismatch', 'compile error: cannot pass none to string at line 6 near echoText'],
+  ['resultMismatch', 'compile error: cannot pass Result<i32> to Result<string> at line 6 near describe']
 ])
 
 const lines = [

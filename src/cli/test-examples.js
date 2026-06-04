@@ -637,11 +637,45 @@ if (bootstrapCompile.code !== 0) {
       join('compiler', 'main.lm'),
       join(outputDir, 'lumen-compiler-self2.ll')
     ])
+    const selfTinyCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
+      join('tests', 'bootstrap', 'tiny.lm'),
+      join(outputDir, 'tiny-self2.ll')
+    ])
 
-    if (selfBasicCompile.code !== 0 || selfRenamedBasicCompile.code !== 0 || selfControlCompile.code !== 0 || selfForLoopCompile.code !== 0 || selfNativeMainCompile.code !== 0 || selfPrintlnCompile.code !== 0 || selfStructCompile.code !== 0 || selfSimpleCompile.code !== 0 || selfIfBinaryCompile.code !== 0 || selfCallCompile.code !== 0 || selfCompilerCompile.code !== 0) {
+    if (selfBasicCompile.code !== 0 || selfRenamedBasicCompile.code !== 0 || selfControlCompile.code !== 0 || selfForLoopCompile.code !== 0 || selfNativeMainCompile.code !== 0 || selfPrintlnCompile.code !== 0 || selfStructCompile.code !== 0 || selfSimpleCompile.code !== 0 || selfIfBinaryCompile.code !== 0 || selfCallCompile.code !== 0 || selfCompilerCompile.code !== 0 || selfTinyCompile.code !== 0) {
       failures += 1
       console.error('failed second-stage compiler output')
     } else {
+      const equalStageOutputs = [
+        ['tiny', 'tiny-self.ll', 'tiny-self2.ll'],
+        ['basic', 'basic-self.ll', 'basic-self2.ll'],
+        ['renamed basic', 'basic-self.ll', 'renamed-basic-self2.ll'],
+        ['control-flow', 'control-flow-self.ll', 'control-flow-self2.ll'],
+        ['for-loop', 'for-loop-self.ll', 'for-loop-self2.ll'],
+        ['native-main', 'native-main-self.ll', 'native-main-self2.ll'],
+        ['println', 'println-self.ll', 'println-self2.ll'],
+        ['struct', 'struct-self.ll', 'struct-self2.ll'],
+        ['self-host-simple', 'self-host-simple-self.ll', 'self-host-simple-self2.ll'],
+        ['self-host-if-binary', 'self-host-if-binary-self.ll', 'self-host-if-binary-self2.ll'],
+        ['self-host-call', 'self-host-call-self.ll', 'self-host-call-self2.ll']
+      ]
+      let equalityFailed = false
+
+      for (const [name, stageOne, stageTwo] of equalStageOutputs) {
+        const stageOneOutput = await readFile(join(outputDir, stageOne), 'utf8')
+        const stageTwoOutput = await readFile(join(outputDir, stageTwo), 'utf8')
+        if (stageOneOutput !== stageTwoOutput) {
+          equalityFailed = true
+          console.error(`failed bootstrap equality for ${name}`)
+        }
+      }
+
+      if (equalityFailed) {
+        failures += 1
+      } else {
+        console.log('ok bootstrap stage output equality')
+      }
+
       await compiler.buildExecutable(join(outputDir, 'basic-self2.ll'), join(outputDir, 'basic-self2'))
       await compiler.buildExecutable(join(outputDir, 'renamed-basic-self2.ll'), join(outputDir, 'renamed-basic-self2'))
       await compiler.buildExecutable(join(outputDir, 'control-flow-self2.ll'), join(outputDir, 'control-flow-self2'))
@@ -653,7 +687,9 @@ if (bootstrapCompile.code !== 0) {
       await compiler.buildExecutable(join(outputDir, 'self-host-if-binary-self2.ll'), join(outputDir, 'self-host-if-binary-self2'))
       await compiler.buildExecutable(join(outputDir, 'self-host-call-self2.ll'), join(outputDir, 'self-host-call-self2'))
       await compiler.buildExecutable(join(outputDir, 'lumen-compiler-self2.ll'), join(outputDir, 'lumen-compiler-self2'))
+      await compiler.buildExecutable(join(outputDir, 'tiny-self2.ll'), join(outputDir, 'tiny-self2'))
 
+      const tiny2 = await runExecutable(join(outputDir, 'tiny-self2'))
       const basic2 = await runExecutable(join(outputDir, 'basic-self2'))
       const renamedBasic2 = await runExecutable(join(outputDir, 'renamed-basic-self2'))
       const control2 = await runExecutable(join(outputDir, 'control-flow-self2'))
@@ -665,7 +701,8 @@ if (bootstrapCompile.code !== 0) {
       const ifBinary2 = await runExecutable(join(outputDir, 'self-host-if-binary-self2'))
       const call2 = await runExecutable(join(outputDir, 'self-host-call-self2'))
 
-      if (basic2.stdout !== 'hello\n3\n' || basic2.code !== 3 ||
+      if (tiny2.code !== 7 ||
+        basic2.stdout !== 'hello\n3\n' || basic2.code !== 3 ||
         renamedBasic2.stdout !== 'hello\n3\n' || renamedBasic2.code !== 3 ||
         control2.stdout !== 'sum 23\n' || control2.code !== 23 ||
         forLoop2.stdout !== '10\n' || forLoop2.code !== 10 ||
@@ -703,6 +740,13 @@ if (bootstrapCompile.code !== 0) {
       failures += 1
       console.error('failed second-stage while compiler output')
     } else {
+      const whileStageOneOutput = await readFile(join(outputDir, 'while-do-self.ll'), 'utf8')
+      const whileStageTwoOutput = await readFile(join(outputDir, 'while-do-self2.ll'), 'utf8')
+      if (whileStageOneOutput !== whileStageTwoOutput) {
+        failures += 1
+        console.error('failed bootstrap equality for while-do')
+      }
+
       await compiler.buildExecutable(join(outputDir, 'while-do-self2.ll'), join(outputDir, 'while-do-self2'))
       const whileDo2 = await runExecutable(join(outputDir, 'while-do-self2'))
 
