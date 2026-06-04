@@ -32,7 +32,8 @@ Useful files:
 ## Missing
 
 - Replace checkpoint source-shape dispatch with real tiny AST emission
-- Move emitter off the legacy AST-to-map bridge
+- Move emitter internals off the legacy AST-to-map bridge
+- Grow `emitIr(...)` beyond the current bridge-backed LLVM emission
 - Grow the self-host IR builder beyond module facts and statement flags
 - Grow the self-host semantic analyzer beyond symbol and control-flow checks
 - Grow the self-host type checker beyond simple annotations and first-argument calls
@@ -64,3 +65,7 @@ variable initializers plus first-argument function calls, including `none()` and
 The self-host IR builder has an `IrModule` and lowers the current AST/statement
 bridge into module facts, instruction counts, return values, print counts, and
 call/binary/loop flags before emission.
+
+The self-host LLVM emitter now has an `emitIr(...)` entry point and the compiler
+calls that IR-based path. Its internals still delegate through the legacy
+statement bridge for supported code generation.

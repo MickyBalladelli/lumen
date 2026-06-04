@@ -5,7 +5,8 @@ This chapter is the living roadmap.
 ## Compiler
 
 - Replace checkpoint source-shape dispatch with real emit path
-- Move emitter off the legacy AST-to-map bridge
+- Move emitter internals off the legacy AST-to-map bridge
+- Grow `emitIr(...)` beyond the current bridge-backed LLVM emission
 - Grow self-host IR builder beyond module facts and statement flags
 - Grow self-host semantic analyzer beyond symbol and control-flow checks
 - Grow self-host type checker beyond simple annotations and first-argument calls

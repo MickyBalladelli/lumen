@@ -3,7 +3,7 @@ import { parseAst, parseProgram } from "../compiler/parser.lm"
 import { analyzeSemantics } from "../compiler/semantics.lm"
 import { checkTypes } from "../compiler/typechecker.lm"
 import { buildIr, irToProgram } from "../compiler/ir.lm"
-import { emitMain } from "../compiler/emitter.lm"
+import { emitIr } from "../compiler/emitter.lm"
 
 function main(): i32 {
   let tokens = tokenize("function main(): i32 { let value = 7 println(value) return value }")
@@ -11,7 +11,7 @@ function main(): i32 {
   let program = parseProgram(tokens)
   let ir = buildIr(ast, program)
   program = irToProgram(ir, program)
-  let llvm = emitMain(program)
+  let llvm = emitIr(ir, program)
 
   println(mapGet(program, "mainReturnValue"))
   println(mapGet(program, "statementCount"))

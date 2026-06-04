@@ -1,3 +1,13 @@
+import { IrModule } from "./ir.lm"
+
+function emitIr(ir: IrModule, program: string): string {
+  if stringEquals(mapGet(program, "mode"), "compiler-main") {
+    return emitCompilerMain(program)
+  }
+
+  return emitStatementMain(program)
+}
+
 function emitMain(program: string): string {
   if stringEquals(mapGet(program, "mode"), "compiler-main") {
     return emitCompilerMain(program)
