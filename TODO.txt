@@ -5,7 +5,7 @@ DONE Real self-host AST, not map/string records
 DONE Self-host semantic analyzer
 DONE Self-host type checker
 DONE Self-host IR builder
-Self-host LLVM emitter for whole language
+DONE Self-host LLVM emitter for whole language
 Real module/import loading in self-host path
 Real struct support, not only Point smoke case
 Arrays, enums, match, switch, try/catch, async in self-host path
