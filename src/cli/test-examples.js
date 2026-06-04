@@ -164,6 +164,18 @@ const expectations = new Map([
     stdout: '9\n',
     code: 9
   }],
+  ['self-host-array', {
+    stdout: '7\n',
+    code: 7
+  }],
+  ['self-host-async', {
+    stdout: '4\n',
+    code: 4
+  }],
+  ['self-host-enum-match', {
+    stdout: 'missing\n',
+    code: 7
+  }],
   ['self-host-simple', {
     stdout: 'simple\n4\ndone\n',
     code: 4
@@ -171,6 +183,14 @@ const expectations = new Map([
   ['self-host-struct-generic', {
     stdout: '11\n',
     code: 11
+  }],
+  ['self-host-switch', {
+    stdout: '20\n',
+    code: 20
+  }],
+  ['self-host-try-catch', {
+    stdout: 'boom\n7\n',
+    code: 7
   }],
   ['self-host-control', {
     stdout: '23\nsum 23\n1\n',
@@ -379,6 +399,26 @@ if (bootstrapCompile.code !== 0) {
     join(examplesDir, 'self-host-struct-generic.lm'),
     join(outputDir, 'self-host-struct-generic-self.ll')
   ])
+  const arrayCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
+    join(examplesDir, 'self-host-array.lm'),
+    join(outputDir, 'self-host-array-self.ll')
+  ])
+  const asyncCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
+    join(examplesDir, 'self-host-async.lm'),
+    join(outputDir, 'self-host-async-self.ll')
+  ])
+  const enumMatchCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
+    join(examplesDir, 'self-host-enum-match.lm'),
+    join(outputDir, 'self-host-enum-match-self.ll')
+  ])
+  const switchCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
+    join(examplesDir, 'self-host-switch.lm'),
+    join(outputDir, 'self-host-switch-self.ll')
+  ])
+  const tryCatchCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
+    join(examplesDir, 'self-host-try-catch.lm'),
+    join(outputDir, 'self-host-try-catch-self.ll')
+  ])
   const simpleCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
     join(examplesDir, 'self-host-simple.lm'),
     join(outputDir, 'self-host-simple-self.ll')
@@ -392,7 +432,7 @@ if (bootstrapCompile.code !== 0) {
     join(outputDir, 'self-host-call-self.ll')
   ])
 
-  if (forLoopCompile.code !== 0 || nativeMainCompile.code !== 0 || printlnCompile.code !== 0 || structCompile.code !== 0 || moduleCompile.code !== 0 || genericStructCompile.code !== 0 || simpleCompile.code !== 0 || ifBinaryCompile.code !== 0 || callCompile.code !== 0) {
+  if (forLoopCompile.code !== 0 || nativeMainCompile.code !== 0 || printlnCompile.code !== 0 || structCompile.code !== 0 || moduleCompile.code !== 0 || genericStructCompile.code !== 0 || arrayCompile.code !== 0 || asyncCompile.code !== 0 || enumMatchCompile.code !== 0 || switchCompile.code !== 0 || tryCatchCompile.code !== 0 || simpleCompile.code !== 0 || ifBinaryCompile.code !== 0 || callCompile.code !== 0) {
     failures += 1
     console.error('failed bootstrap loop compiler output')
   } else {
@@ -402,6 +442,11 @@ if (bootstrapCompile.code !== 0) {
     await compiler.buildExecutable(join(outputDir, 'struct-self.ll'), join(outputDir, 'struct-self'))
     await compiler.buildExecutable(join(outputDir, 'module-app-self.ll'), join(outputDir, 'module-app-self'))
     await compiler.buildExecutable(join(outputDir, 'self-host-struct-generic-self.ll'), join(outputDir, 'self-host-struct-generic-self'))
+    await compiler.buildExecutable(join(outputDir, 'self-host-array-self.ll'), join(outputDir, 'self-host-array-self'))
+    await compiler.buildExecutable(join(outputDir, 'self-host-async-self.ll'), join(outputDir, 'self-host-async-self'))
+    await compiler.buildExecutable(join(outputDir, 'self-host-enum-match-self.ll'), join(outputDir, 'self-host-enum-match-self'))
+    await compiler.buildExecutable(join(outputDir, 'self-host-switch-self.ll'), join(outputDir, 'self-host-switch-self'))
+    await compiler.buildExecutable(join(outputDir, 'self-host-try-catch-self.ll'), join(outputDir, 'self-host-try-catch-self'))
     await compiler.buildExecutable(join(outputDir, 'self-host-simple-self.ll'), join(outputDir, 'self-host-simple-self'))
     await compiler.buildExecutable(join(outputDir, 'self-host-if-binary-self.ll'), join(outputDir, 'self-host-if-binary-self'))
     await compiler.buildExecutable(join(outputDir, 'self-host-call-self.ll'), join(outputDir, 'self-host-call-self'))
@@ -411,6 +456,11 @@ if (bootstrapCompile.code !== 0) {
     const struct = await runExecutable(join(outputDir, 'struct-self'))
     const moduleApp = await runExecutable(join(outputDir, 'module-app-self'))
     const genericStruct = await runExecutable(join(outputDir, 'self-host-struct-generic-self'))
+    const array = await runExecutable(join(outputDir, 'self-host-array-self'))
+    const asyncExample = await runExecutable(join(outputDir, 'self-host-async-self'))
+    const enumMatch = await runExecutable(join(outputDir, 'self-host-enum-match-self'))
+    const switchExample = await runExecutable(join(outputDir, 'self-host-switch-self'))
+    const tryCatch = await runExecutable(join(outputDir, 'self-host-try-catch-self'))
     const simple = await runExecutable(join(outputDir, 'self-host-simple-self'))
     const ifBinary = await runExecutable(join(outputDir, 'self-host-if-binary-self'))
     const call = await runExecutable(join(outputDir, 'self-host-call-self'))
@@ -421,6 +471,11 @@ if (bootstrapCompile.code !== 0) {
       struct.stdout !== '11\n' || struct.code !== 11 ||
       moduleApp.stdout !== '12\n' || moduleApp.code !== 12 ||
       genericStruct.stdout !== '11\n' || genericStruct.code !== 11 ||
+      array.stdout !== '7\n' || array.code !== 7 ||
+      asyncExample.stdout !== '4\n' || asyncExample.code !== 4 ||
+      enumMatch.stdout !== 'missing\n' || enumMatch.code !== 7 ||
+      switchExample.stdout !== '20\n' || switchExample.code !== 20 ||
+      tryCatch.stdout !== 'boom\n7\n' || tryCatch.code !== 7 ||
       simple.stdout !== 'simple\n4\ndone\n' || simple.code !== 4 ||
       ifBinary.stdout !== 'seven\n7\n' || ifBinary.code !== 7 ||
       call.stdout !== '9\n' || call.code !== 9) {

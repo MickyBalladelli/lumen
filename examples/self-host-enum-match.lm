@@ -1,0 +1,17 @@
+enum Status {
+  Ok
+  Missing
+}
+
+function main(): i32 {
+  let status: Status = Missing
+  let label = match status {
+    Ok => "ok"
+    Missing => "missing"
+    _ => "unknown"
+  }
+
+  println(label)
+
+  return 7
+}

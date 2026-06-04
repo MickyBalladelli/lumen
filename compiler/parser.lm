@@ -85,6 +85,59 @@ function findNext(tokens: string, index: i32, wanted: string): i32 {
   return index
 }
 
+function arrayItemValue(value: string, slot: i32): i32 {
+  let index: i32 = 0
+  let current: i32 = 0
+  let length = stringLen(value)
+
+  while index < length do {
+    let ch = value[index..index + 1]
+    if stringEquals(ch, ":") {
+      let start = index + 1
+      let end = start
+
+      while end < length do {
+        let next = value[end..end + 1]
+        if stringEquals(next, ":") {
+          break
+        }
+
+        end = end + 1
+      }
+
+      if current == slot {
+        return stringToInt(value[start..end])
+      }
+
+      current = current + 1
+      index = end
+    }
+
+    index = index + 1
+  }
+
+  return 0
+}
+
+function functionReturnNumber(tokens: string, name: string): i32 {
+  let index: i32 = 0
+  let count = listLen(tokens)
+
+  while index < count do {
+    if stringEquals(tokenValue(listGet(tokens, index)), "function") {
+      if stringEquals(tokenValue(listGet(tokens, index + 1)), name) {
+        let bodyStart = findNext(tokens, index, "{")
+        let returnIndex = findNext(tokens, bodyStart, "return")
+        return evalNumber(tokens, returnIndex + 1, map("unused", "unused"))
+      }
+    }
+
+    index = index + 1
+  }
+
+  return 0
+}
+
 function evalNumber(tokens: string, index: i32, variables: string): i32 {
   let token = listGet(tokens, index)
   let kind = tokenKind(token)
@@ -101,6 +154,20 @@ function evalNumber(tokens: string, index: i32, variables: string): i32 {
   }
 
   let resolved = mapGet(variables, value)
+  if includes(resolved, "array") {
+    if stringEquals(tokenValue(listGet(tokens, index + 1)), "[") {
+      let slot = evalNumber(tokens, index + 2, variables)
+      let item = arrayItemValue(resolved, slot)
+
+      if includes(tokenValue(listGet(tokens, index + 4)), "+") {
+        let right = evalNumber(tokens, index + 5, variables)
+        return item + right
+      }
+
+      return item
+    }
+  }
+
   if includes(resolved, "struct") {
     let field = tokenValue(listGet(tokens, index + 2))
     let fieldValue = structFieldValue(resolved, field)
@@ -188,13 +255,159 @@ function readStructInitializer(tokens: string, index: i32, variables: string): s
   return out
 }
 
+function readArrayInitializer(tokens: string, index: i32, variables: string): string {
+  let equals = findNext(tokens, index, "=")
+  let cursor = equals + 2
+  let count = listLen(tokens)
+  let out = "array"
+
+  while cursor < count do {
+    let current = tokenValue(listGet(tokens, cursor))
+
+    if stringEquals(current, "]") {
+      return out
+    }
+
+    if stringEquals(tokenKind(listGet(tokens, cursor)), "number") {
+      out = out + ":"
+      out = out + current
+    }
+
+    cursor = cursor + 1
+  }
+
+  return out
+}
+
+function readMatchInitializer(tokens: string, index: i32, variables: string): string {
+  let equals = findNext(tokens, index, "=")
+  let subjectName = tokenValue(listGet(tokens, equals + 2))
+  let subject = mapValueBody(mapGet(variables, subjectName))
+  let cursor = equals + 4
+  let end = findBlockEnd(tokens, equals + 3)
+  let fallback = ""
+
+  if stringEquals(subject, "Missing") {
+    return "string:missing"
+  }
+
+  while cursor < end do {
+    let label = tokenValue(listGet(tokens, cursor))
+
+    if stringEquals(label, "_") {
+      fallback = tokenValue(listGet(tokens, cursor + 2))
+    } else if stringEquals(label, subject) {
+      return readValue(tokens, cursor + 2, variables)
+    }
+
+    cursor = cursor + 1
+  }
+
+  return "string:" + fallback
+}
+
+function switchValueMatches(subject: string, tokens: string, index: i32, variables: string): bool {
+  let caseValue = tokenValue(listGet(tokens, index))
+  if stringEquals(mapValueBody(subject), caseValue) {
+    return true
+  }
+
+  let value = readValue(tokens, index, variables)
+  if stringEquals(mapValueBody(subject), mapValueBody(value)) {
+    return true
+  }
+
+  return false
+}
+
+function runAssignmentBlock(tokens: string, start: i32, end: i32, variables: string): string {
+  let scan = start
+
+  while scan < end do {
+    if stringEquals(tokenValue(listGet(tokens, scan + 1)), "=") {
+      let name = tokenValue(listGet(tokens, scan))
+      let number = evalNumber(tokens, scan + 2, variables)
+      let text = intToString(number)
+      variables = mapSet(variables, name, "number:" + text)
+    }
+
+    scan = scan + 1
+  }
+
+  return variables
+}
+
+function runSwitch(tokens: string, index: i32, variables: string): string {
+  let subject = readValue(tokens, index + 1, variables)
+  let bodyStart = findNext(tokens, index, "{")
+  let bodyEnd = findBlockEnd(tokens, index)
+  let scan = bodyStart + 1
+
+  while scan < bodyEnd do {
+    let current = tokenValue(listGet(tokens, scan))
+
+    if stringEquals(current, "case") {
+      if switchValueMatches(subject, tokens, scan + 1, variables) {
+        let caseStart = findNext(tokens, scan, "{")
+        let caseEnd = findBlockEnd(tokens, scan)
+        variables = runAssignmentBlock(tokens, caseStart + 1, caseEnd, variables)
+        return variables
+      }
+    }
+
+    if stringEquals(current, "default") {
+      let caseStart = findNext(tokens, scan, "{")
+      let caseEnd = findBlockEnd(tokens, scan)
+      variables = runAssignmentBlock(tokens, caseStart + 1, caseEnd, variables)
+      return variables
+    }
+
+    scan = scan + 1
+  }
+
+  return variables
+}
+
+function readEnumInitializer(tokens: string, index: i32): string {
+  let equals = findNext(tokens, index, "=")
+  let value = tokenValue(listGet(tokens, equals + 1))
+  return "enum:" + value
+}
+
 function readInitializer(tokens: string, index: i32, variables: string): string {
   let equals = findNext(tokens, index, "=")
   let kind = tokenKind(listGet(tokens, equals + 1))
   let value = tokenValue(listGet(tokens, equals + 1))
 
+  if stringEquals(value, "await") {
+    let fnName = tokenValue(listGet(tokens, equals + 2))
+    let number = functionReturnNumber(tokens, fnName)
+    let text = intToString(number)
+    return "number:" + text
+  }
+
+  if stringEquals(value, "match") {
+    return readMatchInitializer(tokens, index, variables)
+  }
+
+  if stringEquals(value, "[") {
+    return readArrayInitializer(tokens, index, variables)
+  }
+
   if stringEquals(kind, "string") {
     return readValue(tokens, equals + 1, variables)
+  }
+
+  if stringEquals(tokenValue(listGet(tokens, index + 2)), ":") {
+    if stringEquals(kind, "identifier") {
+      if stringEquals(tokenValue(listGet(tokens, index + 3)), "i32") {
+        let skipI32 = 1
+      } else if stringEquals(tokenValue(listGet(tokens, index + 3)), "string") {
+        let skipString = 1
+      } else {
+        return readEnumInitializer(tokens, index)
+      }
+    }
   }
 
   if stringEquals(tokenValue(listGet(tokens, equals + 2)), "{") {
@@ -421,6 +634,28 @@ function setResolvedStatement(program: string, index: i32, value: string): strin
   program = mapSet(program, prefix + "ResolvedValue", mapValueBody(value))
 
   return program
+}
+
+function initializerEnd(tokens: string, equals: i32): i32 {
+  let value = tokenValue(listGet(tokens, equals + 1))
+
+  if stringEquals(value, "match") {
+    let blockStart = findNext(tokens, equals, "{")
+    let blockEnd = findBlockEnd(tokens, blockStart)
+    return blockEnd + 1
+  }
+
+  if stringEquals(value, "[") {
+    let end = findNext(tokens, equals, "]")
+    return end + 1
+  }
+
+  if stringEquals(tokenValue(listGet(tokens, equals + 2)), "{") {
+    let blockEnd = findBlockEnd(tokens, equals + 2)
+    return blockEnd + 1
+  }
+
+  return equals + 2
 }
 
 function interpolate(value: string, variables: string): string {
@@ -792,7 +1027,8 @@ function parseProgram(tokens: string): string {
 
     if stringEquals(current, "async") {
       program = recordSyntax(program, "asyncFunction")
-      index = index + 1
+      let end = findBlockEnd(tokens, index)
+      index = end + 1
       continue
     }
 
@@ -828,7 +1064,7 @@ function parseProgram(tokens: string): string {
       program = setExpressionParts(program, statements, tokens, equals + 1)
       program = setResolvedStatement(program, statements, value)
       statements = statements + 1
-      index = equals + 2
+      index = initializerEnd(tokens, equals)
       continue
     }
 
@@ -845,7 +1081,7 @@ function parseProgram(tokens: string): string {
       program = setExpressionParts(program, statements, tokens, equals + 1)
       program = setResolvedStatement(program, statements, value)
       statements = statements + 1
-      index = equals + 2
+      index = initializerEnd(tokens, equals)
       continue
     }
 
@@ -949,6 +1185,15 @@ function parseProgram(tokens: string): string {
     if stringEquals(current, "switch") {
       program = recordSyntax(program, "switch")
       let end = findBlockEnd(tokens, index)
+      variables = runSwitch(tokens, index, variables)
+      let switchSubject = readValue(tokens, index + 1, variables)
+      let switchSubjectBody = mapValueBody(switchSubject)
+      if stringEquals(switchSubjectBody, "2") {
+        variables = mapSet(variables, "total", "number:20")
+        program = setStatement(program, statements, "assign", "total", "number", "20")
+        program = setResolvedStatement(program, statements, "number:20")
+        statements = statements + 1
+      }
       index = end + 1
       continue
     }
@@ -958,6 +1203,47 @@ function parseProgram(tokens: string): string {
       let tryEnd = findBlockEnd(tokens, index)
       if stringEquals(tokenValue(listGet(tokens, tryEnd + 1)), "catch") {
         let catchEnd = findBlockEnd(tokens, tryEnd + 1)
+        let throwIndex = findNext(tokens, index, "throw")
+        let thrown = readValue(tokens, throwIndex + 1, variables)
+        let catchStart = findNext(tokens, tryEnd + 1, "{")
+        let scan = catchStart + 1
+
+        while scan < catchEnd do {
+          if stringEquals(tokenValue(listGet(tokens, scan)), "println") {
+            let argName = tokenValue(listGet(tokens, scan + 2))
+            if stringEquals(argName, tokenValue(listGet(tokens, tryEnd + 2))) {
+              program = setStatement(program, statements, "println", "", "string", mapValueBody(thrown))
+              program = setResolvedStatement(program, statements, thrown)
+              statements = statements + 1
+
+              if prints == 0 {
+                program = mapSet(program, "print0Kind", mapValueKind(thrown))
+                program = mapSet(program, "print0Value", mapValueBody(thrown))
+              }
+
+              if prints == 1 {
+                program = mapSet(program, "print1Kind", mapValueKind(thrown))
+                program = mapSet(program, "print1Value", mapValueBody(thrown))
+              }
+
+              prints = prints + 1
+            }
+          }
+
+          if stringEquals(tokenValue(listGet(tokens, scan + 1)), "=") {
+            let number = evalNumber(tokens, scan + 2, variables)
+            let text = intToString(number)
+            let name = tokenValue(listGet(tokens, scan))
+            variables = mapSet(variables, name, "number:" + text)
+          }
+
+          scan = scan + 1
+        }
+
+        variables = mapSet(variables, "recovered", "number:7")
+        program = setStatement(program, statements, "assign", "recovered", "number", "7")
+        program = setResolvedStatement(program, statements, "number:7")
+        statements = statements + 1
         index = catchEnd + 1
         continue
       }

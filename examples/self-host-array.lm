@@ -1,0 +1,8 @@
+function main(): i32 {
+  let values: i32[] = [2, 3, 5]
+  let total: i32 = values[0] + 5
+
+  println(total)
+
+  return total
+}

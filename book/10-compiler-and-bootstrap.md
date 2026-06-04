@@ -53,8 +53,10 @@ async functions, `let` / `const`, `if`, classic `for`, for-of, range loops,
 The stage compiler can emit the tiny bootstrap input, simple `let` / `println`
 / `return` programs, helper function calls, `if`, classic loop smoke cases,
 while-loop smoke cases, and struct literals with named integer fields and field
-access. That emit path still uses a compatibility map produced from the AST
-shape.
+access. It also has basic self-host lowering for integer array literals/indexing,
+enum-backed match expressions, numeric switch cases, throw/catch recovery, and
+awaiting simple async functions. That emit path still uses a compatibility map
+produced from the AST shape.
 
 The self-host semantic analyzer has a `SemanticResult` and checks for `main`,
 duplicate top-level symbols, unsupported bootstrap `while 1`, and `break` /

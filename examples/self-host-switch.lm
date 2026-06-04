@@ -1,0 +1,21 @@
+function main(): i32 {
+  let value: i32 = 2
+  let total: i32 = 0
+
+  switch value {
+    case 1 {
+      total = total + 10
+    }
+    case 2 {
+      total = total + 20
+      break
+    }
+    default {
+      total = total + 30
+    }
+  }
+
+  println(total)
+
+  return total
+}

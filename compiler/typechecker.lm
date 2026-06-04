@@ -111,6 +111,28 @@ function inferType(tokens: string, index: i32, variables: string): string {
     return "string"
   }
 
+  if stringEquals(value, "[") {
+    let firstKind = typeTokenKind(listGet(tokens, index + 1))
+    if stringEquals(firstKind, "number") {
+      return "i32[]"
+    }
+
+    if stringEquals(firstKind, "string") {
+      return "string[]"
+    }
+
+    return "unknown[]"
+  }
+
+  if stringEquals(value, "match") {
+    let bodyStart = typeFindNext(tokens, index, "{")
+    return inferType(tokens, bodyStart + 3, variables)
+  }
+
+  if stringEquals(value, "await") {
+    return "i32"
+  }
+
   if stringEquals(value, "true") {
     return "bool"
   }
@@ -135,6 +157,16 @@ function inferType(tokens: string, index: i32, variables: string): string {
 
   let known = mapGet(variables, value)
   if includes(known, "type:") {
+    if stringEquals(typeTokenValue(listGet(tokens, index + 1)), "[") {
+      if includes(known, "i32[]") {
+        return "i32"
+      }
+
+      if includes(known, "string[]") {
+        return "string"
+      }
+    }
+
     return known[5..stringLen(known)]
   }
 

@@ -135,6 +135,12 @@ function buildStatementSymbols(program: string): string {
       }
     }
 
+    if includes(kind, "assign") {
+      let name = mapGet(program, prefix + "Name")
+      symbols = mapSet(symbols, name + "Kind", resolvedExprKind(program, symbols, prefix))
+      symbols = mapSet(symbols, name + "Value", resolvedExprValue(program, symbols, prefix))
+    }
+
     if includes(kind, "while") {
       let name = mapGet(program, prefix + "BodyAssignName")
       symbols = mapSet(symbols, name + "Kind", "number")
