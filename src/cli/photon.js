@@ -18,11 +18,25 @@ if (!command || command === '-h' || command === '--help') {
 if (command === 'init') {
   if (await exists(manifestPath)) fail('photon.json already exists')
 
+  const name = args[0] ?? basename(process.cwd())
+
   await writeJson(manifestPath, {
-    name: basename(process.cwd()),
+    name,
     version: '0.1.0',
+    main: 'main.lm',
     dependencies: {}
   })
+  if (!await exists('main.lm')) {
+    await writeFile('main.lm', 'function main(): i32 {\n  println("hello lumen")\n  return 0\n}\n')
+    console.log('created main.lm')
+  }
+  if (!await exists('lumen.json')) {
+    await writeJson('lumen.json', {
+      entry: 'main.lm',
+      output: join('build', name)
+    })
+    console.log('created lumen.json')
+  }
   console.log('created photon.json')
 } else if (command === 'add') {
   const [name, source] = args
@@ -66,6 +80,7 @@ async function install() {
     const target = join(packageRoot, name)
     await rm(target, { recursive: true, force: true })
     await installPackage(source, target)
+    await validatePackage(name, target)
 
     lock.packages[name] = {
       source,
@@ -78,6 +93,20 @@ async function install() {
   }
 
   await writeJson(lockPath, lock)
+}
+
+async function validatePackage(name, target) {
+  let main = 'main.lm'
+  const packageManifestPath = join(target, 'photon.json')
+
+  if (await exists(packageManifestPath)) {
+    const manifest = JSON.parse(await readFile(packageManifestPath, 'utf8'))
+    main = manifest.main ?? main
+  }
+
+  if (!await exists(join(target, main))) {
+    fail(`package ${name} missing ${main}`)
+  }
 }
 
 async function installPackage(source, target) {
@@ -180,7 +209,7 @@ function usage() {
     'usage: photon <command>',
     '',
     'commands:',
-    '  init',
+    '  init [name]',
     '  add name source',
     '  remove name',
     '  install',

@@ -825,6 +825,19 @@ npm run compile
 
 Current config keys are `entry` and `output`.
 
+Format Lumen files:
+
+```bash
+npm run format -- examples/basic.lm
+npm run format -- --check examples/basic.lm
+```
+
+Editor tooling can also use the language server:
+
+```bash
+npm run lsp
+```
+
 ## Photon packages
 
 Photon installs external Lumen packages into `.photon/packages`.
@@ -833,7 +846,11 @@ Create a package manifest:
 
 ```bash
 photon init
+photon init my-app
 ```
+
+`photon init` creates `photon.json`, `lumen.json`, and a starter `main.lm`
+when those files do not already exist.
 
 Add a package from a local path or Git URL:
 

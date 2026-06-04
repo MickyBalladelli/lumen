@@ -8,10 +8,14 @@
   },
   "bin": {
     "lmsh": "./src/cli/lmsh.js",
-    "photon": "./src/cli/photon.js"
+    "photon": "./src/cli/photon.js",
+    "lumen-format": "./src/cli/format.js",
+    "lumen-lsp": "./src/cli/lsp.js"
   },
   "scripts": {
     "parse": "node ./src/cli/parse.js",
+    "format": "node ./src/cli/format.js",
+    "lsp": "node ./src/cli/lsp.js",
     "compile": "./build/lumen-compiler",
     "bootstrap": "node ./src/cli/compile.js compiler/main.lm -o build/lumen-compiler",
     "lmsh": "node ./src/cli/lmsh.js",
