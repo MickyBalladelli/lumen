@@ -760,7 +760,18 @@ Run like a scripting language:
 npm run lmsh -- examples/cli-args.lm first second
 ```
 
-The package also exposes a `lmsh` bin entry for linked installs.
+Link local CLI tools:
+
+```bash
+npm link
+lmsh examples/cli-args.lm first second
+photon list
+lumen-format --check examples/basic.lm
+lumen-lsp
+```
+
+The package exposes `lmsh`, `photon`, `lumen-format`, and `lumen-lsp` for
+linked or global installs.
 
 Run all tests:
 

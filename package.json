@@ -3,6 +3,14 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Foundational compiler for the Lumen systems language",
+  "files": [
+    "src",
+    "compiler",
+    "packages",
+    "README.md",
+    "lumen.json",
+    "photon.json"
+  ],
   "exports": {
     ".": "./src/index.js"
   },
