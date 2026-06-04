@@ -40,7 +40,7 @@ Useful files:
 - Grow the self-host type checker beyond simple annotations and first-argument calls
 - Lower self-host struct literals to real storage instead of resolved field values
 - Grow self-host module loading beyond local/package source concatenation
-- Make diagnostics source-located
+- Add source snippets/carets to self-host diagnostics
 
 ## Current Self-Host Coverage
 
@@ -74,6 +74,9 @@ The self-host module loader lives in `compiler/modules.lm`. It recursively loads
 local imports and bare package `main.lm` files, skips duplicate loads, removes
 handled import declarations, and feeds the flattened source into the self-host
 parser path.
+
+The command-line self-host compiler reports semantic and type errors with a
+source line and nearby token.
 
 The self-host LLVM emitter now has an `emitIr(...)` entry point and the compiler
 calls that IR-based path. Its internals still delegate through the legacy

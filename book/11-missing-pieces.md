@@ -12,7 +12,7 @@ This chapter is the living roadmap.
 - Grow self-host type checker beyond simple annotations and first-argument calls
 - Lower self-host struct literals to real storage instead of resolved field values
 - Grow self-host module loading beyond local/package source concatenation
-- Add better diagnostics
+- Add source snippets/carets to self-host diagnostics
 
 ## Language
 

@@ -4,23 +4,26 @@ struct TypeResult {
   ok: bool
   message: string
   checkedCount: i32
+  tokenIndex: i32
 }
 
 function typeOk(checkedCount: i32): TypeResult {
   let result = TypeResult {
     ok: true,
     message: "",
-    checkedCount: checkedCount
+    checkedCount: checkedCount,
+    tokenIndex: 0
   }
 
   return result
 }
 
-function typeError(message: string, checkedCount: i32): TypeResult {
+function typeError(message: string, checkedCount: i32, tokenIndex: i32): TypeResult {
   let result = TypeResult {
     ok: false,
     message: message,
-    checkedCount: checkedCount
+    checkedCount: checkedCount,
+    tokenIndex: tokenIndex
   }
 
   return result
@@ -205,7 +208,7 @@ function typeCheckVariable(tokens: string, index: i32, variables: string): TypeR
     if canAssignType(expected, actual) {
       let okResult = typeOk(checked)
     } else {
-      return typeError("compile error: cannot assign " + actual + " to " + expected, checked)
+      return typeError("compile error: cannot assign " + actual + " to " + expected, checked, index)
     }
 
     return typeOk(checked)
@@ -256,7 +259,7 @@ function checkFunctionCall(tokens: string, index: i32, variables: string, functi
       return typeOk(1)
     }
 
-    return typeError("compile error: cannot pass " + actual + " to " + expected, 1)
+    return typeError("compile error: cannot pass " + actual + " to " + expected, 1, index)
   }
 
   return typeOk(0)
@@ -290,7 +293,7 @@ function checkTypes(ast: AstProgram, tokens: string): TypeResult {
       if result.ok {
         variables = registerVariableType(tokens, index, variables)
       } else {
-        return typeError(result.message, checked)
+        return typeError(result.message, checked, result.tokenIndex)
       }
     }
 
@@ -300,7 +303,7 @@ function checkTypes(ast: AstProgram, tokens: string): TypeResult {
       if result.ok {
         variables = registerVariableType(tokens, index, variables)
       } else {
-        return typeError(result.message, checked)
+        return typeError(result.message, checked, result.tokenIndex)
       }
     }
 
@@ -310,7 +313,7 @@ function checkTypes(ast: AstProgram, tokens: string): TypeResult {
       if callResult.ok {
         let okCall = 1
       } else {
-        return typeError(callResult.message, checked)
+        return typeError(callResult.message, checked, callResult.tokenIndex)
       }
     }
 

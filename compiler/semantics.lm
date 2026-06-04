@@ -4,23 +4,26 @@ struct SemanticResult {
   ok: bool
   message: string
   symbolCount: i32
+  tokenIndex: i32
 }
 
 function semanticOk(symbolCount: i32): SemanticResult {
   let result = SemanticResult {
     ok: true,
     message: "",
-    symbolCount: symbolCount
+    symbolCount: symbolCount,
+    tokenIndex: 0
   }
 
   return result
 }
 
-function semanticError(message: string, symbolCount: i32): SemanticResult {
+function semanticError(message: string, symbolCount: i32, tokenIndex: i32): SemanticResult {
   let result = SemanticResult {
     ok: false,
     message: message,
-    symbolCount: symbolCount
+    symbolCount: symbolCount,
+    tokenIndex: tokenIndex
   }
 
   return result
@@ -324,7 +327,7 @@ function analyzeSemantics(ast: AstProgram, tokens: string): SemanticResult {
       if stringEquals(current, "while") {
       let condition = semanticTokenValue(listGet(tokens, index + 1))
       if stringEquals(condition, "1") {
-        return semanticError("compile error: unsupported while", symbolCount)
+        return semanticError("compile error: unsupported while", symbolCount, index)
       }
       }
     }
@@ -336,7 +339,7 @@ function analyzeSemantics(ast: AstProgram, tokens: string): SemanticResult {
       } else if switchDepth > 0 {
         let okSwitchBreak = 1
       } else {
-        return semanticError("compile error: break outside loop", symbolCount)
+        return semanticError("compile error: break outside loop", symbolCount, index)
       }
     }
     }
@@ -350,7 +353,7 @@ function analyzeSemantics(ast: AstProgram, tokens: string): SemanticResult {
       } else if semanticHasPriorLoop(tokens, index) {
         let okPriorLoopContinue = 1
       } else {
-        return semanticError("compile error: continue outside loop", symbolCount)
+        return semanticError("compile error: continue outside loop", symbolCount, index)
       }
     }
     }
@@ -362,5 +365,5 @@ function analyzeSemantics(ast: AstProgram, tokens: string): SemanticResult {
     return semanticOk(symbolCount)
   }
 
-  return semanticError("compile error: missing function main", symbolCount)
+  return semanticError("compile error: missing function main", symbolCount, 0)
 }

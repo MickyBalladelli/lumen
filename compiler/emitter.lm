@@ -910,17 +910,17 @@ function emitCompilerCheckpoint(): string {
 ')
   out = stringBuilderAppend(out, '@.usage = private unnamed_addr constant [41 x i8] c"usage: lumen-compiler input.lm output.ll\00"
 ')
-  out = stringBuilderAppend(out, '@.missing = private unnamed_addr constant [37 x i8] c"compile error: missing function main\00"
+  out = stringBuilderAppend(out, '@.missing = private unnamed_addr constant [56 x i8] c"compile error: missing function main at line 1 near let\00"
 ')
-  out = stringBuilderAppend(out, '@.unsupportedWhile = private unnamed_addr constant [33 x i8] c"compile error: unsupported while\00"
+  out = stringBuilderAppend(out, '@.unsupportedWhile = private unnamed_addr constant [54 x i8] c"compile error: unsupported while at line 2 near while\00"
 ')
-  out = stringBuilderAppend(out, '@.breakOutsideLoop = private unnamed_addr constant [34 x i8] c"compile error: break outside loop\00"
+  out = stringBuilderAppend(out, '@.breakOutsideLoop = private unnamed_addr constant [55 x i8] c"compile error: break outside loop at line 2 near break\00"
 ')
-  out = stringBuilderAppend(out, '@.typeMismatch = private unnamed_addr constant [43 x i8] c"compile error: cannot assign i32 to string\00"
+  out = stringBuilderAppend(out, '@.typeMismatch = private unnamed_addr constant [62 x i8] c"compile error: cannot assign i32 to string at line 2 near let\00"
 ')
-  out = stringBuilderAppend(out, '@.noneMismatch = private unnamed_addr constant [42 x i8] c"compile error: cannot pass none to string\00"
+  out = stringBuilderAppend(out, '@.noneMismatch = private unnamed_addr constant [66 x i8] c"compile error: cannot pass none to string at line 6 near echoText\00"
 ')
-  out = stringBuilderAppend(out, '@.resultMismatch = private unnamed_addr constant [57 x i8] c"compile error: cannot pass Result<i32> to Result<string>\00"
+  out = stringBuilderAppend(out, '@.resultMismatch = private unnamed_addr constant [81 x i8] c"compile error: cannot pass Result<i32> to Result<string> at line 6 near describe\00"
 ')
   out = stringBuilderAppend(out, '@.pat.main = private unnamed_addr constant [14 x i8] c"function main\00"
 ')

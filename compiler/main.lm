@@ -6,6 +6,82 @@ import { checkTypes } from "./typechecker.lm"
 import { buildIr, irToProgram } from "./ir.lm"
 import { emitIr } from "./emitter.lm"
 
+function diagnosticTokenText(tokens: string, index: i32): string {
+  let token = listGet(tokens, index)
+  let cursor: i32 = 0
+  let length = stringLen(token)
+
+  while cursor < length do {
+    let ch = token[cursor..cursor + 1]
+    if includes(":", ch) {
+      return token[cursor + 1..length]
+    }
+
+    cursor = cursor + 1
+  }
+
+  return token
+}
+
+function diagnosticFindToken(source: string, needle: string, start: i32): i32 {
+  let length = stringLen(source)
+  let needleLength = stringLen(needle)
+
+  while start + needleLength <= length do {
+    if stringEquals(source[start..start + needleLength], needle) {
+      return start
+    }
+
+    start = start + 1
+  }
+
+  return length
+}
+
+function diagnosticLineBefore(source: string, end: i32): i32 {
+  let line: i32 = 1
+  let index: i32 = 0
+
+  while index < end do {
+    let ch = source[index..index + 1]
+    if includes('
+', ch) {
+      line = line + 1
+    }
+
+    index = index + 1
+  }
+
+  return line
+}
+
+function diagnosticTokenLine(source: string, tokens: string, target: i32): i32 {
+  let index: i32 = 0
+  let cursor: i32 = 0
+
+  while index <= target do {
+    let text = diagnosticTokenText(tokens, index)
+    cursor = diagnosticFindToken(source, text, cursor)
+
+    if index == target {
+      return diagnosticLineBefore(source, cursor)
+    }
+
+    let textLength = stringLen(text)
+    cursor = cursor + textLength
+    index = index + 1
+  }
+
+  return 1
+}
+
+function diagnosticMessage(source: string, tokens: string, message: string, tokenIndex: i32): string {
+  let line = diagnosticTokenLine(source, tokens, tokenIndex)
+  let lineText = intToString(line)
+  let near = diagnosticTokenText(tokens, tokenIndex)
+  return message + " at line " + lineText + " near " + near
+}
+
 function compileTiny(input: string, output: string): i32 {
   let source = loadModuleSource(input)
   let tokens = tokenize(source)
@@ -15,7 +91,7 @@ function compileTiny(input: string, output: string): i32 {
   if semanticResult.ok {
     let checked = 1
   } else {
-    println(semanticResult.message)
+    println(diagnosticMessage(source, tokens, semanticResult.message, semanticResult.tokenIndex))
     return 1
   }
 
@@ -23,7 +99,7 @@ function compileTiny(input: string, output: string): i32 {
   if typeResult.ok {
     let checkedTypes = 1
   } else {
-    println(typeResult.message)
+    println(diagnosticMessage(source, tokens, typeResult.message, typeResult.tokenIndex))
     return 1
   }
 

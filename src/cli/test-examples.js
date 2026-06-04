@@ -490,7 +490,7 @@ if (bootstrapCompile.code !== 0) {
     join('tests', 'bootstrap', 'invalid.lm'),
     join(outputDir, 'invalid-self.ll')
   ])
-  if (invalidCompile.code === 0 || invalidCompile.stdout !== 'compile error: missing function main\n') {
+  if (invalidCompile.code === 0 || invalidCompile.stdout !== 'compile error: missing function main at line 1 near let\n') {
     failures += 1
     console.error('failed bootstrap invalid source rejection')
   } else {
@@ -521,7 +521,7 @@ if (bootstrapCompile.code !== 0) {
     join('tests', 'bootstrap', 'unsupported-while.lm'),
     join(outputDir, 'unsupported-while-self.ll')
   ])
-  if (unsupportedCompile.code === 0 || unsupportedCompile.stdout !== 'compile error: unsupported while\n') {
+  if (unsupportedCompile.code === 0 || unsupportedCompile.stdout !== 'compile error: unsupported while at line 2 near while\n') {
     failures += 1
     console.error('failed bootstrap unsupported while diagnostic')
   } else {
@@ -532,7 +532,7 @@ if (bootstrapCompile.code !== 0) {
     join('tests', 'negative', 'break-outside-loop.lm'),
     join(outputDir, 'break-outside-loop-self.ll')
   ])
-  if (breakCompile.code === 0 || breakCompile.stdout !== 'compile error: break outside loop\n') {
+  if (breakCompile.code === 0 || breakCompile.stdout !== 'compile error: break outside loop at line 2 near break\n') {
     failures += 1
     console.error('failed bootstrap break semantic diagnostic')
   } else {
@@ -543,7 +543,7 @@ if (bootstrapCompile.code !== 0) {
     join('tests', 'bootstrap', 'type-mismatch.lm'),
     join(outputDir, 'type-mismatch-self.ll')
   ])
-  if (typeMismatchCompile.code === 0 || typeMismatchCompile.stdout !== 'compile error: cannot assign i32 to string\n') {
+  if (typeMismatchCompile.code === 0 || typeMismatchCompile.stdout !== 'compile error: cannot assign i32 to string at line 2 near let\n') {
     failures += 1
     console.error('failed bootstrap type diagnostic')
   } else {
@@ -558,8 +558,8 @@ if (bootstrapCompile.code !== 0) {
     join('tests', 'negative', 'result-type-mismatch.lm'),
     join(outputDir, 'result-type-mismatch-self.ll')
   ])
-  if (noneToStringCompile.code === 0 || noneToStringCompile.stdout !== 'compile error: cannot pass none to string\n' ||
-    resultMismatchCompile.code === 0 || resultMismatchCompile.stdout !== 'compile error: cannot pass Result<i32> to Result<string>\n') {
+  if (noneToStringCompile.code === 0 || noneToStringCompile.stdout !== 'compile error: cannot pass none to string at line 6 near echoText\n' ||
+    resultMismatchCompile.code === 0 || resultMismatchCompile.stdout !== 'compile error: cannot pass Result<i32> to Result<string> at line 6 near describe\n') {
     failures += 1
     console.error('failed bootstrap function-call type diagnostics')
   } else {
@@ -687,7 +687,7 @@ if (bootstrapCompile.code !== 0) {
       join('tests', 'bootstrap', 'invalid.lm'),
       join(outputDir, 'invalid-self2.ll')
     ])
-    if (selfInvalidCompile.code === 0 || selfInvalidCompile.stdout !== 'compile error: missing function main\n') {
+    if (selfInvalidCompile.code === 0 || selfInvalidCompile.stdout !== 'compile error: missing function main at line 1 near let\n') {
       failures += 1
       console.error('failed second-stage invalid source rejection')
     } else {
@@ -718,7 +718,7 @@ if (bootstrapCompile.code !== 0) {
       join('tests', 'bootstrap', 'unsupported-while.lm'),
       join(outputDir, 'unsupported-while-self2.ll')
     ])
-    if (selfUnsupportedCompile.code === 0 || selfUnsupportedCompile.stdout !== 'compile error: unsupported while\n') {
+    if (selfUnsupportedCompile.code === 0 || selfUnsupportedCompile.stdout !== 'compile error: unsupported while at line 2 near while\n') {
       failures += 1
       console.error('failed second-stage unsupported while diagnostic')
     } else {
@@ -729,7 +729,7 @@ if (bootstrapCompile.code !== 0) {
       join('tests', 'negative', 'break-outside-loop.lm'),
       join(outputDir, 'break-outside-loop-self2.ll')
     ])
-    if (selfBreakCompile.code === 0 || selfBreakCompile.stdout !== 'compile error: break outside loop\n') {
+    if (selfBreakCompile.code === 0 || selfBreakCompile.stdout !== 'compile error: break outside loop at line 2 near break\n') {
       failures += 1
       console.error('failed second-stage break semantic diagnostic')
     } else {
@@ -740,7 +740,7 @@ if (bootstrapCompile.code !== 0) {
       join('tests', 'bootstrap', 'type-mismatch.lm'),
       join(outputDir, 'type-mismatch-self2.ll')
     ])
-    if (selfTypeMismatchCompile.code === 0 || selfTypeMismatchCompile.stdout !== 'compile error: cannot assign i32 to string\n') {
+    if (selfTypeMismatchCompile.code === 0 || selfTypeMismatchCompile.stdout !== 'compile error: cannot assign i32 to string at line 2 near let\n') {
       failures += 1
       console.error('failed second-stage type diagnostic')
     } else {
@@ -755,8 +755,8 @@ if (bootstrapCompile.code !== 0) {
       join('tests', 'negative', 'result-type-mismatch.lm'),
       join(outputDir, 'result-type-mismatch-self2.ll')
     ])
-    if (selfNoneToStringCompile.code === 0 || selfNoneToStringCompile.stdout !== 'compile error: cannot pass none to string\n' ||
-      selfResultMismatchCompile.code === 0 || selfResultMismatchCompile.stdout !== 'compile error: cannot pass Result<i32> to Result<string>\n') {
+    if (selfNoneToStringCompile.code === 0 || selfNoneToStringCompile.stdout !== 'compile error: cannot pass none to string at line 6 near echoText\n' ||
+      selfResultMismatchCompile.code === 0 || selfResultMismatchCompile.stdout !== 'compile error: cannot pass Result<i32> to Result<string> at line 6 near describe\n') {
       failures += 1
       console.error('failed second-stage function-call type diagnostics')
     } else {
