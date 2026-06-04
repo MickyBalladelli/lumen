@@ -11,7 +11,7 @@ This chapter is the living roadmap.
 - Grow self-host semantic analyzer beyond symbol and control-flow checks
 - Grow self-host type checker beyond simple annotations and first-argument calls
 - Generalize self-host struct support beyond the current fixed smoke case
-- Add self-host module loading
+- Grow self-host module loading beyond local/package source concatenation
 - Add better diagnostics
 
 ## Language

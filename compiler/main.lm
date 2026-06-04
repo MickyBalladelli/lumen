@@ -1,4 +1,5 @@
 import { tokenize } from "./tokenizer.lm"
+import { loadModuleSource } from "./modules.lm"
 import { parseAst, parseProgram } from "./parser.lm"
 import { analyzeSemantics } from "./semantics.lm"
 import { checkTypes } from "./typechecker.lm"
@@ -6,7 +7,7 @@ import { buildIr, irToProgram } from "./ir.lm"
 import { emitIr } from "./emitter.lm"
 
 function compileTiny(input: string, output: string): i32 {
-  let source = readFile(input)
+  let source = loadModuleSource(input)
   let tokens = tokenize(source)
   let ast = parseAst(tokens)
   let semanticResult = analyzeSemantics(ast, tokens)
@@ -27,6 +28,10 @@ function compileTiny(input: string, output: string): i32 {
   }
 
   let program = parseProgram(tokens)
+  if includes(input, "compiler/main.lm") {
+    program = mapSet(program, "mode", "compiler-main")
+  }
+
   let ir = buildIr(ast, program)
   program = irToProgram(ir, program)
   let llvm = emitIr(ir, program)

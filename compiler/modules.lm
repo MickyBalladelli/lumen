@@ -1,0 +1,147 @@
+function moduleDirname(path: string): string {
+  let length = stringLen(path)
+  let index = length - 1
+
+  while index > 0 do {
+    let ch = path[index..index + 1]
+    if stringEquals(ch, "/") {
+      return path[0..index]
+    }
+
+    index = index - 1
+  }
+
+  return "."
+}
+
+function moduleJoin(base: string, child: string): string {
+  if stringEquals(base, ".") {
+    return child
+  }
+
+  return base + "/" + child
+}
+
+function moduleResolve(base: string, specifier: string): string {
+  if includes(specifier, "./") {
+    let length = stringLen(specifier)
+    return moduleJoin(base, specifier[2..length])
+  }
+
+  if includes(specifier, "../") {
+    let length = stringLen(specifier)
+    let parent = moduleDirname(base)
+    return moduleJoin(parent, specifier[3..length])
+  }
+
+  return "packages/" + specifier + "/main.lm"
+}
+
+function moduleFindFrom(source: string, index: i32): i32 {
+  let length = stringLen(source)
+
+  while index + 4 <= length do {
+    let ch = source[index..index + 1]
+    if includes('
+', ch) {
+      return length
+    }
+
+    if stringEquals(source[index..index + 4], "from") {
+      return index
+    }
+
+    index = index + 1
+  }
+
+  return length
+}
+
+function moduleImportSpecifier(source: string, index: i32): string {
+  let cursor = moduleFindFrom(source, index)
+  let length = stringLen(source)
+  if cursor >= length {
+    return ""
+  }
+
+  while cursor < length do {
+    let ch = source[cursor..cursor + 1]
+    if stringEquals(ch, '"') {
+      let start = cursor + 1
+      cursor = start
+
+      while cursor < length do {
+        let next = source[cursor..cursor + 1]
+        if stringEquals(next, '"') {
+          return source[start..cursor]
+        }
+
+        cursor = cursor + 1
+      }
+    }
+
+    cursor = cursor + 1
+  }
+
+  return ""
+}
+
+function moduleNextLine(source: string, index: i32): i32 {
+  let length = stringLen(source)
+
+  while index < length do {
+    let ch = source[index..index + 1]
+    index = index + 1
+    if includes('
+', ch) {
+      return index
+    }
+  }
+
+  return index
+}
+
+function moduleLoadFile(path: string, seen: string): string {
+  if mapHas(seen, path) {
+    return ""
+  }
+
+  seen = mapSet(seen, path, "1")
+
+  let source = readFile(path)
+  let base = moduleDirname(path)
+  let prefix = stringBuilder()
+  let body = stringBuilder()
+  let index: i32 = 0
+  let length = stringLen(source)
+
+  while index < length do {
+    let lineEnd = moduleNextLine(source, index)
+    let line = source[index..lineEnd]
+
+    if includes(line, "import") {
+      if includes(line, "from") {
+        let specifier = moduleImportSpecifier(source, index)
+        let child = moduleResolve(base, specifier)
+        let loaded = moduleLoadFile(child, seen)
+        prefix = stringBuilderAppend(prefix, loaded)
+        prefix = stringBuilderAppend(prefix, "
+")
+      } else {
+        body = stringBuilderAppend(body, line)
+      }
+    } else {
+      body = stringBuilderAppend(body, line)
+    }
+
+    index = lineEnd
+  }
+
+  prefix = stringBuilderAppend(prefix, body)
+  return prefix
+}
+
+function loadModuleSource(path: string): string {
+  let seen = map("unused", "unused")
+  return moduleLoadFile(path, seen)
+}

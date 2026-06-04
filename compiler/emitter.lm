@@ -392,6 +392,8 @@ function emitFunctionDefinitions(out: string, program: string): string {
     let name = mapGet(program, prefix + "Name")
     let param0 = mapGet(program, prefix + "Param0")
     let param1 = mapGet(program, prefix + "Param1")
+    let paramCount = mapGet(program, prefix + "ParamCount")
+    let operator = mapGet(program, prefix + "ReturnValue")
     let left = mapGet(program, prefix + "ReturnLeftValue")
     let right = mapGet(program, prefix + "ReturnRightValue")
 
@@ -399,15 +401,21 @@ function emitFunctionDefinitions(out: string, program: string): string {
     out = stringBuilderAppend(out, name)
     out = stringBuilderAppend(out, "(i32 %")
     out = stringBuilderAppend(out, param0)
-    out = stringBuilderAppend(out, ", i32 %")
-    out = stringBuilderAppend(out, param1)
+    if stringEquals(paramCount, "2") {
+      out = stringBuilderAppend(out, ", i32 %")
+      out = stringBuilderAppend(out, param1)
+    }
     out = stringBuilderAppend(out, ") {
 entry:
 ")
-    out = stringBuilderAppend(out, "  %fn.ret = add i32 %")
-    out = stringBuilderAppend(out, left)
-    out = stringBuilderAppend(out, ", %")
-    out = stringBuilderAppend(out, right)
+    if stringEquals(operator, "*") {
+      out = stringBuilderAppend(out, "  %fn.ret = mul i32 ")
+    } else {
+      out = stringBuilderAppend(out, "  %fn.ret = add i32 ")
+    }
+    out = emitFunctionAtom(out, left, param0, param1)
+    out = stringBuilderAppend(out, ", ")
+    out = emitFunctionAtom(out, right, param0, param1)
     out = stringBuilderAppend(out, "
 ")
     out = stringBuilderAppend(out, "  ret i32 %fn.ret
@@ -417,6 +425,23 @@ entry:
     index = index + 1
   }
 
+  return out
+}
+
+function emitFunctionAtom(out: string, value: string, param0: string, param1: string): string {
+  if stringEquals(value, param0) {
+    out = stringBuilderAppend(out, "%")
+    out = stringBuilderAppend(out, value)
+    return out
+  }
+
+  if stringEquals(value, param1) {
+    out = stringBuilderAppend(out, "%")
+    out = stringBuilderAppend(out, value)
+    return out
+  }
+
+  out = stringBuilderAppend(out, value)
   return out
 }
 
@@ -450,6 +475,7 @@ function emitCall(out: string, slot: string, program: string, symbols: string, p
   let name = mapGet(program, prefix + "ExprValue")
   let arg0 = resolvedNumberAtom(symbols, mapGet(program, prefix + "ExprCallArg0"))
   let arg1 = resolvedNumberAtom(symbols, mapGet(program, prefix + "ExprCallArg1"))
+  let argCount = mapGet(program, prefix + "ExprCallArgCount")
 
   out = stringBuilderAppend(out, "  ")
   out = stringBuilderAppend(out, callValueName(slot))
@@ -457,8 +483,10 @@ function emitCall(out: string, slot: string, program: string, symbols: string, p
   out = stringBuilderAppend(out, name)
   out = stringBuilderAppend(out, "(i32 ")
   out = stringBuilderAppend(out, arg0)
-  out = stringBuilderAppend(out, ", i32 ")
-  out = stringBuilderAppend(out, arg1)
+  if stringEquals(argCount, "2") {
+    out = stringBuilderAppend(out, ", i32 ")
+    out = stringBuilderAppend(out, arg1)
+  }
   out = stringBuilderAppend(out, ")
 ")
 

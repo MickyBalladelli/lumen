@@ -177,6 +177,10 @@ function expressionKind(tokens: string, index: i32): string {
     return "binary"
   }
 
+  if stringEquals(next, "*") {
+    return "binary"
+  }
+
   if stringEquals(next, "(") {
     return "call"
   }
@@ -197,7 +201,11 @@ function expressionValue(tokens: string, index: i32): string {
   let next = tokenValue(listGet(tokens, index + 1))
 
   if stringEquals(next, "+") {
-    return "+"
+    return next
+  }
+
+  if stringEquals(next, "*") {
+    return next
   }
 
   return value
@@ -214,6 +222,10 @@ function expressionRightValue(tokens: string, index: i32): string {
     return tokenValue(listGet(tokens, index + 2))
   }
 
+  if stringEquals(next, "*") {
+    return tokenValue(listGet(tokens, index + 2))
+  }
+
   if stringEquals(next, "==") {
     return tokenValue(listGet(tokens, index + 2))
   }
@@ -223,10 +235,26 @@ function expressionRightValue(tokens: string, index: i32): string {
 
 function expressionCallArg(tokens: string, index: i32, offset: i32): string {
   if stringEquals(tokenValue(listGet(tokens, index + 1)), "(") {
+    if stringEquals(tokenValue(listGet(tokens, index + offset)), ")") {
+      return ""
+    }
+
     return tokenValue(listGet(tokens, index + offset))
   }
 
   return ""
+}
+
+function expressionCallArgCount(tokens: string, index: i32): string {
+  if stringEquals(tokenValue(listGet(tokens, index + 1)), "(") {
+    if stringEquals(tokenValue(listGet(tokens, index + 3)), ")") {
+      return "1"
+    }
+
+    return "2"
+  }
+
+  return "0"
 }
 
 function parserStatementPrefix(index: i32): string {
@@ -312,6 +340,7 @@ function setExpressionParts(program: string, index: i32, tokens: string, exprInd
   program = mapSet(program, prefix + "ExprRightValue", expressionRightValue(tokens, exprIndex))
   program = mapSet(program, prefix + "ExprCallArg0", expressionCallArg(tokens, exprIndex, 2))
   program = mapSet(program, prefix + "ExprCallArg1", expressionCallArg(tokens, exprIndex, 4))
+  program = mapSet(program, prefix + "ExprCallArgCount", expressionCallArgCount(tokens, exprIndex))
 
   return program
 }
@@ -422,10 +451,21 @@ function setFunction(program: string, index: i32, tokens: string, functionIndex:
   let name = tokenValue(listGet(tokens, functionIndex + 1))
   let bodyStart = findNext(tokens, functionIndex, "{")
   let returnIndex = findNext(tokens, bodyStart, "return")
+  let closeParams = findNext(tokens, functionIndex, ")")
+  let paramCount = "1"
+
+  if stringEquals(tokenValue(listGet(tokens, functionIndex + 6)), ",") {
+    paramCount = "2"
+  }
 
   program = mapSet(program, prefix + "Name", name)
   program = mapSet(program, prefix + "Param0", tokenValue(listGet(tokens, functionIndex + 3)))
-  program = mapSet(program, prefix + "Param1", tokenValue(listGet(tokens, functionIndex + 7)))
+  program = mapSet(program, prefix + "ParamCount", paramCount)
+  if stringEquals(paramCount, "2") {
+    program = mapSet(program, prefix + "Param1", tokenValue(listGet(tokens, functionIndex + 7)))
+  } else {
+    program = mapSet(program, prefix + "Param1", "")
+  }
   program = mapSet(program, prefix + "ReturnKind", expressionKind(tokens, returnIndex + 1))
   program = mapSet(program, prefix + "ReturnValue", expressionValue(tokens, returnIndex + 1))
   program = mapSet(program, prefix + "ReturnLeftValue", expressionLeftValue(tokens, returnIndex + 1))
