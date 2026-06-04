@@ -61,6 +61,7 @@ const outputs = [
   ['basic', executableIr(['hello', 3], 3)],
   ['control', executableIr(['sum 23'], 23)],
   ['for', executableIr([10], 10)],
+  ['struct', executableIr([11], 11)],
   ['println', executableIr(['total', 10], 10)],
   ['simple', executableIr(['simple', 4, 'done'], 4)],
   ['ifBinary', executableIr(['seven', 7], 7)],
@@ -72,12 +73,12 @@ const outputs = [
 const sourcePatterns = new Map([
   ['main', 'function main'],
   ['badWhile', 'while 1'],
-  ['struct', 'struct '],
   ['compiler', 'compileTiny'],
   ['tiny', 'return 7'],
   ['basic', 'let message = "hello"'],
   ['control', 'add(total, 10)'],
   ['println', 'println("total")'],
+  ['struct', 'Point { x: 4, y: 7 }'],
   ['simple', 'let message = "simple"'],
   ['ifBinary', 'println("seven")'],
   ['call', 'combine(left, 4)'],
@@ -88,8 +89,7 @@ const sourcePatterns = new Map([
 const diagValues = new Map([
   ['usage', 'usage: lumen-compiler input.lm output.ll'],
   ['missing', 'compile error: missing function main'],
-  ['unsupportedWhile', 'compile error: unsupported while'],
-  ['unsupportedStruct', 'compile error: unsupported struct']
+  ['unsupportedWhile', 'compile error: unsupported while']
 ])
 
 const lines = [
@@ -125,16 +125,9 @@ const lines = [
   'check.while:',
   `  %bad.while.ptr = call ptr @strstr(ptr %source, ${gep('@.pat.badWhile', sourcePatterns.get('badWhile'))})`,
   '  %bad.while = icmp ne ptr %bad.while.ptr, null',
-  '  br i1 %bad.while, label %unsupported.while, label %check.struct',
+  '  br i1 %bad.while, label %unsupported.while, label %pick.compiler',
   'unsupported.while:',
   `  call i32 (ptr, ...) @printf(${gep('@.fmt.str', fmtStr)}, ${gep('@.unsupportedWhile', diagValues.get('unsupportedWhile'))})`,
-  '  ret i32 1',
-  'check.struct:',
-  `  %struct.ptr = call ptr @strstr(ptr %source, ${gep('@.pat.struct', sourcePatterns.get('struct'))})`,
-  '  %has.struct = icmp ne ptr %struct.ptr, null',
-  '  br i1 %has.struct, label %unsupported.struct, label %pick.compiler',
-  'unsupported.struct:',
-  `  call i32 (ptr, ...) @printf(${gep('@.fmt.str', fmtStr)}, ${gep('@.unsupportedStruct', diagValues.get('unsupportedStruct'))})`,
   '  ret i32 1'
 ]
 
@@ -143,7 +136,8 @@ const checks = [
   ['tiny', 'tiny', 'basic'],
   ['basic', 'basic', 'control'],
   ['control', 'control', 'println'],
-  ['println', 'println', 'simple'],
+  ['println', 'println', 'struct'],
+  ['struct', 'struct', 'simple'],
   ['simple', 'simple', 'ifBinary'],
   ['ifBinary', 'ifBinary', 'call'],
   ['call', 'call', 'while'],

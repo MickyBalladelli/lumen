@@ -5,8 +5,8 @@ This chapter is the living roadmap.
 ## Compiler
 
 - Replace checkpoint source-shape dispatch with real emit path
-- Grow self-host parser beyond special cases
-- Add self-host struct support
+- Replace self-host parser map records with a typed self-host AST
+- Generalize self-host struct support beyond the current fixed smoke case
 - Add self-host module loading
 - Add better diagnostics
 
@@ -32,4 +32,3 @@ This chapter is the living roadmap.
 - More HTTP routing
 - More portable path helpers
 - Cleaner JSON typing
-

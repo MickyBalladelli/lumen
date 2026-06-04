@@ -28,7 +28,18 @@ Useful files:
 ## Missing
 
 - Replace checkpoint source-shape dispatch with real tiny AST emission
-- Support structs in self-host compiler
+- Replace self-host parser map records with a typed self-host AST
+- Generalize self-host struct support beyond the first fixed smoke case
 - Support imports/modules in self-host compiler
 - Make diagnostics source-located
 
+## Current Self-Host Coverage
+
+The self-host parser recognizes imports, extern declarations, structs, enums,
+async functions, `let` / `const`, `if`, classic `for`, for-of, range loops,
+`while`, do-until, `switch`, `defer`, `break`, `continue`, `try` / `catch`,
+`throw`, `return`, and match-expression initializers.
+
+The stage compiler can emit the tiny bootstrap input, simple `let` / `println`
+/ `return` programs, helper function calls, `if`, classic loop smoke cases,
+while-loop smoke cases, and the first struct smoke case from `examples/struct.lm`.

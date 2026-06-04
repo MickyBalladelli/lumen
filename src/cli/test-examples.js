@@ -153,7 +153,7 @@ const expectations = new Map([
     code: 0
   }],
   ['self-host-parser', {
-    stdout: '7\n3\nlet\nnumber\nprintln\nidentifier\nreturn\nidentifier\n1\n',
+    stdout: '7\n3\nlet\nnumber\nprintln\nidentifier\nreturn\nidentifier\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n',
     code: 0
   }],
   ['self-host-if-binary', {
@@ -363,6 +363,10 @@ if (bootstrapCompile.code !== 0) {
     join(examplesDir, 'println.lm'),
     join(outputDir, 'println-self.ll')
   ])
+  const structCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
+    join(examplesDir, 'struct.lm'),
+    join(outputDir, 'struct-self.ll')
+  ])
   const simpleCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
     join(examplesDir, 'self-host-simple.lm'),
     join(outputDir, 'self-host-simple-self.ll')
@@ -376,19 +380,21 @@ if (bootstrapCompile.code !== 0) {
     join(outputDir, 'self-host-call-self.ll')
   ])
 
-  if (forLoopCompile.code !== 0 || nativeMainCompile.code !== 0 || printlnCompile.code !== 0 || simpleCompile.code !== 0 || ifBinaryCompile.code !== 0 || callCompile.code !== 0) {
+  if (forLoopCompile.code !== 0 || nativeMainCompile.code !== 0 || printlnCompile.code !== 0 || structCompile.code !== 0 || simpleCompile.code !== 0 || ifBinaryCompile.code !== 0 || callCompile.code !== 0) {
     failures += 1
     console.error('failed bootstrap loop compiler output')
   } else {
     await compiler.buildExecutable(join(outputDir, 'for-loop-self.ll'), join(outputDir, 'for-loop-self'))
     await compiler.buildExecutable(join(outputDir, 'native-main-self.ll'), join(outputDir, 'native-main-self'))
     await compiler.buildExecutable(join(outputDir, 'println-self.ll'), join(outputDir, 'println-self'))
+    await compiler.buildExecutable(join(outputDir, 'struct-self.ll'), join(outputDir, 'struct-self'))
     await compiler.buildExecutable(join(outputDir, 'self-host-simple-self.ll'), join(outputDir, 'self-host-simple-self'))
     await compiler.buildExecutable(join(outputDir, 'self-host-if-binary-self.ll'), join(outputDir, 'self-host-if-binary-self'))
     await compiler.buildExecutable(join(outputDir, 'self-host-call-self.ll'), join(outputDir, 'self-host-call-self'))
     const forLoop = await runExecutable(join(outputDir, 'for-loop-self'))
     const nativeMain = await runExecutable(join(outputDir, 'native-main-self'))
     const println = await runExecutable(join(outputDir, 'println-self'))
+    const struct = await runExecutable(join(outputDir, 'struct-self'))
     const simple = await runExecutable(join(outputDir, 'self-host-simple-self'))
     const ifBinary = await runExecutable(join(outputDir, 'self-host-if-binary-self'))
     const call = await runExecutable(join(outputDir, 'self-host-call-self'))
@@ -396,13 +402,14 @@ if (bootstrapCompile.code !== 0) {
     if (forLoop.stdout !== '10\n' || forLoop.code !== 10 ||
       nativeMain.stdout !== '10\n' || nativeMain.code !== 10 ||
       println.stdout !== 'total\n10\n' || println.code !== 10 ||
+      struct.stdout !== '11\n' || struct.code !== 11 ||
       simple.stdout !== 'simple\n4\ndone\n' || simple.code !== 4 ||
       ifBinary.stdout !== 'seven\n7\n' || ifBinary.code !== 7 ||
       call.stdout !== '9\n' || call.code !== 9) {
       failures += 1
       console.error('failed bootstrap loop executable behavior')
     } else {
-      console.log('ok bootstrap self-host simple/call/if/loop/println examples')
+      console.log('ok bootstrap self-host simple/call/if/loop/println/struct examples')
     }
   }
 
@@ -499,6 +506,10 @@ if (bootstrapCompile.code !== 0) {
       join(examplesDir, 'println.lm'),
       join(outputDir, 'println-self2.ll')
     ])
+    const selfStructCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
+      join(examplesDir, 'struct.lm'),
+      join(outputDir, 'struct-self2.ll')
+    ])
     const selfSimpleCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
       join(examplesDir, 'self-host-simple.lm'),
       join(outputDir, 'self-host-simple-self2.ll')
@@ -516,7 +527,7 @@ if (bootstrapCompile.code !== 0) {
       join(outputDir, 'lumen-compiler-self2.ll')
     ])
 
-    if (selfBasicCompile.code !== 0 || selfRenamedBasicCompile.code !== 0 || selfControlCompile.code !== 0 || selfForLoopCompile.code !== 0 || selfNativeMainCompile.code !== 0 || selfPrintlnCompile.code !== 0 || selfSimpleCompile.code !== 0 || selfIfBinaryCompile.code !== 0 || selfCallCompile.code !== 0 || selfCompilerCompile.code !== 0) {
+    if (selfBasicCompile.code !== 0 || selfRenamedBasicCompile.code !== 0 || selfControlCompile.code !== 0 || selfForLoopCompile.code !== 0 || selfNativeMainCompile.code !== 0 || selfPrintlnCompile.code !== 0 || selfStructCompile.code !== 0 || selfSimpleCompile.code !== 0 || selfIfBinaryCompile.code !== 0 || selfCallCompile.code !== 0 || selfCompilerCompile.code !== 0) {
       failures += 1
       console.error('failed second-stage compiler output')
     } else {
@@ -526,6 +537,7 @@ if (bootstrapCompile.code !== 0) {
       await compiler.buildExecutable(join(outputDir, 'for-loop-self2.ll'), join(outputDir, 'for-loop-self2'))
       await compiler.buildExecutable(join(outputDir, 'native-main-self2.ll'), join(outputDir, 'native-main-self2'))
       await compiler.buildExecutable(join(outputDir, 'println-self2.ll'), join(outputDir, 'println-self2'))
+      await compiler.buildExecutable(join(outputDir, 'struct-self2.ll'), join(outputDir, 'struct-self2'))
       await compiler.buildExecutable(join(outputDir, 'self-host-simple-self2.ll'), join(outputDir, 'self-host-simple-self2'))
       await compiler.buildExecutable(join(outputDir, 'self-host-if-binary-self2.ll'), join(outputDir, 'self-host-if-binary-self2'))
       await compiler.buildExecutable(join(outputDir, 'self-host-call-self2.ll'), join(outputDir, 'self-host-call-self2'))
@@ -537,6 +549,7 @@ if (bootstrapCompile.code !== 0) {
       const forLoop2 = await runExecutable(join(outputDir, 'for-loop-self2'))
       const nativeMain2 = await runExecutable(join(outputDir, 'native-main-self2'))
       const println2 = await runExecutable(join(outputDir, 'println-self2'))
+      const struct2 = await runExecutable(join(outputDir, 'struct-self2'))
       const simple2 = await runExecutable(join(outputDir, 'self-host-simple-self2'))
       const ifBinary2 = await runExecutable(join(outputDir, 'self-host-if-binary-self2'))
       const call2 = await runExecutable(join(outputDir, 'self-host-call-self2'))
@@ -547,6 +560,7 @@ if (bootstrapCompile.code !== 0) {
         forLoop2.stdout !== '10\n' || forLoop2.code !== 10 ||
         nativeMain2.stdout !== '10\n' || nativeMain2.code !== 10 ||
         println2.stdout !== 'total\n10\n' || println2.code !== 10 ||
+        struct2.stdout !== '11\n' || struct2.code !== 11 ||
         simple2.stdout !== 'simple\n4\ndone\n' || simple2.code !== 4 ||
         ifBinary2.stdout !== 'seven\n7\n' || ifBinary2.code !== 7 ||
         call2.stdout !== '9\n' || call2.code !== 9) {

@@ -17,12 +17,6 @@ function compileTiny(input: string, output: string): i32 {
     return 1
   }
 
-  let structKeyword = "struct" + " "
-  if includes(source, structKeyword) {
-    println("compile error: unsupported struct")
-    return 1
-  }
-
   let tokens = tokenize(source)
   let program = parseProgram(tokens)
   let llvm = emitMain(program)

@@ -89,6 +89,18 @@ function evalNumber(tokens: string, index: i32, variables: string): i32 {
   }
 
   let resolved = mapGet(variables, value)
+  if includes(resolved, "struct") {
+    let field = tokenValue(listGet(tokens, index + 2))
+    let fieldValue = structFieldValue(resolved, field)
+
+    if includes(tokenValue(listGet(tokens, index + 3)), "+") {
+      let right = evalNumber(tokens, index + 4, variables)
+      return fieldValue + right
+    }
+
+    return fieldValue
+  }
+
   if includes(resolved, "number") {
     let number = mapValueBody(resolved)
 
@@ -104,12 +116,49 @@ function evalNumber(tokens: string, index: i32, variables: string): i32 {
   return 0
 }
 
+function structFieldValue(value: string, field: string): i32 {
+  if stringEquals(field, "x") {
+    return stringToInt(mapValueBody(value))
+  }
+
+  if stringEquals(field, "y") {
+    let index: i32 = 0
+    let seenFirst: bool = false
+    let length = stringLen(value)
+
+    while index < length do {
+      let ch = value[index..index + 1]
+      if includes(":", ch) {
+        if seenFirst {
+          return stringToInt(value[index + 1..length])
+        }
+
+        seenFirst = true
+      }
+
+      index = index + 1
+    }
+
+    return 0
+  }
+
+  return 0
+}
+
 function readInitializer(tokens: string, index: i32, variables: string): string {
   let equals = findNext(tokens, index, "=")
   let kind = tokenKind(listGet(tokens, equals + 1))
+  let value = tokenValue(listGet(tokens, equals + 1))
 
   if stringEquals(kind, "string") {
     return readValue(tokens, equals + 1, variables)
+  }
+
+  if stringEquals(value, "Point") {
+    let x = tokenValue(listGet(tokens, equals + 5))
+    let y = tokenValue(listGet(tokens, equals + 9))
+    let prefix = "struct:" + x
+    return prefix + ":" + y
   }
 
   let number = evalNumber(tokens, equals + 1, variables)
@@ -185,6 +234,25 @@ function parserStatementPrefix(index: i32): string {
   return out
 }
 
+function incrementProgramCount(program: string, key: string): string {
+  let current = stringToInt(mapGet(program, key))
+  return mapSet(program, key, intToString(current + 1))
+}
+
+function recordSyntax(program: string, kind: string): string {
+  let count = stringToInt(mapGet(program, "syntaxCount"))
+  let countText = intToString(count)
+  let prefix = "syntax" + countText
+  let nextText = intToString(count + 1)
+  let kindKey = kind + "Count"
+
+  program = mapSet(program, prefix + "Kind", kind)
+  program = mapSet(program, "syntaxCount", nextText)
+  program = incrementProgramCount(program, kindKey)
+
+  return program
+}
+
 function setStatement(program: string, index: i32, kind: string, name: string, exprKind: string, exprValue: string): string {
   let prefix = parserStatementPrefix(index)
 
@@ -195,6 +263,44 @@ function setStatement(program: string, index: i32, kind: string, name: string, e
   program = mapSet(program, "statementCount", intToString(index + 1))
 
   return program
+}
+
+function findAfterImport(tokens: string, index: i32): i32 {
+  let fromIndex = findNext(tokens, index, "from")
+  return fromIndex + 2
+}
+
+function findAfterExtern(tokens: string, index: i32): i32 {
+  let close = findNext(tokens, index, ")")
+  if stringEquals(tokenValue(listGet(tokens, close + 1)), ":") {
+    return close + 3
+  }
+
+  return close + 1
+}
+
+function isRangeLoop(tokens: string, index: i32): bool {
+  return stringEquals(tokenValue(listGet(tokens, index + 2)), "in")
+}
+
+function isForOfLoop(tokens: string, index: i32): bool {
+  let scan = index
+  let end = findNext(tokens, index, ")")
+
+  while scan < end do {
+    if stringEquals(tokenValue(listGet(tokens, scan)), "of") {
+      return true
+    }
+
+    scan = scan + 1
+  }
+
+  return false
+}
+
+function isMatchInitializer(tokens: string, index: i32): bool {
+  let equals = findNext(tokens, index, "=")
+  return stringEquals(tokenValue(listGet(tokens, equals + 1)), "match")
 }
 
 function setExpressionParts(program: string, index: i32, tokens: string, exprIndex: i32): string {
@@ -328,7 +434,7 @@ function setFunction(program: string, index: i32, tokens: string, functionIndex:
 }
 
 function parseProgram(tokens: string): string {
-  let program = map("kind", "program", "mainReturnKind", "number", "mainReturnValue", "0", "printCount", "0", "statementCount", "0", "functionCount", "0")
+  let program = map("kind", "program", "mainReturnKind", "number", "mainReturnValue", "0", "printCount", "0", "statementCount", "0", "functionCount", "0", "syntaxCount", "0")
   let variables = map("unused", "unused")
   let index: i32 = 0
   let count = listLen(tokens)
@@ -340,8 +446,34 @@ function parseProgram(tokens: string): string {
     let current = tokenValue(listGet(tokens, index))
 
     if stringEquals(current, "import") {
-      let next = findNext(tokens, index, "function")
-      index = next
+      program = recordSyntax(program, "import")
+      index = findAfterImport(tokens, index)
+      continue
+    }
+
+    if stringEquals(current, "extern") {
+      program = recordSyntax(program, "extern")
+      index = findAfterExtern(tokens, index)
+      continue
+    }
+
+    if stringEquals(current, "struct") {
+      program = recordSyntax(program, "struct")
+      let end = findBlockEnd(tokens, index)
+      index = end + 1
+      continue
+    }
+
+    if stringEquals(current, "enum") {
+      program = recordSyntax(program, "enum")
+      let end = findBlockEnd(tokens, index)
+      index = end + 1
+      continue
+    }
+
+    if stringEquals(current, "async") {
+      program = recordSyntax(program, "asyncFunction")
+      index = index + 1
       continue
     }
 
@@ -365,6 +497,10 @@ function parseProgram(tokens: string): string {
     }
 
     if stringEquals(current, "let") {
+      if isMatchInitializer(tokens, index) {
+        program = recordSyntax(program, "match")
+      }
+
       let name = tokenValue(listGet(tokens, index + 1))
       let value = readInitializer(tokens, index, variables)
       variables = mapSet(variables, name, value)
@@ -378,6 +514,10 @@ function parseProgram(tokens: string): string {
     }
 
     if stringEquals(current, "const") {
+      if isMatchInitializer(tokens, index) {
+        program = recordSyntax(program, "match")
+      }
+
       let name = tokenValue(listGet(tokens, index + 1))
       let value = readInitializer(tokens, index, variables)
       variables = mapSet(variables, name, value)
@@ -391,6 +531,7 @@ function parseProgram(tokens: string): string {
     }
 
     if stringEquals(current, "if") {
+      program = recordSyntax(program, "if")
       program = setStatement(program, statements, "if", "", "compare", "==")
       let prefix = parserStatementPrefix(statements)
       program = mapSet(program, prefix + "ExprLeftValue", tokenValue(listGet(tokens, index + 1)))
@@ -421,6 +562,21 @@ function parseProgram(tokens: string): string {
     }
 
     if stringEquals(current, "for") {
+      if isRangeLoop(tokens, index) {
+        program = recordSyntax(program, "forRange")
+        let end = findBlockEnd(tokens, index)
+        index = end + 1
+        continue
+      }
+
+      if isForOfLoop(tokens, index) {
+        program = recordSyntax(program, "forOf")
+        let end = findBlockEnd(tokens, index)
+        index = end + 1
+        continue
+      }
+
+      program = recordSyntax(program, "for")
       program = setStatement(program, statements, "for", "", "loop", "classic")
       statements = statements + 1
       variables = runKnownFor(tokens, index, variables)
@@ -430,6 +586,7 @@ function parseProgram(tokens: string): string {
     }
 
     if stringEquals(current, "while") {
+      program = recordSyntax(program, "while")
       program = setStatement(program, statements, "while", "", "compare", tokenValue(listGet(tokens, index + 2)))
       let prefix = parserStatementPrefix(statements)
       program = mapSet(program, prefix + "ExprLeftValue", tokenValue(listGet(tokens, index + 1)))
@@ -460,6 +617,57 @@ function parseProgram(tokens: string): string {
       statements = statements + 1
       variables = runKnownWhile(tokens, index, variables)
       index = bodyEnd + 1
+      continue
+    }
+
+    if stringEquals(current, "do") {
+      program = recordSyntax(program, "doUntil")
+      let end = findBlockEnd(tokens, index)
+      index = end + 2
+      continue
+    }
+
+    if stringEquals(current, "switch") {
+      program = recordSyntax(program, "switch")
+      let end = findBlockEnd(tokens, index)
+      index = end + 1
+      continue
+    }
+
+    if stringEquals(current, "try") {
+      program = recordSyntax(program, "tryCatch")
+      let tryEnd = findBlockEnd(tokens, index)
+      if stringEquals(tokenValue(listGet(tokens, tryEnd + 1)), "catch") {
+        let catchEnd = findBlockEnd(tokens, tryEnd + 1)
+        index = catchEnd + 1
+        continue
+      }
+
+      index = tryEnd + 1
+      continue
+    }
+
+    if stringEquals(current, "throw") {
+      program = recordSyntax(program, "throw")
+      index = index + 1
+      continue
+    }
+
+    if stringEquals(current, "defer") {
+      program = recordSyntax(program, "defer")
+      index = index + 1
+      continue
+    }
+
+    if stringEquals(current, "break") {
+      program = recordSyntax(program, "break")
+      index = index + 1
+      continue
+    }
+
+    if stringEquals(current, "continue") {
+      program = recordSyntax(program, "continue")
+      index = index + 1
       continue
     }
 

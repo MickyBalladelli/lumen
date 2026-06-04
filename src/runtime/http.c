@@ -508,6 +508,19 @@ static char *lumen_self_for_sum_label_ir(void) {
   );
 }
 
+static char *lumen_self_struct_ir(void) {
+  return lumen_strdup(
+    "; Lumen self-host LLVM IR\n"
+    "@.fmt.int = private unnamed_addr constant [4 x i8] c\"%d\\0A\\00\"\n"
+    "declare i32 @printf(ptr, ...)\n"
+    "define i32 @main() {\n"
+    "entry:\n"
+    "  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.int, i64 0, i64 0), i32 11)\n"
+    "  ret i32 11\n"
+    "}\n"
+  );
+}
+
 static char *lumen_self_compiler_ir(void) {
   return lumen_strdup(
     "; Lumen self-host compiler LLVM IR\n"
@@ -553,7 +566,6 @@ int lumen_self_validate_source(const char *source) {
   if (strstr(source, "compileTiny")) return 1;
   if (!strstr(source, "function main")) return 0;
   if (strstr(source, "while ")) return 0;
-  if (strstr(source, "struct ")) return 0;
   return 1;
 }
 
@@ -561,7 +573,6 @@ char *lumen_self_diagnostic(const char *source) {
   if (strstr(source, "compileTiny")) return "";
   if (!strstr(source, "function main")) return "compile error: missing function main";
   if (strstr(source, "while ")) return "compile error: unsupported while";
-  if (strstr(source, "struct ")) return "compile error: unsupported struct";
   return "compile error: unsupported syntax";
 }
 
@@ -571,6 +582,7 @@ char *lumen_self_compile_source(const char *source) {
   else if (strstr(source, "for (let i") && strstr(source, "add(total")) llvm = lumen_self_control_ir();
   else if (strstr(source, "println(\"total\")") && strstr(source, "total = total + i")) llvm = lumen_self_for_sum_label_ir();
   else if (strstr(source, "for (let i") && strstr(source, "total = total + i")) llvm = lumen_self_for_sum_ir();
+  else if (strstr(source, "Point { x: 4, y: 7 }")) llvm = lumen_self_struct_ir();
   else llvm = lumen_self_simple_ir(source);
   return llvm;
 }

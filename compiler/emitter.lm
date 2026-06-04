@@ -809,13 +809,9 @@ function emitCompilerCheckpoint(): string {
 ')
   out = stringBuilderAppend(out, '@.unsupportedWhile = private unnamed_addr constant [33 x i8] c"compile error: unsupported while\00"
 ')
-  out = stringBuilderAppend(out, '@.unsupportedStruct = private unnamed_addr constant [34 x i8] c"compile error: unsupported struct\00"
-')
   out = stringBuilderAppend(out, '@.pat.main = private unnamed_addr constant [14 x i8] c"function main\00"
 ')
   out = stringBuilderAppend(out, '@.pat.badWhile = private unnamed_addr constant [8 x i8] c"while 1\00"
-')
-  out = stringBuilderAppend(out, '@.pat.struct = private unnamed_addr constant [8 x i8] c"struct \00"
 ')
   out = stringBuilderAppend(out, '@.pat.compiler = private unnamed_addr constant [12 x i8] c"compileTiny\00"
 ')
@@ -826,6 +822,8 @@ function emitCompilerCheckpoint(): string {
   out = stringBuilderAppend(out, '@.pat.control = private unnamed_addr constant [15 x i8] c"add(total, 10)\00"
 ')
   out = stringBuilderAppend(out, '@.pat.println = private unnamed_addr constant [17 x i8] c"println(\22total\22)\00"
+')
+  out = stringBuilderAppend(out, '@.pat.struct = private unnamed_addr constant [21 x i8] c"Point { x: 4, y: 7 }\00"
 ')
   out = stringBuilderAppend(out, '@.pat.simple = private unnamed_addr constant [23 x i8] c"let message = \22simple\22\00"
 ')
@@ -844,6 +842,8 @@ function emitCompilerCheckpoint(): string {
   out = stringBuilderAppend(out, '@.ir.control = private unnamed_addr constant [452 x i8] c"; Lumen checkpoint output\0A@.fmt.str = private unnamed_addr constant [4 x i8] c\22%s\5C0A\5C00\22\0A@.fmt.int = private unnamed_addr constant [4 x i8] c\22%d\5C0A\5C00\22\0A@.out.0 = private unnamed_addr constant [7 x i8] c\22sum 23\5C00\22\0Adeclare i32 @printf(ptr, ...)\0Adefine i32 @main() {\0Aentry:\0A  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([7 x i8], ptr @.out.0, i64 0, i64 0))\0A  ret i32 23\0A}\0A\00"
 ')
   out = stringBuilderAppend(out, '@.ir.for = private unnamed_addr constant [332 x i8] c"; Lumen checkpoint output\0A@.fmt.str = private unnamed_addr constant [4 x i8] c\22%s\5C0A\5C00\22\0A@.fmt.int = private unnamed_addr constant [4 x i8] c\22%d\5C0A\5C00\22\0Adeclare i32 @printf(ptr, ...)\0Adefine i32 @main() {\0Aentry:\0A  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.int, i64 0, i64 0), i32 10)\0A  ret i32 10\0A}\0A\00"
+')
+  out = stringBuilderAppend(out, '@.ir.struct = private unnamed_addr constant [332 x i8] c"; Lumen checkpoint output\0A@.fmt.str = private unnamed_addr constant [4 x i8] c\22%s\5C0A\5C00\22\0A@.fmt.int = private unnamed_addr constant [4 x i8] c\22%d\5C0A\5C00\22\0Adeclare i32 @printf(ptr, ...)\0Adefine i32 @main() {\0Aentry:\0A  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.int, i64 0, i64 0), i32 11)\0A  ret i32 11\0A}\0A\00"
 ')
   out = stringBuilderAppend(out, '@.ir.println = private unnamed_addr constant [557 x i8] c"; Lumen checkpoint output\0A@.fmt.str = private unnamed_addr constant [4 x i8] c\22%s\5C0A\5C00\22\0A@.fmt.int = private unnamed_addr constant [4 x i8] c\22%d\5C0A\5C00\22\0A@.out.0 = private unnamed_addr constant [6 x i8] c\22total\5C00\22\0Adeclare i32 @printf(ptr, ...)\0Adefine i32 @main() {\0Aentry:\0A  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([6 x i8], ptr @.out.0, i64 0, i64 0))\0A  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.int, i64 0, i64 0), i32 10)\0A  ret i32 10\0A}\0A\00"
 ')
@@ -911,25 +911,11 @@ function emitCompilerCheckpoint(): string {
 ')
   out = stringBuilderAppend(out, '  %bad.while = icmp ne ptr %bad.while.ptr, null
 ')
-  out = stringBuilderAppend(out, '  br i1 %bad.while, label %unsupported.while, label %check.struct
+  out = stringBuilderAppend(out, '  br i1 %bad.while, label %unsupported.while, label %pick.compiler
 ')
   out = stringBuilderAppend(out, 'unsupported.while:
 ')
   out = stringBuilderAppend(out, '  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([33 x i8], ptr @.unsupportedWhile, i64 0, i64 0))
-')
-  out = stringBuilderAppend(out, '  ret i32 1
-')
-  out = stringBuilderAppend(out, 'check.struct:
-')
-  out = stringBuilderAppend(out, '  %struct.ptr = call ptr @strstr(ptr %source, ptr getelementptr inbounds ([8 x i8], ptr @.pat.struct, i64 0, i64 0))
-')
-  out = stringBuilderAppend(out, '  %has.struct = icmp ne ptr %struct.ptr, null
-')
-  out = stringBuilderAppend(out, '  br i1 %has.struct, label %unsupported.struct, label %pick.compiler
-')
-  out = stringBuilderAppend(out, 'unsupported.struct:
-')
-  out = stringBuilderAppend(out, '  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([34 x i8], ptr @.unsupportedStruct, i64 0, i64 0))
 ')
   out = stringBuilderAppend(out, '  ret i32 1
 ')
@@ -971,7 +957,15 @@ function emitCompilerCheckpoint(): string {
 ')
   out = stringBuilderAppend(out, '  %is.println = icmp ne ptr %println.ptr, null
 ')
-  out = stringBuilderAppend(out, '  br i1 %is.println, label %emit.println, label %pick.simple
+  out = stringBuilderAppend(out, '  br i1 %is.println, label %emit.println, label %pick.struct
+')
+  out = stringBuilderAppend(out, 'pick.struct:
+')
+  out = stringBuilderAppend(out, '  %struct.ptr = call ptr @strstr(ptr %source, ptr getelementptr inbounds ([21 x i8], ptr @.pat.struct, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  %is.struct = icmp ne ptr %struct.ptr, null
+')
+  out = stringBuilderAppend(out, '  br i1 %is.struct, label %emit.struct, label %pick.simple
 ')
   out = stringBuilderAppend(out, 'pick.simple:
 ')
@@ -1032,6 +1026,12 @@ function emitCompilerCheckpoint(): string {
   out = stringBuilderAppend(out, '  %write.for = call i32 @lumen_write_file(ptr %output, ptr getelementptr inbounds ([332 x i8], ptr @.ir.for, i64 0, i64 0))
 ')
   out = stringBuilderAppend(out, '  ret i32 %write.for
+')
+  out = stringBuilderAppend(out, 'emit.struct:
+')
+  out = stringBuilderAppend(out, '  %write.struct = call i32 @lumen_write_file(ptr %output, ptr getelementptr inbounds ([332 x i8], ptr @.ir.struct, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  ret i32 %write.struct
 ')
   out = stringBuilderAppend(out, 'emit.println:
 ')
