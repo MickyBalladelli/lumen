@@ -1,6 +1,7 @@
 import { tokenize } from "./tokenizer.lm"
 import { parseAst, parseProgram } from "./parser.lm"
 import { analyzeSemantics } from "./semantics.lm"
+import { checkTypes } from "./typechecker.lm"
 import { emitMain } from "./emitter.lm"
 
 function compileTiny(input: string, output: string): i32 {
@@ -13,6 +14,14 @@ function compileTiny(input: string, output: string): i32 {
     let checked = 1
   } else {
     println(semanticResult.message)
+    return 1
+  }
+
+  let typeResult = checkTypes(ast, tokens)
+  if typeResult.ok {
+    let checkedTypes = 1
+  } else {
+    println(typeResult.message)
     return 1
   }
 

@@ -1,6 +1,7 @@
 import { tokenize } from "../compiler/tokenizer.lm"
 import { parseAst, parseProgram } from "../compiler/parser.lm"
 import { analyzeSemantics } from "../compiler/semantics.lm"
+import { checkTypes } from "../compiler/typechecker.lm"
 import { emitMain } from "../compiler/emitter.lm"
 
 function main(): i32 {
@@ -22,6 +23,7 @@ function main(): i32 {
   let syntaxTokens = tokenize(syntaxSource)
   let syntaxAst = parseAst(syntaxTokens)
   let syntaxSemantics = analyzeSemantics(syntaxAst, syntaxTokens)
+  let syntaxTypes = checkTypes(syntaxAst, syntaxTokens)
 
   println(syntaxAst.importCount)
   println(syntaxAst.structCount)
@@ -37,12 +39,20 @@ function main(): i32 {
   println(syntaxAst.tryCatchCount)
   println(syntaxSemantics.ok)
   println(syntaxSemantics.symbolCount)
+  println(syntaxTypes.ok)
+  println(syntaxTypes.checkedCount)
 
   let badTokens = tokenize("function main(): i32 { break return 0 }")
   let badAst = parseAst(badTokens)
   let badSemantics = analyzeSemantics(badAst, badTokens)
   println(badSemantics.ok)
   println(badSemantics.message)
+
+  let badTypeTokens = tokenize("function main(): i32 { let value: string = 7 return 0 }")
+  let badTypeAst = parseAst(badTypeTokens)
+  let badTypes = checkTypes(badTypeAst, badTypeTokens)
+  println(badTypes.ok)
+  println(badTypes.message)
 
   return 0
 }

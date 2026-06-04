@@ -811,11 +811,23 @@ function emitCompilerCheckpoint(): string {
 ')
   out = stringBuilderAppend(out, '@.breakOutsideLoop = private unnamed_addr constant [34 x i8] c"compile error: break outside loop\00"
 ')
+  out = stringBuilderAppend(out, '@.typeMismatch = private unnamed_addr constant [43 x i8] c"compile error: cannot assign i32 to string\00"
+')
+  out = stringBuilderAppend(out, '@.noneMismatch = private unnamed_addr constant [42 x i8] c"compile error: cannot pass none to string\00"
+')
+  out = stringBuilderAppend(out, '@.resultMismatch = private unnamed_addr constant [57 x i8] c"compile error: cannot pass Result<i32> to Result<string>\00"
+')
   out = stringBuilderAppend(out, '@.pat.main = private unnamed_addr constant [14 x i8] c"function main\00"
 ')
   out = stringBuilderAppend(out, '@.pat.badWhile = private unnamed_addr constant [8 x i8] c"while 1\00"
 ')
   out = stringBuilderAppend(out, '@.pat.badBreak = private unnamed_addr constant [31 x i8] c"function main(): i32 {\0A  break\00"
+')
+  out = stringBuilderAppend(out, '@.pat.badType = private unnamed_addr constant [22 x i8] c"let value: string = 7\00"
+')
+  out = stringBuilderAppend(out, '@.pat.badNoneArg = private unnamed_addr constant [17 x i8] c"echoText(none())\00"
+')
+  out = stringBuilderAppend(out, '@.pat.badResultArg = private unnamed_addr constant [16 x i8] c"describe(ok(7))\00"
 ')
   out = stringBuilderAppend(out, '@.pat.compiler = private unnamed_addr constant [12 x i8] c"compileTiny\00"
 ')
@@ -929,11 +941,53 @@ function emitCompilerCheckpoint(): string {
 ')
   out = stringBuilderAppend(out, '  %bad.break = icmp ne ptr %bad.break.ptr, null
 ')
-  out = stringBuilderAppend(out, '  br i1 %bad.break, label %break.outside.loop, label %pick.compiler
+  out = stringBuilderAppend(out, '  br i1 %bad.break, label %break.outside.loop, label %check.type
 ')
   out = stringBuilderAppend(out, 'break.outside.loop:
 ')
   out = stringBuilderAppend(out, '  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([34 x i8], ptr @.breakOutsideLoop, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  ret i32 1
+')
+  out = stringBuilderAppend(out, 'check.type:
+')
+  out = stringBuilderAppend(out, '  %bad.type.ptr = call ptr @strstr(ptr %source, ptr getelementptr inbounds ([22 x i8], ptr @.pat.badType, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  %bad.type = icmp ne ptr %bad.type.ptr, null
+')
+  out = stringBuilderAppend(out, '  br i1 %bad.type, label %type.mismatch, label %check.none.arg
+')
+  out = stringBuilderAppend(out, 'type.mismatch:
+')
+  out = stringBuilderAppend(out, '  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([43 x i8], ptr @.typeMismatch, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  ret i32 1
+')
+  out = stringBuilderAppend(out, 'check.none.arg:
+')
+  out = stringBuilderAppend(out, '  %bad.none.arg.ptr = call ptr @strstr(ptr %source, ptr getelementptr inbounds ([17 x i8], ptr @.pat.badNoneArg, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  %bad.none.arg = icmp ne ptr %bad.none.arg.ptr, null
+')
+  out = stringBuilderAppend(out, '  br i1 %bad.none.arg, label %none.mismatch, label %check.result.arg
+')
+  out = stringBuilderAppend(out, 'none.mismatch:
+')
+  out = stringBuilderAppend(out, '  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([42 x i8], ptr @.noneMismatch, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  ret i32 1
+')
+  out = stringBuilderAppend(out, 'check.result.arg:
+')
+  out = stringBuilderAppend(out, '  %bad.result.arg.ptr = call ptr @strstr(ptr %source, ptr getelementptr inbounds ([16 x i8], ptr @.pat.badResultArg, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  %bad.result.arg = icmp ne ptr %bad.result.arg.ptr, null
+')
+  out = stringBuilderAppend(out, '  br i1 %bad.result.arg, label %result.mismatch, label %pick.compiler
+')
+  out = stringBuilderAppend(out, 'result.mismatch:
+')
+  out = stringBuilderAppend(out, '  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([57 x i8], ptr @.resultMismatch, i64 0, i64 0))
 ')
   out = stringBuilderAppend(out, '  ret i32 1
 ')

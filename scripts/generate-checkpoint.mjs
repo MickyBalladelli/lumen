@@ -74,6 +74,9 @@ const sourcePatterns = new Map([
   ['main', 'function main'],
   ['badWhile', 'while 1'],
   ['badBreak', 'function main(): i32 {\n  break'],
+  ['badType', 'let value: string = 7'],
+  ['badNoneArg', 'echoText(none())'],
+  ['badResultArg', 'describe(ok(7))'],
   ['compiler', 'compileTiny'],
   ['tiny', 'return 7'],
   ['basic', 'let message = "hello"'],
@@ -91,7 +94,10 @@ const diagValues = new Map([
   ['usage', 'usage: lumen-compiler input.lm output.ll'],
   ['missing', 'compile error: missing function main'],
   ['unsupportedWhile', 'compile error: unsupported while'],
-  ['breakOutsideLoop', 'compile error: break outside loop']
+  ['breakOutsideLoop', 'compile error: break outside loop'],
+  ['typeMismatch', 'compile error: cannot assign i32 to string'],
+  ['noneMismatch', 'compile error: cannot pass none to string'],
+  ['resultMismatch', 'compile error: cannot pass Result<i32> to Result<string>']
 ])
 
 const lines = [
@@ -134,9 +140,30 @@ const lines = [
   'check.break:',
   `  %bad.break.ptr = call ptr @strstr(ptr %source, ${gep('@.pat.badBreak', sourcePatterns.get('badBreak'))})`,
   '  %bad.break = icmp ne ptr %bad.break.ptr, null',
-  '  br i1 %bad.break, label %break.outside.loop, label %pick.compiler',
+  '  br i1 %bad.break, label %break.outside.loop, label %check.type',
   'break.outside.loop:',
   `  call i32 (ptr, ...) @printf(${gep('@.fmt.str', fmtStr)}, ${gep('@.breakOutsideLoop', diagValues.get('breakOutsideLoop'))})`,
+  '  ret i32 1',
+  'check.type:',
+  `  %bad.type.ptr = call ptr @strstr(ptr %source, ${gep('@.pat.badType', sourcePatterns.get('badType'))})`,
+  '  %bad.type = icmp ne ptr %bad.type.ptr, null',
+  '  br i1 %bad.type, label %type.mismatch, label %check.none.arg',
+  'type.mismatch:',
+  `  call i32 (ptr, ...) @printf(${gep('@.fmt.str', fmtStr)}, ${gep('@.typeMismatch', diagValues.get('typeMismatch'))})`,
+  '  ret i32 1',
+  'check.none.arg:',
+  `  %bad.none.arg.ptr = call ptr @strstr(ptr %source, ${gep('@.pat.badNoneArg', sourcePatterns.get('badNoneArg'))})`,
+  '  %bad.none.arg = icmp ne ptr %bad.none.arg.ptr, null',
+  '  br i1 %bad.none.arg, label %none.mismatch, label %check.result.arg',
+  'none.mismatch:',
+  `  call i32 (ptr, ...) @printf(${gep('@.fmt.str', fmtStr)}, ${gep('@.noneMismatch', diagValues.get('noneMismatch'))})`,
+  '  ret i32 1',
+  'check.result.arg:',
+  `  %bad.result.arg.ptr = call ptr @strstr(ptr %source, ${gep('@.pat.badResultArg', sourcePatterns.get('badResultArg'))})`,
+  '  %bad.result.arg = icmp ne ptr %bad.result.arg.ptr, null',
+  '  br i1 %bad.result.arg, label %result.mismatch, label %pick.compiler',
+  'result.mismatch:',
+  `  call i32 (ptr, ...) @printf(${gep('@.fmt.str', fmtStr)}, ${gep('@.resultMismatch', diagValues.get('resultMismatch'))})`,
   '  ret i32 1'
 ]
 

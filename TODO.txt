@@ -2,8 +2,8 @@ Still missing big things:
 
 DONE Real self-host parser for all syntax
 DONE Real self-host AST, not map/string records
-Self-host semantic analyzer
-Self-host type checker
+DONE Self-host semantic analyzer
+DONE Self-host type checker
 Self-host IR builder
 Self-host LLVM emitter for whole language
 Real module/import loading in self-host path

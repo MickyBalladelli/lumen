@@ -153,7 +153,7 @@ const expectations = new Map([
     code: 0
   }],
   ['self-host-parser', {
-    stdout: '7\n3\nlet\nnumber\nprintln\nidentifier\nreturn\nidentifier\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n5\n0\ncompile error: break outside loop\n',
+    stdout: '7\n3\nlet\nnumber\nprintln\nidentifier\nreturn\nidentifier\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n5\n1\n2\n0\ncompile error: break outside loop\n0\ncompile error: cannot assign i32 to string\n',
     code: 0
   }],
   ['self-host-if-binary', {
@@ -466,6 +466,33 @@ if (bootstrapCompile.code !== 0) {
     console.log('ok bootstrap break semantic diagnostic')
   }
 
+  const typeMismatchCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
+    join('tests', 'bootstrap', 'type-mismatch.lm'),
+    join(outputDir, 'type-mismatch-self.ll')
+  ])
+  if (typeMismatchCompile.code === 0 || typeMismatchCompile.stdout !== 'compile error: cannot assign i32 to string\n') {
+    failures += 1
+    console.error('failed bootstrap type diagnostic')
+  } else {
+    console.log('ok bootstrap type diagnostic')
+  }
+
+  const noneToStringCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
+    join('tests', 'negative', 'none-to-string.lm'),
+    join(outputDir, 'none-to-string-self.ll')
+  ])
+  const resultMismatchCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
+    join('tests', 'negative', 'result-type-mismatch.lm'),
+    join(outputDir, 'result-type-mismatch-self.ll')
+  ])
+  if (noneToStringCompile.code === 0 || noneToStringCompile.stdout !== 'compile error: cannot pass none to string\n' ||
+    resultMismatchCompile.code === 0 || resultMismatchCompile.stdout !== 'compile error: cannot pass Result<i32> to Result<string>\n') {
+    failures += 1
+    console.error('failed bootstrap function-call type diagnostics')
+  } else {
+    console.log('ok bootstrap function-call type diagnostics')
+  }
+
   const compilerSeedPath = join(outputDir, 'lumen-compiler.ll')
   const hiddenCompilerSeedPath = join(outputDir, 'lumen-compiler.seed-hidden.ll')
   await rename(compilerSeedPath, hiddenCompilerSeedPath)
@@ -634,6 +661,33 @@ if (bootstrapCompile.code !== 0) {
       console.error('failed second-stage break semantic diagnostic')
     } else {
       console.log('ok second-stage break semantic diagnostic')
+    }
+
+    const selfTypeMismatchCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
+      join('tests', 'bootstrap', 'type-mismatch.lm'),
+      join(outputDir, 'type-mismatch-self2.ll')
+    ])
+    if (selfTypeMismatchCompile.code === 0 || selfTypeMismatchCompile.stdout !== 'compile error: cannot assign i32 to string\n') {
+      failures += 1
+      console.error('failed second-stage type diagnostic')
+    } else {
+      console.log('ok second-stage type diagnostic')
+    }
+
+    const selfNoneToStringCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
+      join('tests', 'negative', 'none-to-string.lm'),
+      join(outputDir, 'none-to-string-self2.ll')
+    ])
+    const selfResultMismatchCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
+      join('tests', 'negative', 'result-type-mismatch.lm'),
+      join(outputDir, 'result-type-mismatch-self2.ll')
+    ])
+    if (selfNoneToStringCompile.code === 0 || selfNoneToStringCompile.stdout !== 'compile error: cannot pass none to string\n' ||
+      selfResultMismatchCompile.code === 0 || selfResultMismatchCompile.stdout !== 'compile error: cannot pass Result<i32> to Result<string>\n') {
+      failures += 1
+      console.error('failed second-stage function-call type diagnostics')
+    } else {
+      console.log('ok second-stage function-call type diagnostics')
     }
   }
 }

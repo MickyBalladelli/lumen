@@ -23,6 +23,7 @@ Useful files:
 - `compiler/tokenizer.lm`
 - `compiler/parser.lm`
 - `compiler/semantics.lm`
+- `compiler/typechecker.lm`
 - `compiler/emitter.lm`
 - `compiler/main.lm`
 - `src/cli/test-examples.js`
@@ -32,7 +33,7 @@ Useful files:
 - Replace checkpoint source-shape dispatch with real tiny AST emission
 - Move emitter off the legacy AST-to-map bridge
 - Grow the self-host semantic analyzer beyond symbol and control-flow checks
-- Add self-host type checking
+- Grow the self-host type checker beyond simple annotations and first-argument calls
 - Generalize self-host struct support beyond the first fixed smoke case
 - Support imports/modules in self-host compiler
 - Make diagnostics source-located
@@ -53,3 +54,7 @@ That emit path still uses a compatibility map produced from the AST shape.
 The self-host semantic analyzer has a `SemanticResult` and checks for `main`,
 duplicate top-level symbols, unsupported bootstrap `while 1`, and `break` /
 `continue` outside valid control-flow regions.
+
+The self-host type checker has a `TypeResult` and checks simple annotated
+variable initializers plus first-argument function calls, including `none()` and
+`ok(...)` helper shapes.
