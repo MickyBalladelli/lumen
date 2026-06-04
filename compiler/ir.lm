@@ -1,0 +1,117 @@
+import { AstProgram } from "./ast.lm"
+
+struct IrModule {
+  kind: string
+  functionCount: i32
+  instructionCount: i32
+  printCount: i32
+  returnKind: string
+  returnValue: string
+  hasCall: i32
+  hasBinary: i32
+  hasFor: i32
+  hasWhile: i32
+}
+
+function irModule(): IrModule {
+  let module = IrModule {
+    kind: "IRModule",
+    functionCount: 0,
+    instructionCount: 0,
+    printCount: 0,
+    returnKind: "number",
+    returnValue: "0",
+    hasCall: 0,
+    hasBinary: 0,
+    hasFor: 0,
+    hasWhile: 0
+  }
+
+  return module
+}
+
+function irStatementPrefix(index: i32): string {
+  let indexText = intToString(index)
+  return "statement" + indexText
+}
+
+function buildIr(ast: AstProgram, program: string): IrModule {
+  let module = irModule()
+  let count = stringToInt(mapGet(program, "statementCount"))
+  let index: i32 = 0
+
+  module.functionCount = ast.functionCount
+  module.returnKind = mapGet(program, "mainReturnKind")
+  module.returnValue = mapGet(program, "mainReturnValue")
+
+  while index < count do {
+    let prefix = irStatementPrefix(index)
+    let kind = mapGet(program, prefix + "Kind")
+    let exprKind = mapGet(program, prefix + "ExprKind")
+
+    if includes(kind, "println") {
+      module.printCount = module.printCount + 1
+      module.instructionCount = module.instructionCount + 1
+    } else if includes(kind, "return") {
+      module.instructionCount = module.instructionCount + 1
+    } else if includes(kind, "let") {
+      module.instructionCount = module.instructionCount + 1
+    } else if includes(kind, "const") {
+      module.instructionCount = module.instructionCount + 1
+    } else if includes(kind, "if") {
+      module.instructionCount = module.instructionCount + 1
+    } else if includes(kind, "for") {
+      module.hasFor = 1
+      module.instructionCount = module.instructionCount + 1
+    } else if includes(kind, "while") {
+      module.hasWhile = 1
+      module.instructionCount = module.instructionCount + 1
+    }
+
+    if includes(exprKind, "call") {
+      module.hasCall = 1
+    }
+
+    if includes(exprKind, "binary") {
+      module.hasBinary = 1
+    }
+
+    index = index + 1
+  }
+
+  return module
+}
+
+function irToProgram(ir: IrModule, program: string): string {
+  program = mapSet(program, "irKind", ir.kind)
+  program = mapSet(program, "irInstructionCount", intToString(ir.instructionCount))
+  program = mapSet(program, "irPrintCount", intToString(ir.printCount))
+  program = mapSet(program, "irReturnKind", ir.returnKind)
+  program = mapSet(program, "irReturnValue", ir.returnValue)
+
+  if ir.hasCall == 1 {
+    program = mapSet(program, "irHasCall", "1")
+  } else {
+    program = mapSet(program, "irHasCall", "0")
+  }
+
+  if ir.hasBinary == 1 {
+    program = mapSet(program, "irHasBinary", "1")
+  } else {
+    program = mapSet(program, "irHasBinary", "0")
+  }
+
+  if ir.hasFor == 1 {
+    program = mapSet(program, "irHasFor", "1")
+  } else {
+    program = mapSet(program, "irHasFor", "0")
+  }
+
+  if ir.hasWhile == 1 {
+    program = mapSet(program, "irHasWhile", "1")
+  } else {
+    program = mapSet(program, "irHasWhile", "0")
+  }
+
+  return program
+}

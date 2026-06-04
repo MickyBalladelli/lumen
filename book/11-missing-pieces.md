@@ -6,6 +6,7 @@ This chapter is the living roadmap.
 
 - Replace checkpoint source-shape dispatch with real emit path
 - Move emitter off the legacy AST-to-map bridge
+- Grow self-host IR builder beyond module facts and statement flags
 - Grow self-host semantic analyzer beyond symbol and control-flow checks
 - Grow self-host type checker beyond simple annotations and first-argument calls
 - Generalize self-host struct support beyond the current fixed smoke case

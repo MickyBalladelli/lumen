@@ -2,6 +2,7 @@ import { tokenize } from "./tokenizer.lm"
 import { parseAst, parseProgram } from "./parser.lm"
 import { analyzeSemantics } from "./semantics.lm"
 import { checkTypes } from "./typechecker.lm"
+import { buildIr, irToProgram } from "./ir.lm"
 import { emitMain } from "./emitter.lm"
 
 function compileTiny(input: string, output: string): i32 {
@@ -26,6 +27,8 @@ function compileTiny(input: string, output: string): i32 {
   }
 
   let program = parseProgram(tokens)
+  let ir = buildIr(ast, program)
+  program = irToProgram(ir, program)
   let llvm = emitMain(program)
 
   return writeFile(output, llvm)

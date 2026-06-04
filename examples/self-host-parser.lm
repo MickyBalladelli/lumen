@@ -2,11 +2,15 @@ import { tokenize } from "../compiler/tokenizer.lm"
 import { parseAst, parseProgram } from "../compiler/parser.lm"
 import { analyzeSemantics } from "../compiler/semantics.lm"
 import { checkTypes } from "../compiler/typechecker.lm"
+import { buildIr, irToProgram } from "../compiler/ir.lm"
 import { emitMain } from "../compiler/emitter.lm"
 
 function main(): i32 {
   let tokens = tokenize("function main(): i32 { let value = 7 println(value) return value }")
+  let ast = parseAst(tokens)
   let program = parseProgram(tokens)
+  let ir = buildIr(ast, program)
+  program = irToProgram(ir, program)
   let llvm = emitMain(program)
 
   println(mapGet(program, "mainReturnValue"))
@@ -18,6 +22,11 @@ function main(): i32 {
   println(mapGet(program, "statement2Kind"))
   println(mapGet(program, "statement2ExprKind"))
   println(includes(llvm, "ret i32 7"))
+  println(ir.kind)
+  println(ir.instructionCount)
+  println(ir.printCount)
+  println(ir.returnValue)
+  println(mapGet(program, "irKind"))
 
   let syntaxSource = 'import { println } from "system" struct Point { x: i32 y: i32 } enum Status { Ok Missing } extern function native(value: i32): i32 async function load(): i32 { return 1 } function main(): i32 { defer cleanup() let status: Status = Missing let label = match status { Ok => "ok" _ => "unknown" } for item in 0..2 { continue } for (let value of values) { break } switch status { case Missing { println(label) } default { println("x") } } do { status = Ok } until status == Ok try { throw "boom" } catch error { println(error) } return 0 }'
   let syntaxTokens = tokenize(syntaxSource)

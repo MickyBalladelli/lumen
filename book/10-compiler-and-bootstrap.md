@@ -24,6 +24,7 @@ Useful files:
 - `compiler/parser.lm`
 - `compiler/semantics.lm`
 - `compiler/typechecker.lm`
+- `compiler/ir.lm`
 - `compiler/emitter.lm`
 - `compiler/main.lm`
 - `src/cli/test-examples.js`
@@ -32,6 +33,7 @@ Useful files:
 
 - Replace checkpoint source-shape dispatch with real tiny AST emission
 - Move emitter off the legacy AST-to-map bridge
+- Grow the self-host IR builder beyond module facts and statement flags
 - Grow the self-host semantic analyzer beyond symbol and control-flow checks
 - Grow the self-host type checker beyond simple annotations and first-argument calls
 - Generalize self-host struct support beyond the first fixed smoke case
@@ -58,3 +60,7 @@ duplicate top-level symbols, unsupported bootstrap `while 1`, and `break` /
 The self-host type checker has a `TypeResult` and checks simple annotated
 variable initializers plus first-argument function calls, including `none()` and
 `ok(...)` helper shapes.
+
+The self-host IR builder has an `IrModule` and lowers the current AST/statement
+bridge into module facts, instruction counts, return values, print counts, and
+call/binary/loop flags before emission.
