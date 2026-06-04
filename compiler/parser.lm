@@ -1,3 +1,5 @@
+import { AstProgram, astProgram, astRecordFunction, astRecordReturn, astRecordStatement, astRecordSyntax } from "./ast.lm"
+
 function tokenValue(token: string): string {
   let index: i32 = 0
   let length = stringLen(token)
@@ -433,7 +435,215 @@ function setFunction(program: string, index: i32, tokens: string, functionIndex:
   return program
 }
 
+function parseAst(tokens: string): AstProgram {
+  let program = astProgram()
+  let variables = map("unused", "unused")
+  let index: i32 = 0
+  let count = listLen(tokens)
+
+  while index < count do {
+    let current = tokenValue(listGet(tokens, index))
+
+    if stringEquals(current, "import") {
+      program = astRecordSyntax(program, "import")
+      index = findAfterImport(tokens, index)
+      continue
+    }
+
+    if stringEquals(current, "extern") {
+      program = astRecordSyntax(program, "extern")
+      index = findAfterExtern(tokens, index)
+      continue
+    }
+
+    if stringEquals(current, "struct") {
+      program = astRecordSyntax(program, "struct")
+      let end = findBlockEnd(tokens, index)
+      index = end + 1
+      continue
+    }
+
+    if stringEquals(current, "enum") {
+      program = astRecordSyntax(program, "enum")
+      let end = findBlockEnd(tokens, index)
+      index = end + 1
+      continue
+    }
+
+    if stringEquals(current, "async") {
+      program = astRecordSyntax(program, "asyncFunction")
+      index = index + 1
+      continue
+    }
+
+    if stringEquals(current, "function") {
+      let name = tokenValue(listGet(tokens, index + 1))
+
+      if stringEquals(name, "main") {
+        let start = findNext(tokens, index, "{")
+        index = start + 1
+        continue
+      }
+
+      program = astRecordFunction(program)
+      let end = findBlockEnd(tokens, index)
+      index = end + 1
+      continue
+    }
+
+    if stringEquals(current, "let") {
+      if isMatchInitializer(tokens, index) {
+        program = astRecordSyntax(program, "match")
+      }
+
+      let name = tokenValue(listGet(tokens, index + 1))
+      let value = readInitializer(tokens, index, variables)
+      variables = mapSet(variables, name, value)
+      program = astRecordStatement(program)
+      let equals = findNext(tokens, index, "=")
+      index = equals + 2
+      continue
+    }
+
+    if stringEquals(current, "const") {
+      if isMatchInitializer(tokens, index) {
+        program = astRecordSyntax(program, "match")
+      }
+
+      let name = tokenValue(listGet(tokens, index + 1))
+      let value = readInitializer(tokens, index, variables)
+      variables = mapSet(variables, name, value)
+      program = astRecordStatement(program)
+      let equals = findNext(tokens, index, "=")
+      index = equals + 2
+      continue
+    }
+
+    if stringEquals(current, "if") {
+      program = astRecordSyntax(program, "if")
+      program = astRecordStatement(program)
+      let end = findBlockEnd(tokens, index)
+      if stringEquals(tokenValue(listGet(tokens, end + 1)), "else") {
+        let elseEnd = findBlockEnd(tokens, end + 1)
+        index = elseEnd + 1
+        continue
+      }
+
+      index = end + 1
+      continue
+    }
+
+    if stringEquals(current, "for") {
+      if isRangeLoop(tokens, index) {
+        program = astRecordSyntax(program, "forRange")
+        let end = findBlockEnd(tokens, index)
+        index = end + 1
+        continue
+      }
+
+      if isForOfLoop(tokens, index) {
+        program = astRecordSyntax(program, "forOf")
+        let end = findBlockEnd(tokens, index)
+        index = end + 1
+        continue
+      }
+
+      program = astRecordSyntax(program, "for")
+      program = astRecordStatement(program)
+      let end = findBlockEnd(tokens, index)
+      index = end + 1
+      continue
+    }
+
+    if stringEquals(current, "while") {
+      program = astRecordSyntax(program, "while")
+      program = astRecordStatement(program)
+      let end = findBlockEnd(tokens, index)
+      index = end + 1
+      continue
+    }
+
+    if stringEquals(current, "do") {
+      program = astRecordSyntax(program, "doUntil")
+      let end = findBlockEnd(tokens, index)
+      index = end + 2
+      continue
+    }
+
+    if stringEquals(current, "switch") {
+      program = astRecordSyntax(program, "switch")
+      let end = findBlockEnd(tokens, index)
+      index = end + 1
+      continue
+    }
+
+    if stringEquals(current, "try") {
+      program = astRecordSyntax(program, "tryCatch")
+      let tryEnd = findBlockEnd(tokens, index)
+      if stringEquals(tokenValue(listGet(tokens, tryEnd + 1)), "catch") {
+        let catchEnd = findBlockEnd(tokens, tryEnd + 1)
+        index = catchEnd + 1
+        continue
+      }
+
+      index = tryEnd + 1
+      continue
+    }
+
+    if stringEquals(current, "throw") {
+      program = astRecordSyntax(program, "throw")
+      index = index + 1
+      continue
+    }
+
+    if stringEquals(current, "defer") {
+      program = astRecordSyntax(program, "defer")
+      index = index + 1
+      continue
+    }
+
+    if stringEquals(current, "break") {
+      program = astRecordSyntax(program, "break")
+      index = index + 1
+      continue
+    }
+
+    if stringEquals(current, "continue") {
+      program = astRecordSyntax(program, "continue")
+      index = index + 1
+      continue
+    }
+
+    if stringEquals(current, "println") {
+      program = astRecordStatement(program)
+      index = index + 1
+      continue
+    }
+
+    if stringEquals(current, "return") {
+      let value = readValue(tokens, index + 1, variables)
+      program = astRecordReturn(program, mapValueKind(value), mapValueBody(value))
+      index = index + 1
+      continue
+    }
+
+    if stringEquals(tokenValue(listGet(tokens, index + 1)), "=") {
+      let number = evalNumber(tokens, index + 2, variables)
+      let text = intToString(number)
+      let value = "number:" + text
+      variables = mapSet(variables, current, value)
+      index = index + 1
+      continue
+    }
+
+    index = index + 1
+  }
+
+  return program
+}
+
 function parseProgram(tokens: string): string {
+  let ast = parseAst(tokens)
   let program = map("kind", "program", "mainReturnKind", "number", "mainReturnValue", "0", "printCount", "0", "statementCount", "0", "functionCount", "0", "syntaxCount", "0")
   let variables = map("unused", "unused")
   let index: i32 = 0

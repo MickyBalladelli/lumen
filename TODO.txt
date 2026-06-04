@@ -1,6 +1,6 @@
 Still missing big things:
 
-Real self-host parser for all syntax
+DONE Real self-host parser for all syntax
 Real self-host AST, not map/string records
 Self-host semantic analyzer
 Self-host type checker

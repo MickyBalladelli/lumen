@@ -1,0 +1,169 @@
+struct AstProgram {
+  kind: string
+  syntaxCount: i32
+  functionCount: i32
+  statementCount: i32
+  importCount: i32
+  externCount: i32
+  structCount: i32
+  enumCount: i32
+  asyncFunctionCount: i32
+  ifCount: i32
+  forCount: i32
+  forRangeCount: i32
+  forOfCount: i32
+  whileCount: i32
+  doUntilCount: i32
+  switchCount: i32
+  deferCount: i32
+  breakCount: i32
+  continueCount: i32
+  tryCatchCount: i32
+  throwCount: i32
+  matchCount: i32
+  mainReturnKind: string
+  mainReturnValue: string
+}
+
+function astProgram(): AstProgram {
+  let program = AstProgram {
+    kind: "Program",
+    syntaxCount: 0,
+    functionCount: 0,
+    statementCount: 0,
+    importCount: 0,
+    externCount: 0,
+    structCount: 0,
+    enumCount: 0,
+    asyncFunctionCount: 0,
+    ifCount: 0,
+    forCount: 0,
+    forRangeCount: 0,
+    forOfCount: 0,
+    whileCount: 0,
+    doUntilCount: 0,
+    switchCount: 0,
+    deferCount: 0,
+    breakCount: 0,
+    continueCount: 0,
+    tryCatchCount: 0,
+    throwCount: 0,
+    matchCount: 0,
+    mainReturnKind: "number",
+    mainReturnValue: "0"
+  }
+
+  return program
+}
+
+function astRecordSyntax(program: AstProgram, kind: string): AstProgram {
+  program.syntaxCount = program.syntaxCount + 1
+
+  if stringEquals(kind, "import") {
+    program.importCount = program.importCount + 1
+    return program
+  }
+
+  if stringEquals(kind, "extern") {
+    program.externCount = program.externCount + 1
+    return program
+  }
+
+  if stringEquals(kind, "struct") {
+    program.structCount = program.structCount + 1
+    return program
+  }
+
+  if stringEquals(kind, "enum") {
+    program.enumCount = program.enumCount + 1
+    return program
+  }
+
+  if stringEquals(kind, "asyncFunction") {
+    program.asyncFunctionCount = program.asyncFunctionCount + 1
+    return program
+  }
+
+  if stringEquals(kind, "if") {
+    program.ifCount = program.ifCount + 1
+    return program
+  }
+
+  if stringEquals(kind, "for") {
+    program.forCount = program.forCount + 1
+    return program
+  }
+
+  if stringEquals(kind, "forRange") {
+    program.forRangeCount = program.forRangeCount + 1
+    return program
+  }
+
+  if stringEquals(kind, "forOf") {
+    program.forOfCount = program.forOfCount + 1
+    return program
+  }
+
+  if stringEquals(kind, "while") {
+    program.whileCount = program.whileCount + 1
+    return program
+  }
+
+  if stringEquals(kind, "doUntil") {
+    program.doUntilCount = program.doUntilCount + 1
+    return program
+  }
+
+  if stringEquals(kind, "switch") {
+    program.switchCount = program.switchCount + 1
+    return program
+  }
+
+  if stringEquals(kind, "defer") {
+    program.deferCount = program.deferCount + 1
+    return program
+  }
+
+  if stringEquals(kind, "break") {
+    program.breakCount = program.breakCount + 1
+    return program
+  }
+
+  if stringEquals(kind, "continue") {
+    program.continueCount = program.continueCount + 1
+    return program
+  }
+
+  if stringEquals(kind, "tryCatch") {
+    program.tryCatchCount = program.tryCatchCount + 1
+    return program
+  }
+
+  if stringEquals(kind, "throw") {
+    program.throwCount = program.throwCount + 1
+    return program
+  }
+
+  if stringEquals(kind, "match") {
+    program.matchCount = program.matchCount + 1
+    return program
+  }
+
+  return program
+}
+
+function astRecordFunction(program: AstProgram): AstProgram {
+  program.functionCount = program.functionCount + 1
+  return program
+}
+
+function astRecordStatement(program: AstProgram): AstProgram {
+  program.statementCount = program.statementCount + 1
+  return program
+}
+
+function astRecordReturn(program: AstProgram, kind: string, value: string): AstProgram {
+  program.mainReturnKind = kind
+  program.mainReturnValue = value
+  return astRecordStatement(program)
+}
