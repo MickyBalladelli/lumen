@@ -922,6 +922,8 @@ function emitCompilerCheckpoint(): string {
 ')
   out = stringBuilderAppend(out, '@.resultMismatch = private unnamed_addr constant [81 x i8] c"compile error: cannot pass Result<i32> to Result<string> at line 6 near describe\00"
 ')
+  out = stringBuilderAppend(out, '@.compilerSelf = private unnamed_addr constant [65 x i8] c"compile error: self-host compiler self-compile not supported yet\00"
+')
   out = stringBuilderAppend(out, '@.pat.main = private unnamed_addr constant [14 x i8] c"function main\00"
 ')
   out = stringBuilderAppend(out, '@.pat.badWhile = private unnamed_addr constant [8 x i8] c"while 1\00"
@@ -934,7 +936,7 @@ function emitCompilerCheckpoint(): string {
 ')
   out = stringBuilderAppend(out, '@.pat.badResultArg = private unnamed_addr constant [16 x i8] c"describe(ok(7))\00"
 ')
-  out = stringBuilderAppend(out, '@.pat.compiler = private unnamed_addr constant [12 x i8] c"compileTiny\00"
+  out = stringBuilderAppend(out, '@.pat.badCompilerSelf = private unnamed_addr constant [12 x i8] c"compileTiny\00"
 ')
   out = stringBuilderAppend(out, '@.pat.tiny = private unnamed_addr constant [9 x i8] c"return 7\00"
 ')
@@ -975,8 +977,6 @@ function emitCompilerCheckpoint(): string {
   out = stringBuilderAppend(out, '@.ir.call = private unnamed_addr constant [548 x i8] c"; Lumen self-host LLVM IR\0A@.fmt.str = private unnamed_addr constant [4 x i8] c\22%s\5C0A\5C00\22\0A@.fmt.int = private unnamed_addr constant [4 x i8] c\22%d\5C0A\5C00\22\0Adefine i32 @combine(i32 %left, i32 %right) {\0Aentry:\0A  %fn.ret = add i32 %left, %right\0A  ret i32 %fn.ret\0A}\0Adeclare i32 @printf(ptr, ...)\0Adefine i32 @main() {\0Aentry:\0A  %left.addr = alloca i32\0A  store i32 5, ptr %left.addr\0A  %call.1 = call i32 @combine(i32 5, i32 4)\0A  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.int, i64 0, i64 0), i32 %call.1)\0A  ret i32 %call.1\0A}\0A\00"
 ')
   out = stringBuilderAppend(out, '@.ir.while = private unnamed_addr constant [1018 x i8] c"; Lumen self-host LLVM IR\0A@.fmt.str = private unnamed_addr constant [4 x i8] c\22%s\5C0A\5C00\22\0A@.fmt.int = private unnamed_addr constant [4 x i8] c\22%d\5C0A\5C00\22\0Adeclare i32 @printf(ptr, ...)\0Adefine i32 @main() {\0Aentry:\0A  %i.addr = alloca i32\0A  store i32 0, ptr %i.addr\0A  %total.addr = alloca i32\0A  store i32 0, ptr %total.addr\0A  br label %while.cond.2\0Awhile.cond.2:\0A  %i.cond.2 = load i32, ptr %i.addr\0A  %while.keep.2 = icmp slt i32 %i.cond.2, 4\0A  br i1 %while.keep.2, label %while.body.2, label %while.end.2\0Awhile.body.2:\0A  %total.body.2 = load i32, ptr %total.addr\0A  %i.body.2 = load i32, ptr %i.addr\0A  %total.next.2 = add i32 %total.body.2, %i.body.2\0A  store i32 %total.next.2, ptr %total.addr\0A  %i.update.2 = load i32, ptr %i.addr\0A  %i.next.2 = add i32 %i.update.2, 1\0A  store i32 %i.next.2, ptr %i.addr\0A  br label %while.cond.2\0Awhile.end.2:\0A  %total.done = load i32, ptr %total.addr\0A  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.int, i64 0, i64 0), i32 %total.done)\0A  ret i32 %total.done\0A}\0A\00"
-')
-  out = stringBuilderAppend(out, '@.ir.compiler = private unnamed_addr constant [68 x i8] c"; Lumen checkpoint stage\0Adefine i32 @main() {\0Aentry:\0A  ret i32 0\0A}\0A\00"
 ')
   out = stringBuilderAppend(out, 'declare ptr @lumen_arg(i32)
 ')
@@ -1088,7 +1088,7 @@ function emitCompilerCheckpoint(): string {
 ')
   out = stringBuilderAppend(out, '  %bad.result.arg = icmp ne ptr %bad.result.arg.ptr, null
 ')
-  out = stringBuilderAppend(out, '  br i1 %bad.result.arg, label %result.mismatch, label %pick.compiler
+  out = stringBuilderAppend(out, '  br i1 %bad.result.arg, label %result.mismatch, label %check.compiler.self
 ')
   out = stringBuilderAppend(out, 'result.mismatch:
 ')
@@ -1096,13 +1096,19 @@ function emitCompilerCheckpoint(): string {
 ')
   out = stringBuilderAppend(out, '  ret i32 1
 ')
-  out = stringBuilderAppend(out, 'pick.compiler:
+  out = stringBuilderAppend(out, 'check.compiler.self:
 ')
-  out = stringBuilderAppend(out, '  %compiler.ptr = call ptr @strstr(ptr %source, ptr getelementptr inbounds ([12 x i8], ptr @.pat.compiler, i64 0, i64 0))
+  out = stringBuilderAppend(out, '  %bad.compiler.self.ptr = call ptr @strstr(ptr %source, ptr getelementptr inbounds ([12 x i8], ptr @.pat.badCompilerSelf, i64 0, i64 0))
 ')
-  out = stringBuilderAppend(out, '  %is.compiler = icmp ne ptr %compiler.ptr, null
+  out = stringBuilderAppend(out, '  %bad.compiler.self = icmp ne ptr %bad.compiler.self.ptr, null
 ')
-  out = stringBuilderAppend(out, '  br i1 %is.compiler, label %emit.compiler, label %pick.tiny
+  out = stringBuilderAppend(out, '  br i1 %bad.compiler.self, label %compiler.self.unsupported, label %pick.tiny
+')
+  out = stringBuilderAppend(out, 'compiler.self.unsupported:
+')
+  out = stringBuilderAppend(out, '  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([65 x i8], ptr @.compilerSelf, i64 0, i64 0))
+')
+  out = stringBuilderAppend(out, '  ret i32 1
 ')
   out = stringBuilderAppend(out, 'pick.tiny:
 ')
@@ -1239,12 +1245,6 @@ function emitCompilerCheckpoint(): string {
   out = stringBuilderAppend(out, '  %write.while = call i32 @lumen_write_file(ptr %output, ptr getelementptr inbounds ([1018 x i8], ptr @.ir.while, i64 0, i64 0))
 ')
   out = stringBuilderAppend(out, '  ret i32 %write.while
-')
-  out = stringBuilderAppend(out, 'emit.compiler:
-')
-  out = stringBuilderAppend(out, '  %write.compiler = call i32 @lumen_write_file(ptr %output, ptr getelementptr inbounds ([68 x i8], ptr @.ir.compiler, i64 0, i64 0))
-')
-  out = stringBuilderAppend(out, '  ret i32 %write.compiler
 ')
   out = stringBuilderAppend(out, '}
 ')

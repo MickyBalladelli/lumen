@@ -71,8 +71,7 @@ const outputs = [
   ['simple', stageOneIr('build/self-host-simple-self.ll', executableIr(['simple', 4, 'done'], 4))],
   ['ifBinary', stageOneIr('build/self-host-if-binary-self.ll', executableIr(['seven', 7], 7))],
   ['call', stageOneIr('build/self-host-call-self.ll', executableIr([9], 9))],
-  ['while', stageOneIr('build/while-do-self.ll', executableIr([6], 6))],
-  ['compiler', '; Lumen checkpoint stage\ndefine i32 @main() {\nentry:\n  ret i32 0\n}\n']
+  ['while', stageOneIr('build/while-do-self.ll', executableIr([6], 6))]
 ]
 
 const sourcePatterns = new Map([
@@ -82,7 +81,7 @@ const sourcePatterns = new Map([
   ['badType', 'let value: string = 7'],
   ['badNoneArg', 'echoText(none())'],
   ['badResultArg', 'describe(ok(7))'],
-  ['compiler', 'compileTiny'],
+  ['badCompilerSelf', 'compileTiny'],
   ['tiny', 'return 7'],
   ['basic', 'let message = "hello"'],
   ['control', 'add(total, 10)'],
@@ -102,7 +101,8 @@ const diagValues = new Map([
   ['breakOutsideLoop', 'compile error: break outside loop at line 2 near break'],
   ['typeMismatch', 'compile error: cannot assign i32 to string at line 2 near let'],
   ['noneMismatch', 'compile error: cannot pass none to string at line 6 near echoText'],
-  ['resultMismatch', 'compile error: cannot pass Result<i32> to Result<string> at line 6 near describe']
+  ['resultMismatch', 'compile error: cannot pass Result<i32> to Result<string> at line 6 near describe'],
+  ['compilerSelf', 'compile error: self-host compiler self-compile not supported yet']
 ])
 
 const lines = [
@@ -166,14 +166,20 @@ const lines = [
   'check.result.arg:',
   `  %bad.result.arg.ptr = call ptr @strstr(ptr %source, ${gep('@.pat.badResultArg', sourcePatterns.get('badResultArg'))})`,
   '  %bad.result.arg = icmp ne ptr %bad.result.arg.ptr, null',
-  '  br i1 %bad.result.arg, label %result.mismatch, label %pick.compiler',
+  '  br i1 %bad.result.arg, label %result.mismatch, label %check.compiler.self',
   'result.mismatch:',
   `  call i32 (ptr, ...) @printf(${gep('@.fmt.str', fmtStr)}, ${gep('@.resultMismatch', diagValues.get('resultMismatch'))})`,
+  '  ret i32 1',
+  'check.compiler.self:',
+  `  %bad.compiler.self.ptr = call ptr @strstr(ptr %source, ${gep('@.pat.badCompilerSelf', sourcePatterns.get('badCompilerSelf'))})`,
+  '  %bad.compiler.self = icmp ne ptr %bad.compiler.self.ptr, null',
+  '  br i1 %bad.compiler.self, label %compiler.self.unsupported, label %pick.tiny',
+  'compiler.self.unsupported:',
+  `  call i32 (ptr, ...) @printf(${gep('@.fmt.str', fmtStr)}, ${gep('@.compilerSelf', diagValues.get('compilerSelf'))})`,
   '  ret i32 1'
 ]
 
 const checks = [
-  ['compiler', 'compiler', 'tiny'],
   ['tiny', 'tiny', 'basic'],
   ['basic', 'basic', 'control'],
   ['control', 'control', 'println'],

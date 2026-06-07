@@ -561,7 +561,7 @@ The first pure-Lumen compiler pieces live in `compiler/`:
 
 - `compiler/tokenizer.lm`: tokenizes a small Lumen subset
 - `compiler/parser.lm`: extracts a small program model with helper functions, statement slots, calls, and expression metadata for lets, consts, prints, returns, `if`, binary `+`, and selected loops
-- `compiler/emitter.lm`: emits LLVM for simple helper functions, calls, `main`, `let`/`const`, local `i32` storage, `println`, return, binary `+`, simple `if`, statement-mode loop examples, the current control-flow example, and the compiler checkpoint IR
+- `compiler/emitter.lm`: emits LLVM for simple helper functions, calls, `main`, `let`/`const`, local `i32` storage, `println`, return, binary `+`, simple `if`, statement-mode loop examples, and the current control-flow example
 - `compiler/main.lm`: CLI-shaped tiny compiler
 
 The bootstrap flow is tested by one command:
@@ -572,7 +572,7 @@ npm run test
 
 That command builds the stage-1 compiler, compiles examples, links binaries,
 runs expected-output checks, verifies bootstrap examples, builds the stage-2
-compiler checkpoint, and runs negative compile tests.
+example outputs, and runs negative compile tests.
 
 Manual use stays small:
 
@@ -585,15 +585,16 @@ clang -Wno-override-module -DLUMEN_NO_SELF_HOST_FALLBACK build/basic-self.ll src
 
 That prints `hello` and `3`, then exits with code `3`.
 
-The second-stage compiler output is also linked and tested by `npm run test`.
+The second-stage example outputs are also linked and tested by `npm run test`.
 Invalid bootstrap input is rejected with a nonzero exit code.
 Stage-1 compiler, stage-2 compiler, and example executables now link with
 `-DLUMEN_NO_SELF_HOST_FALLBACK`, which removes the C source-to-LLVM fallback
-symbols from the runtime. The stage-2 compiler is produced while the stage-1
-LLVM seed file is hidden, proving the self-compile step no longer reads
-`build/lumen-compiler.ll`. The checkpoint also compiles a renamed copy of the
-basic example, proving the current bootstrap dispatch is based on source shape
-rather than the input path.
+symbols from the runtime. The stage-1 self-compile step is produced while the
+stage-1 LLVM seed file is hidden, proving it no longer reads
+`build/lumen-compiler.ll`. The stage-2 compiler now rejects compiler
+self-compilation instead of emitting the old no-op checkpoint compiler. It still
+compiles a renamed copy of the basic example, proving the current bootstrap
+dispatch is based on source shape rather than the input path.
 
 ### HTTP
 

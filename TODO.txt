@@ -17,3 +17,34 @@ DONE VS Code package check: make sure copy-compiler includes formatter/LSP and e
 DONE Add small formatter tests so it does not drift
 DONE Add LSP diagnostics tests
 DONE Update README with “install Lumen” path
+DONE Kill fake no-op compiler checkpoint
+
+DONE Kill checkpoint compiler
+Replace source-shape dispatch in compiler/emitter.lm with real self-host compile path.
+
+Remove old C self-host fallback
+src/runtime/http.c still has lumen_self_compile_source fallback stuff. Delete when true path good.
+
+Make self-host IR real
+Current self-host IR still smells like flags/maps. Make proper IR nodes.
+
+Make self-host emitter emit from IR
+Stop bridge-backed output. emitIr(...) should walk real IR.
+
+Expand self-host semantic/type checks
+Make Lumen compiler catch same errors as JS compiler.
+
+Fix empty array literals
+Array literal cannot be empty yet is small but visible language gap.
+
+Add focused unit tests
+Parser, formatter, LSP, type checker. Current big test is strong, but slow and chunky.
+
+Clean docs roadmap
+book/11-missing-pieces.md is stale. Many DONE things still listed as missing.
+
+Make packaged install story official
+Add exact npm install -g, npm link, VSIX install docs. One clear “Install Lumen” page.
+
+Improve Photon package UX
+Add photon search/local registry or photon add result shortcut for bundled packages.

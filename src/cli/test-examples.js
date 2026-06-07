@@ -662,7 +662,14 @@ if (bootstrapCompile.code !== 0) {
       join(outputDir, 'tiny-self2.ll')
     ])
 
-    if (selfBasicCompile.code !== 0 || selfRenamedBasicCompile.code !== 0 || selfControlCompile.code !== 0 || selfForLoopCompile.code !== 0 || selfNativeMainCompile.code !== 0 || selfPrintlnCompile.code !== 0 || selfStructCompile.code !== 0 || selfSimpleCompile.code !== 0 || selfIfBinaryCompile.code !== 0 || selfCallCompile.code !== 0 || selfCompilerCompile.code !== 0 || selfTinyCompile.code !== 0) {
+    if (selfCompilerCompile.code === 0 || selfCompilerCompile.stdout !== 'compile error: self-host compiler self-compile not supported yet\n') {
+      failures += 1
+      console.error('failed second-stage compiler self-compile rejection')
+    } else {
+      console.log('ok second-stage compiler self-compile rejected')
+    }
+
+    if (selfBasicCompile.code !== 0 || selfRenamedBasicCompile.code !== 0 || selfControlCompile.code !== 0 || selfForLoopCompile.code !== 0 || selfNativeMainCompile.code !== 0 || selfPrintlnCompile.code !== 0 || selfStructCompile.code !== 0 || selfSimpleCompile.code !== 0 || selfIfBinaryCompile.code !== 0 || selfCallCompile.code !== 0 || selfTinyCompile.code !== 0) {
       failures += 1
       console.error('failed second-stage compiler output')
     } else {
@@ -706,7 +713,6 @@ if (bootstrapCompile.code !== 0) {
       await compiler.buildExecutable(join(outputDir, 'self-host-simple-self2.ll'), join(outputDir, 'self-host-simple-self2'))
       await compiler.buildExecutable(join(outputDir, 'self-host-if-binary-self2.ll'), join(outputDir, 'self-host-if-binary-self2'))
       await compiler.buildExecutable(join(outputDir, 'self-host-call-self2.ll'), join(outputDir, 'self-host-call-self2'))
-      await compiler.buildExecutable(join(outputDir, 'lumen-compiler-self2.ll'), join(outputDir, 'lumen-compiler-self2'))
       await compiler.buildExecutable(join(outputDir, 'tiny-self2.ll'), join(outputDir, 'tiny-self2'))
 
       const tiny2 = await runExecutable(join(outputDir, 'tiny-self2'))
