@@ -33,7 +33,7 @@ DONE Expand self-host semantic/type checks
 
 DONE Fix empty array literals
 
-Add focused unit tests
+DONE Add focused unit tests
 Parser, formatter, LSP, type checker. Current big test is strong, but slow and chunky.
 
 Clean docs roadmap

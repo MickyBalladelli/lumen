@@ -81,6 +81,7 @@ export class TypeSystem {
     if (this.isNullable(to) && this.canAssign(from, this.nonNullable(to))) return true
     if (from === LumenTypes.Unknown && this.isNullable(to)) return true
     if (this.isArray(from) || this.isArray(to)) {
+      if (this.isArray(from) && this.elementType(from) === LumenTypes.Unknown && this.isArray(to)) return true
       return this.isArray(from) &&
         this.isArray(to) &&
         this.canAssign(this.elementType(from), this.elementType(to))

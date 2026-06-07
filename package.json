@@ -30,6 +30,7 @@
     "http": "node ./src/cli/http.js",
     "chat": "node ./src/cli/chat.js",
     "speedtest": "node ./src/cli/speedtest.js",
-    "test": "node ./src/cli/test-examples.js"
+    "test": "node --test ./tests/unit/*.test.js && node ./src/cli/test-examples.js",
+    "test:unit": "node --test ./tests/unit/*.test.js"
   }
 }
