@@ -27,8 +27,7 @@ DONE Remove old C self-host fallback
 
 DONE Make self-host IR real
 
-Make self-host emitter emit from IR
-Stop bridge-backed output. emitIr(...) should walk real IR.
+DONE Make self-host emitter emit from IR
 
 Expand self-host semantic/type checks
 Make Lumen compiler catch same errors as JS compiler.

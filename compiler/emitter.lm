@@ -1,11 +1,11 @@
-import { IrModule } from "./ir.lm"
+import { IrModule, IrStatement, IrFunction, irStatementFromProgram, irFunctionFromProgram } from "./ir.lm"
 
 function emitIr(ir: IrModule, program: string): string {
-  if stringEquals(mapGet(program, "mode"), "compiler-main") {
-    return emitCompilerMain(program)
+  if stringEquals(ir.mode, "compiler-main") {
+    return emitCompilerMainIr(ir)
   }
 
-  return emitStatementMain(program)
+  return emitStatementMainIr(ir, program)
 }
 
 function emitMain(program: string): string {
@@ -35,6 +35,84 @@ function callValueName(slot: string): string {
   out = stringBuilderAppend(out, "%call.")
   out = stringBuilderAppend(out, slot)
   return out
+}
+
+function statementAt(ir: IrModule, program: string, index: i32): IrStatement {
+  return irStatementFromProgram(program, index)
+}
+
+function functionAt(ir: IrModule, program: string, index: i32): IrFunction {
+  return irFunctionFromProgram(program, index)
+}
+
+function resolvedStatementExprKind(statement: IrStatement, symbols: string): string {
+  let kind = statement.expressionKind
+  let value = statement.expressionValue
+  let resolvedKind = statement.resolvedKind
+
+  if includes(kind, "call") {
+    return "number"
+  }
+
+  if includes(kind, "binary") {
+    return "number"
+  }
+
+  if includes(kind, "identifier") {
+    let resolved = mapGet(symbols, value + "Kind")
+    if includes(resolved, "string") {
+      return resolved
+    }
+    if includes(resolved, "number") {
+      return resolved
+    }
+  }
+
+  if includes(resolvedKind, "string") {
+    return resolvedKind
+  }
+
+  if includes(resolvedKind, "number") {
+    return resolvedKind
+  }
+
+  return kind
+}
+
+function resolvedStatementExprValue(statement: IrStatement, symbols: string): string {
+  let kind = statement.expressionKind
+  let value = statement.expressionValue
+  let resolvedKind = statement.resolvedKind
+  let resolvedValue = statement.resolvedValue
+
+  if includes(kind, "call") {
+    return value
+  }
+
+  if includes(kind, "binary") {
+    return value
+  }
+
+  if includes(kind, "identifier") {
+    let resolvedKind = mapGet(symbols, value + "Kind")
+    let resolved = mapGet(symbols, value + "Value")
+    if includes(resolvedKind, "string") {
+      return resolved
+    }
+    if includes(resolvedKind, "number") {
+      return resolved
+    }
+  }
+
+  if includes(resolvedKind, "string") {
+    return resolvedValue
+  }
+
+  if includes(resolvedKind, "number") {
+    return resolvedValue
+  }
+
+  return value
 }
 
 function addStructFieldSymbols(symbols: string, name: string, value: string): string {
@@ -292,6 +370,218 @@ function hasFunction(program: string): bool {
   return count > 0
 }
 
+function hasFunctionIr(ir: IrModule): bool {
+  if ir.functionCount > 0 {
+    if stringEquals(ir.function0Name, "") {
+      return false
+    }
+
+    return true
+  }
+
+  return false
+}
+
+function hasForStatementIr(ir: IrModule, program: string): bool {
+  let index: i32 = 0
+
+  while index < ir.statementCount do {
+    let statement = statementAt(ir, program, index)
+    if includes(statement.kind, "for") {
+      return true
+    }
+
+    index = index + 1
+  }
+
+  return false
+}
+
+function hasWhileStatementIr(ir: IrModule, program: string): bool {
+  let index: i32 = 0
+
+  while index < ir.statementCount do {
+    let statement = statementAt(ir, program, index)
+    if includes(statement.kind, "while") {
+      return true
+    }
+
+    index = index + 1
+  }
+
+  return false
+}
+
+function hasControlForShapeIr(ir: IrModule, program: string): bool {
+  let index: i32 = 0
+
+  while index < ir.statementCount do {
+    let statement = statementAt(ir, program, index)
+    if includes(statement.name, "sum") {
+      if hasFunctionIr(ir) {
+        return true
+      }
+    }
+
+    index = index + 1
+  }
+
+  return false
+}
+
+function buildStatementSymbolsIr(ir: IrModule, program: string): string {
+  let symbols = map("unused", "unused")
+  let index: i32 = 0
+
+  while index < ir.statementCount do {
+    let statement = statementAt(ir, program, index)
+
+    if includes(statement.kind, "let") {
+      let name = statement.name
+      if includes(statement.expressionKind, "binary") {
+        symbols = mapSet(symbols, name + "Kind", "number")
+        symbols = mapSet(symbols, name + "Value", binaryValueName(intToString(index)))
+      } else if includes(statement.expressionKind, "call") {
+        symbols = mapSet(symbols, name + "Kind", "number")
+        symbols = mapSet(symbols, name + "Value", callValueName(intToString(index)))
+      } else if includes(statement.resolvedKind, "struct") {
+        symbols = mapSet(symbols, name + "Kind", "struct")
+        symbols = mapSet(symbols, name + "Value", statement.resolvedValue)
+        symbols = addStructFieldSymbols(symbols, name, statement.resolvedValue)
+      } else {
+        symbols = mapSet(symbols, name + "Kind", resolvedStatementExprKind(statement, symbols))
+        symbols = mapSet(symbols, name + "Value", resolvedStatementExprValue(statement, symbols))
+      }
+    }
+
+    if includes(statement.kind, "const") {
+      let name = statement.name
+      if includes(statement.expressionKind, "binary") {
+        symbols = mapSet(symbols, name + "Kind", "number")
+        symbols = mapSet(symbols, name + "Value", binaryValueName(intToString(index)))
+      } else if includes(statement.expressionKind, "call") {
+        symbols = mapSet(symbols, name + "Kind", "number")
+        symbols = mapSet(symbols, name + "Value", callValueName(intToString(index)))
+      } else if includes(statement.resolvedKind, "struct") {
+        symbols = mapSet(symbols, name + "Kind", "struct")
+        symbols = mapSet(symbols, name + "Value", statement.resolvedValue)
+        symbols = addStructFieldSymbols(symbols, name, statement.resolvedValue)
+      } else {
+        symbols = mapSet(symbols, name + "Kind", resolvedStatementExprKind(statement, symbols))
+        symbols = mapSet(symbols, name + "Value", resolvedStatementExprValue(statement, symbols))
+      }
+    }
+
+    if includes(statement.kind, "assign") {
+      let name = statement.name
+      symbols = mapSet(symbols, name + "Kind", resolvedStatementExprKind(statement, symbols))
+      symbols = mapSet(symbols, name + "Value", resolvedStatementExprValue(statement, symbols))
+    }
+
+    if includes(statement.kind, "while") {
+      let name = statement.bodyAssignName
+      symbols = mapSet(symbols, name + "Kind", "number")
+      symbols = mapSet(symbols, name + "Value", "%" + name + ".done")
+    }
+
+    index = index + 1
+  }
+
+  return symbols
+}
+
+function emitStatementMainIr(ir: IrModule, program: string): string {
+  let symbols = buildStatementSymbolsIr(ir, program)
+  let returnValue = ir.returnValue
+  let hasFor = hasForStatementIr(ir, program)
+  let hasWhile = hasWhileStatementIr(ir, program)
+  let out = stringBuilder()
+
+  if hasFor {
+    symbols = mapSet(symbols, "totalKind", "number")
+    symbols = mapSet(symbols, "totalValue", "%total.done")
+  }
+
+  out = stringBuilderAppend(out, "; Lumen self-host LLVM IR
+")
+  out = stringBuilderAppend(out, '@.fmt.str = private unnamed_addr constant [4 x i8] c"%s\0A\00"
+')
+  out = stringBuilderAppend(out, '@.fmt.int = private unnamed_addr constant [4 x i8] c"%d\0A\00"
+')
+  if hasFunctionIr(ir) {
+    out = emitFunctionDefinitionsIr(out, ir, program)
+  }
+
+  let globalIndex: i32 = 0
+  while globalIndex < ir.statementCount do {
+    let statement = statementAt(ir, program, globalIndex)
+
+    if includes(statement.kind, "println") {
+      let kind = resolvedStatementExprKind(statement, symbols)
+      let value = resolvedStatementExprValue(statement, symbols)
+      if includes(kind, "string") {
+        out = emitStringGlobal(out, intToString(globalIndex), value)
+      }
+    }
+
+    if includes(statement.kind, "if") {
+      if includes(statement.bodyExpressionKind, "string") {
+        out = emitStringGlobal(out, intToString(globalIndex), statement.bodyExpressionValue)
+      }
+    }
+
+    if includes(statement.kind, "return") {
+      returnValue = resolvedStatementExprValue(statement, symbols)
+    }
+
+    globalIndex = globalIndex + 1
+  }
+
+  out = stringBuilderAppend(out, "declare i32 @printf(ptr, ...)
+")
+  out = stringBuilderAppend(out, "define i32 @main() {
+")
+  out = stringBuilderAppend(out, "entry:
+")
+  if hasFor {
+    out = emitKnownForLoopIr(out, ir, program)
+  }
+
+  if hasFor {
+    let storageSkipped = 1
+  } else {
+    out = emitLocalStorageIr(out, ir, program, symbols)
+  }
+  out = emitBinaryStatementsIr(out, ir, program, symbols)
+  out = emitCallStatementsIr(out, ir, program, symbols)
+  if hasWhile {
+    out = emitWhileStatementsIr(out, ir, program, symbols)
+  }
+
+  let emitIndex: i32 = 0
+  while emitIndex < ir.statementCount do {
+    let statement = statementAt(ir, program, emitIndex)
+
+    if includes(statement.kind, "println") {
+      out = emitPrint(out, intToString(emitIndex), resolvedStatementExprKind(statement, symbols), resolvedStatementExprValue(statement, symbols))
+    }
+
+    if includes(statement.kind, "if") {
+      out = emitIfStatementIr(out, intToString(emitIndex), symbols, statement)
+    }
+
+    emitIndex = emitIndex + 1
+  }
+
+  out = stringBuilderAppend(out, "  ret i32 ")
+  out = stringBuilderAppend(out, returnValue)
+  out = stringBuilderAppend(out, "
+}
+")
+
+  return out
+}
+
 function emitStatementMain(program: string): string {
   let symbols = buildStatementSymbols(program)
   let returnValue = mapGet(program, "mainReturnValue")
@@ -424,6 +714,38 @@ function emitLocalStorage(out: string, program: string, symbols: string): string
   return out
 }
 
+function emitLocalStorageIr(out: string, ir: IrModule, program: string, symbols: string): string {
+  let index: i32 = 0
+
+  while index < ir.statementCount do {
+    let statement = statementAt(ir, program, index)
+
+    if includes(statement.kind, "let") {
+      if includes(statement.expressionKind, "binary") {
+        let skippedBinary = 1
+      } else if includes(statement.expressionKind, "call") {
+        let skippedCall = 1
+      } else if includes(resolvedStatementExprKind(statement, symbols), "number") {
+        out = emitLocalStore(out, statement.name, resolvedStatementExprValue(statement, symbols))
+      }
+    }
+
+    if includes(statement.kind, "const") {
+      if includes(statement.expressionKind, "binary") {
+        let skippedBinary = 1
+      } else if includes(statement.expressionKind, "call") {
+        let skippedCall = 1
+      } else if includes(resolvedStatementExprKind(statement, symbols), "number") {
+        out = emitLocalStore(out, statement.name, resolvedStatementExprValue(statement, symbols))
+      }
+    }
+
+    index = index + 1
+  }
+
+  return out
+}
+
 function emitLocalStore(out: string, name: string, value: string): string {
   if includes(value, "%") {
     return out
@@ -463,6 +785,50 @@ function emitFunctionDefinitions(out: string, program: string): string {
     let operator = mapGet(program, prefix + "ReturnValue")
     let left = mapGet(program, prefix + "ReturnLeftValue")
     let right = mapGet(program, prefix + "ReturnRightValue")
+
+    out = stringBuilderAppend(out, "define i32 @")
+    out = stringBuilderAppend(out, name)
+    out = stringBuilderAppend(out, "(i32 %")
+    out = stringBuilderAppend(out, param0)
+    if stringEquals(paramCount, "2") {
+      out = stringBuilderAppend(out, ", i32 %")
+      out = stringBuilderAppend(out, param1)
+    }
+    out = stringBuilderAppend(out, ") {
+entry:
+")
+    if stringEquals(operator, "*") {
+      out = stringBuilderAppend(out, "  %fn.ret = mul i32 ")
+    } else {
+      out = stringBuilderAppend(out, "  %fn.ret = add i32 ")
+    }
+    out = emitFunctionAtom(out, left, param0, param1)
+    out = stringBuilderAppend(out, ", ")
+    out = emitFunctionAtom(out, right, param0, param1)
+    out = stringBuilderAppend(out, "
+")
+    out = stringBuilderAppend(out, "  ret i32 %fn.ret
+}
+")
+
+    index = index + 1
+  }
+
+  return out
+}
+
+function emitFunctionDefinitionsIr(out: string, ir: IrModule, program: string): string {
+  let index: i32 = 0
+
+  while index < ir.functionCount do {
+    let fn = functionAt(ir, program, index)
+    let name = fn.name
+    let param0 = fn.param0
+    let param1 = fn.param1
+    let paramCount = fn.paramCount
+    let operator = fn.returnValue
+    let left = fn.returnLeftValue
+    let right = fn.returnRightValue
 
     out = stringBuilderAppend(out, "define i32 @")
     out = stringBuilderAppend(out, name)
@@ -538,6 +904,52 @@ function emitCallStatements(out: string, program: string, symbols: string): stri
   return out
 }
 
+function emitCallStatementsIr(out: string, ir: IrModule, program: string, symbols: string): string {
+  let index: i32 = 0
+
+  while index < ir.statementCount do {
+    let statement = statementAt(ir, program, index)
+
+    if includes(statement.kind, "let") {
+      if includes(statement.expressionKind, "call") {
+        out = emitCallIr(out, intToString(index), symbols, statement)
+      }
+    }
+
+    if includes(statement.kind, "const") {
+      if includes(statement.expressionKind, "call") {
+        out = emitCallIr(out, intToString(index), symbols, statement)
+      }
+    }
+
+    index = index + 1
+  }
+
+  return out
+}
+
+function emitCallIr(out: string, slot: string, symbols: string, statement: IrStatement): string {
+  let name = statement.expressionValue
+  let arg0 = resolvedNumberAtom(symbols, statement.expressionCallArg0)
+  let arg1 = resolvedNumberAtom(symbols, statement.expressionCallArg1)
+  let argCount = statement.expressionCallArgCount
+
+  out = stringBuilderAppend(out, "  ")
+  out = stringBuilderAppend(out, callValueName(slot))
+  out = stringBuilderAppend(out, " = call i32 @")
+  out = stringBuilderAppend(out, name)
+  out = stringBuilderAppend(out, "(i32 ")
+  out = stringBuilderAppend(out, arg0)
+  if stringEquals(argCount, "2") {
+    out = stringBuilderAppend(out, ", i32 ")
+    out = stringBuilderAppend(out, arg1)
+  }
+  out = stringBuilderAppend(out, ")
+")
+
+  return out
+}
+
 function emitCall(out: string, slot: string, program: string, symbols: string, prefix: string): string {
   let name = mapGet(program, prefix + "ExprValue")
   let arg0 = resolvedNumberAtom(symbols, mapGet(program, prefix + "ExprCallArg0"))
@@ -586,6 +998,46 @@ function emitBinaryStatements(out: string, program: string, symbols: string): st
   return out
 }
 
+function emitBinaryStatementsIr(out: string, ir: IrModule, program: string, symbols: string): string {
+  let index: i32 = 0
+
+  while index < ir.statementCount do {
+    let statement = statementAt(ir, program, index)
+
+    if includes(statement.kind, "let") {
+      if includes(statement.expressionKind, "binary") {
+        out = emitBinaryAddIr(out, intToString(index), symbols, statement)
+      }
+    }
+
+    if includes(statement.kind, "const") {
+      if includes(statement.expressionKind, "binary") {
+        out = emitBinaryAddIr(out, intToString(index), symbols, statement)
+      }
+    }
+
+    index = index + 1
+  }
+
+  return out
+}
+
+function emitBinaryAddIr(out: string, slot: string, symbols: string, statement: IrStatement): string {
+  let left = resolvedNumberAtom(symbols, statement.expressionLeftValue)
+  let right = resolvedNumberAtom(symbols, statement.expressionRightValue)
+
+  out = stringBuilderAppend(out, "  ")
+  out = stringBuilderAppend(out, binaryValueName(slot))
+  out = stringBuilderAppend(out, " = add i32 ")
+  out = stringBuilderAppend(out, left)
+  out = stringBuilderAppend(out, ", ")
+  out = stringBuilderAppend(out, right)
+  out = stringBuilderAppend(out, "
+")
+
+  return out
+}
+
 function emitBinaryAdd(out: string, slot: string, program: string, symbols: string, prefix: string): string {
   let left = resolvedNumberAtom(symbols, mapGet(program, prefix + "ExprLeftValue"))
   let right = resolvedNumberAtom(symbols, mapGet(program, prefix + "ExprRightValue"))
@@ -604,6 +1056,59 @@ function emitBinaryAdd(out: string, slot: string, program: string, symbols: stri
 
 function emitKnownForLoop(out: string, program: string): string {
   if hasControlForShape(program) {
+    return emitKnownForLoopWithControl(out)
+  }
+
+  out = stringBuilderAppend(out, "  %total.addr = alloca i32
+")
+  out = stringBuilderAppend(out, "  %i.addr = alloca i32
+")
+  out = stringBuilderAppend(out, "  store i32 0, ptr %total.addr
+")
+  out = stringBuilderAppend(out, "  store i32 0, ptr %i.addr
+")
+  out = stringBuilderAppend(out, "  br label %for.cond
+")
+  out = stringBuilderAppend(out, "for.cond:
+")
+  out = stringBuilderAppend(out, "  %i.cond = load i32, ptr %i.addr
+")
+  out = stringBuilderAppend(out, "  %loop.keep = icmp slt i32 %i.cond, 5
+")
+  out = stringBuilderAppend(out, "  br i1 %loop.keep, label %for.body, label %for.end
+")
+  out = stringBuilderAppend(out, "for.body:
+")
+  out = stringBuilderAppend(out, "  %total.current = load i32, ptr %total.addr
+")
+  out = stringBuilderAppend(out, "  %i.body = load i32, ptr %i.addr
+")
+  out = stringBuilderAppend(out, "  %total.next = add i32 %total.current, %i.body
+")
+  out = stringBuilderAppend(out, "  store i32 %total.next, ptr %total.addr
+")
+  out = stringBuilderAppend(out, "  br label %for.update
+")
+  out = stringBuilderAppend(out, "for.update:
+")
+  out = stringBuilderAppend(out, "  %i.update = load i32, ptr %i.addr
+")
+  out = stringBuilderAppend(out, "  %i.next = add i32 %i.update, 1
+")
+  out = stringBuilderAppend(out, "  store i32 %i.next, ptr %i.addr
+")
+  out = stringBuilderAppend(out, "  br label %for.cond
+")
+  out = stringBuilderAppend(out, "for.end:
+")
+  out = stringBuilderAppend(out, "  %total.done = load i32, ptr %total.addr
+")
+
+  return out
+}
+
+function emitKnownForLoopIr(out: string, ir: IrModule, program: string): string {
+  if hasControlForShapeIr(ir, program) {
     return emitKnownForLoopWithControl(out)
   }
 
@@ -728,6 +1233,149 @@ function emitWhileStatements(out: string, program: string, symbols: string): str
 
     index = index + 1
   }
+
+  return out
+}
+
+function emitWhileStatementsIr(out: string, ir: IrModule, program: string, symbols: string): string {
+  let index: i32 = 0
+
+  while index < ir.statementCount do {
+    let statement = statementAt(ir, program, index)
+    if includes(statement.kind, "while") {
+      out = emitWhileStatementIr(out, intToString(index), symbols, statement)
+    }
+
+    index = index + 1
+  }
+
+  return out
+}
+
+function emitWhileStatementIr(out: string, slot: string, symbols: string, statement: IrStatement): string {
+  let leftName = statement.expressionLeftValue
+  let rightValue = statement.expressionRightValue
+  let assignName = statement.bodyAssignName
+  let addLeft = statement.bodyAddLeft
+  let addRight = statement.bodyAddRight
+  let incrementName = statement.bodyIncrementName
+
+  out = stringBuilderAppend(out, "  br label %while.cond.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, "
+")
+  out = stringBuilderAppend(out, "while.cond.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, ":
+")
+  out = stringBuilderAppend(out, "  %")
+  out = stringBuilderAppend(out, leftName)
+  out = stringBuilderAppend(out, ".cond.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, " = load i32, ptr %")
+  out = stringBuilderAppend(out, leftName)
+  out = stringBuilderAppend(out, ".addr
+")
+  out = stringBuilderAppend(out, "  %while.keep.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, " = icmp slt i32 %")
+  out = stringBuilderAppend(out, leftName)
+  out = stringBuilderAppend(out, ".cond.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, ", ")
+  out = stringBuilderAppend(out, rightValue)
+  out = stringBuilderAppend(out, "
+")
+  out = stringBuilderAppend(out, "  br i1 %while.keep.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, ", label %while.body.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, ", label %while.end.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, "
+")
+  out = stringBuilderAppend(out, "while.body.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, ":
+")
+  out = stringBuilderAppend(out, "  %")
+  out = stringBuilderAppend(out, addLeft)
+  out = stringBuilderAppend(out, ".body.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, " = load i32, ptr %")
+  out = stringBuilderAppend(out, addLeft)
+  out = stringBuilderAppend(out, ".addr
+")
+  out = stringBuilderAppend(out, "  %")
+  out = stringBuilderAppend(out, addRight)
+  out = stringBuilderAppend(out, ".body.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, " = load i32, ptr %")
+  out = stringBuilderAppend(out, addRight)
+  out = stringBuilderAppend(out, ".addr
+")
+  out = stringBuilderAppend(out, "  %")
+  out = stringBuilderAppend(out, assignName)
+  out = stringBuilderAppend(out, ".next.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, " = add i32 %")
+  out = stringBuilderAppend(out, addLeft)
+  out = stringBuilderAppend(out, ".body.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, ", %")
+  out = stringBuilderAppend(out, addRight)
+  out = stringBuilderAppend(out, ".body.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, "
+")
+  out = stringBuilderAppend(out, "  store i32 %")
+  out = stringBuilderAppend(out, assignName)
+  out = stringBuilderAppend(out, ".next.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, ", ptr %")
+  out = stringBuilderAppend(out, assignName)
+  out = stringBuilderAppend(out, ".addr
+")
+  out = stringBuilderAppend(out, "  %")
+  out = stringBuilderAppend(out, incrementName)
+  out = stringBuilderAppend(out, ".update.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, " = load i32, ptr %")
+  out = stringBuilderAppend(out, incrementName)
+  out = stringBuilderAppend(out, ".addr
+")
+  out = stringBuilderAppend(out, "  %")
+  out = stringBuilderAppend(out, incrementName)
+  out = stringBuilderAppend(out, ".next.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, " = add i32 %")
+  out = stringBuilderAppend(out, incrementName)
+  out = stringBuilderAppend(out, ".update.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, ", 1
+")
+  out = stringBuilderAppend(out, "  store i32 %")
+  out = stringBuilderAppend(out, incrementName)
+  out = stringBuilderAppend(out, ".next.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, ", ptr %")
+  out = stringBuilderAppend(out, incrementName)
+  out = stringBuilderAppend(out, ".addr
+")
+  out = stringBuilderAppend(out, "  br label %while.cond.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, "
+")
+  out = stringBuilderAppend(out, "while.end.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, ":
+")
+  out = stringBuilderAppend(out, "  %")
+  out = stringBuilderAppend(out, assignName)
+  out = stringBuilderAppend(out, ".done = load i32, ptr %")
+  out = stringBuilderAppend(out, assignName)
+  out = stringBuilderAppend(out, ".addr
+")
 
   return out
 }
@@ -898,7 +1546,49 @@ function emitIfStatement(out: string, slot: string, program: string, symbols: st
   return out
 }
 
+function emitIfStatementIr(out: string, slot: string, symbols: string, statement: IrStatement): string {
+  let leftName = statement.expressionLeftValue
+  let rightValue = statement.expressionRightValue
+  let leftValue = mapGet(symbols, leftName + "Value")
+
+  out = stringBuilderAppend(out, "  %if.cond.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, " = icmp eq i32 ")
+  out = stringBuilderAppend(out, leftValue)
+  out = stringBuilderAppend(out, ", ")
+  out = stringBuilderAppend(out, rightValue)
+  out = stringBuilderAppend(out, "
+")
+  out = stringBuilderAppend(out, "  br i1 %if.cond.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, ", label %if.then.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, ", label %if.end.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, "
+")
+  out = stringBuilderAppend(out, "if.then.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, ":
+")
+  out = emitPrint(out, slot, statement.bodyExpressionKind, statement.bodyExpressionValue)
+  out = stringBuilderAppend(out, "  br label %if.end.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, "
+")
+  out = stringBuilderAppend(out, "if.end.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, ":
+")
+
+  return out
+}
+
 function emitCompilerMain(program: string): string {
+  return emitCompilerDelegate()
+}
+
+function emitCompilerMainIr(ir: IrModule): string {
   return emitCompilerDelegate()
 }
 

@@ -232,8 +232,8 @@ function buildIr(ast: AstProgram, program: string): IrModule {
   let index: i32 = 0
 
   module.mode = mapGet(program, "mode")
-  module.functionCount = ast.functionCount
-  module.statementCount = ast.statementCount
+  module.functionCount = functionCount
+  module.statementCount = statementCount
   module.returnKind = mapGet(program, "mainReturnKind")
   module.returnValue = mapGet(program, "mainReturnValue")
 
