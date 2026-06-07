@@ -579,7 +579,7 @@ Manual use stays small:
 ```bash
 npm run bootstrap
 npm run compile -- examples/basic.lm build/basic-self.ll
-clang -Wno-override-module -DLUMEN_NO_SELF_HOST_FALLBACK build/basic-self.ll src/runtime/http.c -pthread -o build/basic-self
+clang -Wno-override-module build/basic-self.ll src/runtime/http.c -pthread -o build/basic-self
 ./build/basic-self
 ```
 
@@ -587,15 +587,13 @@ That prints `hello` and `3`, then exits with code `3`.
 
 The second-stage delegate compiler is also linked and tested by `npm run test`.
 Invalid bootstrap input is rejected with a nonzero exit code.
-Stage-1 compiler, stage-2 compiler, and example executables now link with
-`-DLUMEN_NO_SELF_HOST_FALLBACK`, which removes the C source-to-LLVM fallback
-symbols from the runtime. The stage-1 self-compile step is produced while the
-stage-1 LLVM seed file is hidden, proving it no longer reads
-`build/lumen-compiler.ll`. The stage-2 compiler no longer contains the
-source-shape example dispatcher; it delegates compile requests to the stage-1
-self-host compiler executable and rejects compiler self-compilation explicitly.
-It still compiles a renamed copy of the basic example, proving the stage-2 path
-is not based on the input path.
+The C source-to-LLVM fallback has been removed from the runtime. The stage-1
+self-compile step is produced while the stage-1 LLVM seed file is hidden,
+proving it no longer reads `build/lumen-compiler.ll`. The stage-2 compiler no
+longer contains the source-shape example dispatcher; it delegates compile
+requests to the stage-1 self-host compiler executable and rejects compiler
+self-compilation explicitly. It still compiles a renamed copy of the basic
+example, proving the stage-2 path is not based on the input path.
 
 ### HTTP
 
@@ -752,7 +750,7 @@ npm run compile -- examples/native-main.lm build/native-main.ll
 Link and run manually:
 
 ```bash
-clang -Wno-override-module -DLUMEN_NO_SELF_HOST_FALLBACK build/native-main.ll src/runtime/http.c -pthread -o build/native-main
+clang -Wno-override-module build/native-main.ll src/runtime/http.c -pthread -o build/native-main
 ./build/native-main
 ```
 

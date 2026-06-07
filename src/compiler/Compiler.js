@@ -77,10 +77,9 @@ export class Compiler {
     return result
   }
 
-  async buildExecutable(llvmPath, outputPath, { clang = 'clang', selfHostFallback = false, optimize = false } = {}) {
+  async buildExecutable(llvmPath, outputPath, { clang = 'clang', optimize = false } = {}) {
     const flags = ['-Wno-override-module', '-g']
     if (optimize) flags.push('-O2')
-    if (!selfHostFallback) flags.push('-DLUMEN_NO_SELF_HOST_FALLBACK')
 
     const objectPath = `${outputPath}.o`
     await this.run(clang, [...flags, '-c', llvmPath, '-o', objectPath])

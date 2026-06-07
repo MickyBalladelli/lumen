@@ -23,8 +23,7 @@ DONE Replace source-shape dispatch with stage-1 self-host delegate
 DONE Kill checkpoint compiler
 DONE Replace source-shape dispatch in compiler/emitter.lm with stage-1 self-host delegate path.
 
-Remove old C self-host fallback
-src/runtime/http.c still has lumen_self_compile_source fallback stuff. Delete when true path good.
+DONE Remove old C self-host fallback
 
 Make self-host IR real
 Current self-host IR still smells like flags/maps. Make proper IR nodes.
