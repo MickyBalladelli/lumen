@@ -1,20 +1,24 @@
 # Missing Pieces
 
-This chapter is the living roadmap.
+This chapter is the living roadmap. It should describe what is actually left, not old work already done.
+
+## Recently Finished
+
+- Real self-host parser, AST, semantic analyzer, type checker, IR builder, and LLVM emitter
+- Stage-1 self-host delegate path with the old C fallback removed
+- Stage-2 bootstrap equality against stage-1 output
+- Module/import loading in the self-host path
+- Structs, arrays, enums, match, switch, try/catch, async, loops, and source diagnostics in the self-host path
+- Empty array literals for annotated array types
+- Formatter, language server, VS Code packaging checks, and focused unit tests
+- Smoother package CLI install path for `lmsh`, `photon`, `lumen-format`, and `lumen-lsp`
 
 ## Compiler
 
-- DONE Replace checkpoint source-shape example dispatch with stage-1 self-host delegate
-- DONE Remove fake no-op compiler checkpoint
-- Replace delegate compiler with self-contained real emit path
-- Move emitter internals off the legacy AST-to-map bridge
-- Grow `emitIr(...)` beyond the current bridge-backed LLVM emission
-- Grow self-host IR builder beyond module facts and statement flags
-- Grow self-host semantic analyzer beyond symbol and control-flow checks
-- Grow self-host type checker beyond simple annotations and first-argument calls
-- Lower self-host struct literals to real storage instead of resolved field values
-- Grow self-host module loading beyond local/package source concatenation
-- Add source snippets/carets to self-host diagnostics
+- Keep expanding focused parser, formatter, LSP, and type checker tests as bugs are found
+- Tighten self-host type checks for generics, collections, and function calls
+- Improve self-host diagnostics with richer snippets and recovery
+- Reduce remaining JS-only compiler assumptions until the self-host compiler can own the full path comfortably
 
 ## Language
 
@@ -26,11 +30,9 @@ This chapter is the living roadmap.
 
 ## Tooling
 
-- Install command
-- Project init command
-- Formatter
-- Language server
-- Better VS Code docs
+- Make packaged install docs official with exact `npm install -g`, `npm link`, and VSIX install flows
+- Add clearer project init docs and examples
+- Improve Photon package UX with search, local registry, or `photon add` shortcuts for bundled packages
 
 ## Runtime
 

@@ -34,9 +34,8 @@ DONE Expand self-host semantic/type checks
 DONE Fix empty array literals
 
 DONE Add focused unit tests
-Parser, formatter, LSP, type checker. Current big test is strong, but slow and chunky.
 
-Clean docs roadmap
+DONE Clean docs roadmap
 book/11-missing-pieces.md is stale. Many DONE things still listed as missing.
 
 Make packaged install story official
