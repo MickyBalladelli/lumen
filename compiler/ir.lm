@@ -1,30 +1,125 @@
 import { AstProgram } from "./ast.lm"
 
+struct IrStatement {
+  kind: string
+  name: string
+  expressionKind: string
+  expressionValue: string
+  expressionLeftValue: string
+  expressionRightValue: string
+  expressionCallArg0: string
+  expressionCallArg1: string
+  expressionCallArgCount: string
+  resolvedKind: string
+  resolvedValue: string
+  bodyKind: string
+  bodyExpressionKind: string
+  bodyExpressionValue: string
+  bodyAssignName: string
+  bodyAddLeft: string
+  bodyAddRight: string
+  bodyIncrementName: string
+}
+
+struct IrFunction {
+  name: string
+  param0: string
+  param1: string
+  paramCount: string
+  returnKind: string
+  returnValue: string
+  returnLeftValue: string
+  returnRightValue: string
+}
+
 struct IrModule {
   kind: string
+  mode: string
   functionCount: i32
+  statementCount: i32
   instructionCount: i32
   printCount: i32
   returnKind: string
   returnValue: string
-  hasCall: i32
-  hasBinary: i32
-  hasFor: i32
-  hasWhile: i32
+  function0Name: string
+  statement0Kind: string
+  statement0ExpressionKind: string
+  statement0ExpressionValue: string
+  statement1Kind: string
+  statement1ExpressionKind: string
+  statement1ExpressionValue: string
+  statement2Kind: string
+  statement2ExpressionKind: string
+  statement2ExpressionValue: string
+  statement3Kind: string
+  statement3ExpressionKind: string
+  statement3ExpressionValue: string
+}
+
+function irStatement(kind: string): IrStatement {
+  let statement = IrStatement {
+    kind: "",
+    name: "",
+    expressionKind: "",
+    expressionValue: "",
+    expressionLeftValue: "",
+    expressionRightValue: "",
+    expressionCallArg0: "",
+    expressionCallArg1: "",
+    expressionCallArgCount: "0",
+    resolvedKind: "",
+    resolvedValue: "",
+    bodyKind: "",
+    bodyExpressionKind: "",
+    bodyExpressionValue: "",
+    bodyAssignName: "",
+    bodyAddLeft: "",
+    bodyAddRight: "",
+    bodyIncrementName: ""
+  }
+
+  statement.kind = kind
+  return statement
+}
+
+function irFunction(): IrFunction {
+  let fn = IrFunction {
+    name: "",
+    param0: "",
+    param1: "",
+    paramCount: "0",
+    returnKind: "",
+    returnValue: "",
+    returnLeftValue: "",
+    returnRightValue: ""
+  }
+
+  return fn
 }
 
 function irModule(): IrModule {
   let module = IrModule {
     kind: "IRModule",
+    mode: "",
     functionCount: 0,
+    statementCount: 0,
     instructionCount: 0,
     printCount: 0,
     returnKind: "number",
     returnValue: "0",
-    hasCall: 0,
-    hasBinary: 0,
-    hasFor: 0,
-    hasWhile: 0
+    function0Name: "",
+    statement0Kind: "",
+    statement0ExpressionKind: "",
+    statement0ExpressionValue: "",
+    statement1Kind: "",
+    statement1ExpressionKind: "",
+    statement1ExpressionValue: "",
+    statement2Kind: "",
+    statement2ExpressionKind: "",
+    statement2ExpressionValue: "",
+    statement3Kind: "",
+    statement3ExpressionKind: "",
+    statement3ExpressionValue: ""
   }
 
   return module
@@ -35,47 +130,123 @@ function irStatementPrefix(index: i32): string {
   return "statement" + indexText
 }
 
+function irFunctionPrefix(index: i32): string {
+  let indexText = intToString(index)
+  return "function" + indexText
+}
+
+function irFunctionFromProgram(program: string, index: i32): IrFunction {
+  let prefix = irFunctionPrefix(index)
+  let fn = irFunction()
+  fn.name = mapGet(program, prefix + "Name")
+  fn.param0 = mapGet(program, prefix + "Param0")
+  fn.param1 = mapGet(program, prefix + "Param1")
+  fn.paramCount = mapGet(program, prefix + "ParamCount")
+  fn.returnKind = mapGet(program, prefix + "ReturnKind")
+  fn.returnValue = mapGet(program, prefix + "ReturnValue")
+  fn.returnLeftValue = mapGet(program, prefix + "ReturnLeftValue")
+  fn.returnRightValue = mapGet(program, prefix + "ReturnRightValue")
+  return fn
+}
+
+function irStatementFromProgram(program: string, index: i32): IrStatement {
+  let prefix = irStatementPrefix(index)
+  let statement = irStatement(mapGet(program, prefix + "Kind"))
+  statement.name = mapGet(program, prefix + "Name")
+  statement.expressionKind = mapGet(program, prefix + "ExprKind")
+  statement.expressionValue = mapGet(program, prefix + "ExprValue")
+  statement.expressionLeftValue = mapGet(program, prefix + "ExprLeftValue")
+  statement.expressionRightValue = mapGet(program, prefix + "ExprRightValue")
+  statement.expressionCallArg0 = mapGet(program, prefix + "ExprCallArg0")
+  statement.expressionCallArg1 = mapGet(program, prefix + "ExprCallArg1")
+  statement.expressionCallArgCount = mapGet(program, prefix + "ExprCallArgCount")
+  statement.resolvedKind = mapGet(program, prefix + "ResolvedKind")
+  statement.resolvedValue = mapGet(program, prefix + "ResolvedValue")
+  statement.bodyKind = mapGet(program, prefix + "BodyKind")
+  statement.bodyExpressionKind = mapGet(program, prefix + "BodyExprKind")
+  statement.bodyExpressionValue = mapGet(program, prefix + "BodyExprValue")
+  statement.bodyAssignName = mapGet(program, prefix + "BodyAssignName")
+  statement.bodyAddLeft = mapGet(program, prefix + "BodyAddLeft")
+  statement.bodyAddRight = mapGet(program, prefix + "BodyAddRight")
+  statement.bodyIncrementName = mapGet(program, prefix + "BodyIncrementName")
+  return statement
+}
+
+function irStoreFunction(module: IrModule, index: i32, fn: IrFunction): IrModule {
+  if index == 0 {
+    module.function0Name = fn.name
+  }
+
+  return module
+}
+
+function irStoreStatement(module: IrModule, index: i32, statement: IrStatement): IrModule {
+  if index == 0 {
+    module.statement0Kind = statement.kind
+    module.statement0ExpressionKind = statement.expressionKind
+    module.statement0ExpressionValue = statement.expressionValue
+  } else if index == 1 {
+    module.statement1Kind = statement.kind
+    module.statement1ExpressionKind = statement.expressionKind
+    module.statement1ExpressionValue = statement.expressionValue
+  } else if index == 2 {
+    module.statement2Kind = statement.kind
+    module.statement2ExpressionKind = statement.expressionKind
+    module.statement2ExpressionValue = statement.expressionValue
+  } else if index == 3 {
+    module.statement3Kind = statement.kind
+    module.statement3ExpressionKind = statement.expressionKind
+    module.statement3ExpressionValue = statement.expressionValue
+  }
+
+  return module
+}
+
+function irCountInstruction(module: IrModule, statement: IrStatement): IrModule {
+  if includes(statement.kind, "println") {
+    module.printCount = module.printCount + 1
+    module.instructionCount = module.instructionCount + 1
+  } else if includes(statement.kind, "return") {
+    module.instructionCount = module.instructionCount + 1
+  } else if includes(statement.kind, "let") {
+    module.instructionCount = module.instructionCount + 1
+  } else if includes(statement.kind, "const") {
+    module.instructionCount = module.instructionCount + 1
+  } else if includes(statement.kind, "assign") {
+    module.instructionCount = module.instructionCount + 1
+  } else if includes(statement.kind, "if") {
+    module.instructionCount = module.instructionCount + 1
+  } else if includes(statement.kind, "for") {
+    module.instructionCount = module.instructionCount + 1
+  } else if includes(statement.kind, "while") {
+    module.instructionCount = module.instructionCount + 1
+  }
+
+  return module
+}
+
 function buildIr(ast: AstProgram, program: string): IrModule {
   let module = irModule()
-  let count = stringToInt(mapGet(program, "statementCount"))
+  let statementCount = stringToInt(mapGet(program, "statementCount"))
+  let functionCount = stringToInt(mapGet(program, "functionCount"))
   let index: i32 = 0
 
+  module.mode = mapGet(program, "mode")
   module.functionCount = ast.functionCount
+  module.statementCount = ast.statementCount
   module.returnKind = mapGet(program, "mainReturnKind")
   module.returnValue = mapGet(program, "mainReturnValue")
 
-  while index < count do {
-    let prefix = irStatementPrefix(index)
-    let kind = mapGet(program, prefix + "Kind")
-    let exprKind = mapGet(program, prefix + "ExprKind")
+  while index < functionCount do {
+    module = irStoreFunction(module, index, irFunctionFromProgram(program, index))
+    index = index + 1
+  }
 
-    if includes(kind, "println") {
-      module.printCount = module.printCount + 1
-      module.instructionCount = module.instructionCount + 1
-    } else if includes(kind, "return") {
-      module.instructionCount = module.instructionCount + 1
-    } else if includes(kind, "let") {
-      module.instructionCount = module.instructionCount + 1
-    } else if includes(kind, "const") {
-      module.instructionCount = module.instructionCount + 1
-    } else if includes(kind, "if") {
-      module.instructionCount = module.instructionCount + 1
-    } else if includes(kind, "for") {
-      module.hasFor = 1
-      module.instructionCount = module.instructionCount + 1
-    } else if includes(kind, "while") {
-      module.hasWhile = 1
-      module.instructionCount = module.instructionCount + 1
-    }
-
-    if includes(exprKind, "call") {
-      module.hasCall = 1
-    }
-
-    if includes(exprKind, "binary") {
-      module.hasBinary = 1
-    }
-
+  index = 0
+  while index < statementCount do {
+    let statement = irStatementFromProgram(program, index)
+    module = irStoreStatement(module, index, statement)
+    module = irCountInstruction(module, statement)
     index = index + 1
   }
 
@@ -88,30 +259,11 @@ function irToProgram(ir: IrModule, program: string): string {
   program = mapSet(program, "irPrintCount", intToString(ir.printCount))
   program = mapSet(program, "irReturnKind", ir.returnKind)
   program = mapSet(program, "irReturnValue", ir.returnValue)
-
-  if ir.hasCall == 1 {
-    program = mapSet(program, "irHasCall", "1")
-  } else {
-    program = mapSet(program, "irHasCall", "0")
-  }
-
-  if ir.hasBinary == 1 {
-    program = mapSet(program, "irHasBinary", "1")
-  } else {
-    program = mapSet(program, "irHasBinary", "0")
-  }
-
-  if ir.hasFor == 1 {
-    program = mapSet(program, "irHasFor", "1")
-  } else {
-    program = mapSet(program, "irHasFor", "0")
-  }
-
-  if ir.hasWhile == 1 {
-    program = mapSet(program, "irHasWhile", "1")
-  } else {
-    program = mapSet(program, "irHasWhile", "0")
-  }
+  program = mapSet(program, "irStatementCount", intToString(ir.statementCount))
+  program = mapSet(program, "irFunctionCount", intToString(ir.functionCount))
+  program = mapSet(program, "irStatement0Kind", ir.statement0Kind)
+  program = mapSet(program, "irStatement0ExprKind", ir.statement0ExpressionKind)
+  program = mapSet(program, "irFunction0Name", ir.function0Name)
 
   return program
 }

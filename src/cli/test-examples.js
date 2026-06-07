@@ -154,7 +154,7 @@ const expectations = new Map([
     code: 0
   }],
   ['self-host-parser', {
-    stdout: '7\n3\nlet\nnumber\nprintln\nidentifier\nreturn\nidentifier\n1\nIRModule\n3\n1\n7\nIRModule\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n5\n1\n2\n0\ncompile error: break outside loop\n0\ncompile error: cannot assign i32 to string\n',
+    stdout: '7\n3\nlet\nnumber\nprintln\nidentifier\nreturn\nidentifier\n1\nIRModule\n3\n1\n7\nlet\nnumber\nIRModule\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n5\n1\n2\n0\ncompile error: break outside loop\n0\ncompile error: cannot assign i32 to string\n',
     code: 0
   }],
   ['self-host-if-binary', {

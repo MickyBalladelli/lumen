@@ -25,8 +25,7 @@ DONE Replace source-shape dispatch in compiler/emitter.lm with stage-1 self-host
 
 DONE Remove old C self-host fallback
 
-Make self-host IR real
-Current self-host IR still smells like flags/maps. Make proper IR nodes.
+DONE Make self-host IR real
 
 Make self-host emitter emit from IR
 Stop bridge-backed output. emitIr(...) should walk real IR.
