@@ -884,6 +884,19 @@ photon add math ../lumen-math
 photon add http git@github.com:you/lumen-http.git#v1.0.0
 ```
 
+Search bundled packages:
+
+```bash
+photon search
+photon search result
+```
+
+Add a bundled package by name:
+
+```bash
+photon add result
+```
+
 Install packages:
 
 ```bash

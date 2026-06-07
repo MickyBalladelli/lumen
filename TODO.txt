@@ -40,5 +40,5 @@ DONE Clean docs roadmap
 DONE Make packaged install story official
 Add exact npm install -g, npm link, VSIX install docs. One clear “Install Lumen” page.
 
-Improve Photon package UX
+DONE Improve Photon package UX
 Add photon search/local registry or photon add result shortcut for bundled packages.

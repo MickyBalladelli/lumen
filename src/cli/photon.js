@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-import { access, cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { access, cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
 import { spawn } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 
 const command = process.argv[2]
 const args = process.argv.slice(3)
@@ -9,6 +10,8 @@ const args = process.argv.slice(3)
 const manifestPath = 'photon.json'
 const lockPath = 'photon.lock'
 const packageRoot = join('.photon', 'packages')
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
+const bundledPackageRoot = join(repoRoot, 'packages')
 
 if (!command || command === '-h' || command === '--help') {
   usage()
@@ -40,11 +43,12 @@ if (command === 'init') {
   console.log('created photon.json')
 } else if (command === 'add') {
   const [name, source] = args
-  if (!name || !source) fail('usage: photon add name source')
+  if (!name) fail('usage: photon add name [source]')
+  const resolvedSource = source ?? await bundledPackageSource(name)
 
   const manifest = await readManifest()
   manifest.dependencies ??= {}
-  manifest.dependencies[name] = source
+  manifest.dependencies[name] = resolvedSource
   await writeJson(manifestPath, manifest)
   await install()
 } else if (command === 'remove') {
@@ -58,6 +62,8 @@ if (command === 'init') {
   await install()
 } else if (command === 'install') {
   await install()
+} else if (command === 'search') {
+  await search(args.join(' '))
 } else if (command === 'list') {
   const manifest = await readManifest()
   for (const [name, source] of Object.entries(manifest.dependencies ?? {})) {
@@ -93,6 +99,58 @@ async function install() {
   }
 
   await writeJson(lockPath, lock)
+}
+
+async function search(query = '') {
+  const packages = await bundledPackages()
+  const needle = query.trim().toLowerCase()
+  const matches = packages.filter(pkg => {
+    if (!needle) return true
+    return pkg.name.toLowerCase().includes(needle) ||
+      pkg.exports.some(name => name.toLowerCase().includes(needle))
+  })
+
+  for (const pkg of matches) {
+    const exportsText = pkg.exports.length > 0
+      ? ` exports: ${pkg.exports.join(', ')}`
+      : ''
+    console.log(`${pkg.name} ${pkg.version}${exportsText}`)
+  }
+}
+
+async function bundledPackageSource(name) {
+  const target = join(bundledPackageRoot, name)
+  const packageManifestPath = join(target, 'photon.json')
+
+  if (!await exists(packageManifestPath)) {
+    fail(`unknown bundled package "${name}"; run photon search`)
+  }
+
+  return `file:${target}`
+}
+
+async function bundledPackages() {
+  if (!await exists(bundledPackageRoot)) return []
+
+  const entries = await readdir(bundledPackageRoot, { withFileTypes: true })
+  const packages = []
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+
+    const packagePath = join(bundledPackageRoot, entry.name)
+    const packageManifestPath = join(packagePath, 'photon.json')
+    if (!await exists(packageManifestPath)) continue
+
+    const manifest = JSON.parse(await readFile(packageManifestPath, 'utf8'))
+    packages.push({
+      name: manifest.name ?? entry.name,
+      version: manifest.version ?? '0.0.0',
+      exports: manifest.exports ?? []
+    })
+  }
+
+  return packages.sort((left, right) => left.name.localeCompare(right.name))
 }
 
 async function validatePackage(name, target) {
@@ -210,9 +268,10 @@ function usage() {
     '',
     'commands:',
     '  init [name]',
-    '  add name source',
+    '  add name [source]',
     '  remove name',
     '  install',
-    '  list'
+    '  list',
+    '  search [query]'
   ].join('\n'))
 }
