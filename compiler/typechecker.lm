@@ -233,6 +233,12 @@ function canAssignType(expected: string, actual: string): bool {
     return true
   }
 
+  if stringEquals(actual, "unknown[]") {
+    if includes(expected, "[]") {
+      return true
+    }
+  }
+
   if stringEquals(expected, "unknown") {
     return true
   }

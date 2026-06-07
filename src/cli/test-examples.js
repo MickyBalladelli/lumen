@@ -77,6 +77,10 @@ const expectations = new Map([
     stdout: 'from-env\nfrom-dotenv\n\n1\n1\n',
     code: 0
   }],
+  ['empty-array', {
+    stdout: '0\n0\n',
+    code: 0
+  }],
   ['extern', {
     stdout: 'hello extern\n',
     code: 0

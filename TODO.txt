@@ -31,8 +31,7 @@ DONE Make self-host emitter emit from IR
 
 DONE Expand self-host semantic/type checks
 
-Fix empty array literals
-Array literal cannot be empty yet is small but visible language gap.
+DONE Fix empty array literals
 
 Add focused unit tests
 Parser, formatter, LSP, type checker. Current big test is strong, but slow and chunky.

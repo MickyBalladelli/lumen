@@ -406,10 +406,6 @@ export class TypeChecker {
     const elementType = this.typeSystem.elementType(typeName)
     const elements = this.splitDelimited(expression.tokens.slice(1, -1))
 
-    if (elements.length === 0) {
-      throw new Diagnostic('Array literal cannot be empty yet', expression.location, 'type')
-    }
-
     const inspector = new ExpressionInspector(scope, this.typeSystem)
 
     for (const element of elements) {

@@ -1,0 +1,9 @@
+function main(): i32 {
+  let numbers: i32[] = []
+  let names: string[] = []
+
+  println(len(numbers))
+  println(len(names))
+
+  return 0
+}
