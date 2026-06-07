@@ -4,8 +4,9 @@ This chapter is the living roadmap.
 
 ## Compiler
 
-- Replace remaining checkpoint source-shape example dispatch with real emit path
+- DONE Replace checkpoint source-shape example dispatch with stage-1 self-host delegate
 - DONE Remove fake no-op compiler checkpoint
+- Replace delegate compiler with self-contained real emit path
 - Move emitter internals off the legacy AST-to-map bridge
 - Grow `emitIr(...)` beyond the current bridge-backed LLVM emission
 - Grow self-host IR builder beyond module facts and statement flags

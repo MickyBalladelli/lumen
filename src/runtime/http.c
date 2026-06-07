@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -589,7 +590,10 @@ char *lumen_self_compile_source(const char *source) {
 #endif
 
 int lumen_exec(const char *command) {
-  return system(command);
+  int status = system(command);
+  if (status == -1) return 1;
+  if (WIFEXITED(status)) return WEXITSTATUS(status);
+  return status == 0 ? 0 : 1;
 }
 
 char *lumen_string_concat(const char *left, const char *right) {

@@ -572,7 +572,7 @@ npm run test
 
 That command builds the stage-1 compiler, compiles examples, links binaries,
 runs expected-output checks, verifies bootstrap examples, builds the stage-2
-example outputs, and runs negative compile tests.
+delegate compiler, and runs negative compile tests.
 
 Manual use stays small:
 
@@ -585,16 +585,17 @@ clang -Wno-override-module -DLUMEN_NO_SELF_HOST_FALLBACK build/basic-self.ll src
 
 That prints `hello` and `3`, then exits with code `3`.
 
-The second-stage example outputs are also linked and tested by `npm run test`.
+The second-stage delegate compiler is also linked and tested by `npm run test`.
 Invalid bootstrap input is rejected with a nonzero exit code.
 Stage-1 compiler, stage-2 compiler, and example executables now link with
 `-DLUMEN_NO_SELF_HOST_FALLBACK`, which removes the C source-to-LLVM fallback
 symbols from the runtime. The stage-1 self-compile step is produced while the
 stage-1 LLVM seed file is hidden, proving it no longer reads
-`build/lumen-compiler.ll`. The stage-2 compiler now rejects compiler
-self-compilation instead of emitting the old no-op checkpoint compiler. It still
-compiles a renamed copy of the basic example, proving the current bootstrap
-dispatch is based on source shape rather than the input path.
+`build/lumen-compiler.ll`. The stage-2 compiler no longer contains the
+source-shape example dispatcher; it delegates compile requests to the stage-1
+self-host compiler executable and rejects compiler self-compilation explicitly.
+It still compiles a renamed copy of the basic example, proving the stage-2 path
+is not based on the input path.
 
 ### HTTP
 

@@ -18,9 +18,10 @@ DONE Add small formatter tests so it does not drift
 DONE Add LSP diagnostics tests
 DONE Update README with “install Lumen” path
 DONE Kill fake no-op compiler checkpoint
+DONE Replace source-shape dispatch with stage-1 self-host delegate
 
 DONE Kill checkpoint compiler
-Replace source-shape dispatch in compiler/emitter.lm with real self-host compile path.
+DONE Replace source-shape dispatch in compiler/emitter.lm with stage-1 self-host delegate path.
 
 Remove old C self-host fallback
 src/runtime/http.c still has lumen_self_compile_source fallback stuff. Delete when true path good.

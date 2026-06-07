@@ -596,7 +596,9 @@ if (bootstrapCompile.code !== 0) {
       join(outputDir, 'lumen-compiler-self.ll')
     ])
   } finally {
-    await rename(hiddenCompilerSeedPath, compilerSeedPath)
+    await rename(hiddenCompilerSeedPath, compilerSeedPath).catch(error => {
+      if (error.code !== 'ENOENT') throw error
+    })
   }
 
   if (compilerSelfCompile.code !== 0) {
