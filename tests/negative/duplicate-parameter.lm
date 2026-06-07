@@ -1,0 +1,7 @@
+function pair(value: i32, value: i32): i32 {
+  return value
+}
+
+function main(): i32 {
+  return pair(1, 2)
+}

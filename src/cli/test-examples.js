@@ -154,7 +154,7 @@ const expectations = new Map([
     code: 0
   }],
   ['self-host-parser', {
-    stdout: '7\n3\nlet\nnumber\nprintln\nidentifier\nreturn\nidentifier\n1\nIRModule\n3\n1\n7\nlet\nnumber\nIRModule\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n5\n1\n2\n0\ncompile error: break outside loop\n0\ncompile error: cannot assign i32 to string\n',
+    stdout: '7\n3\nlet\nnumber\nprintln\nidentifier\nreturn\nidentifier\n1\nIRModule\n3\n1\n7\nlet\nnumber\nIRModule\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n5\n1\n7\n0\ncompile error: break outside loop\n0\ncompile error: cannot assign i32 to string\n',
     code: 0
   }],
   ['self-host-if-binary', {
@@ -586,6 +586,27 @@ if (bootstrapCompile.code !== 0) {
     console.log('ok bootstrap function-call type diagnostics')
   }
 
+  const extraDiagnostics = [
+    [join('tests', 'negative', 'duplicate-parameter.lm'), 'duplicate-parameter', 'compile error: duplicate parameter value at line 1 near value\n'],
+    [join('tests', 'negative', 'return-type-mismatch.lm'), 'return-type-mismatch', 'compile error: return type i32 does not match string at line 2 near return\n'],
+    [join('tests', 'bootstrap', 'assignment-type-mismatch.lm'), 'assignment-type-mismatch', 'compile error: cannot assign i32 to string at line 3 near value\n'],
+    [join('tests', 'negative', 'throw-type-mismatch.lm'), 'throw-type-mismatch', 'compile error: throw expects string or error, got i32 at line 2 near throw\n'],
+    [join('tests', 'negative', 'for-of-non-array.lm'), 'for-of-non-array', 'compile error: for-of needs an array at line 3 near of\n'],
+    [join('tests', 'negative', 'switch-case-mismatch.lm'), 'switch-case-mismatch', 'compile error: cannot compare switch i32 with case string at line 4 near case\n']
+  ]
+
+  for (const [file, outputName, stdout] of extraDiagnostics) {
+    const result = await runExecutable(join(outputDir, 'lumen-compiler'), [
+      file,
+      join(outputDir, `${outputName}-self.ll`)
+    ])
+
+    if (result.code === 0 || result.stdout !== stdout) {
+      failures += 1
+      console.error(`failed bootstrap expanded diagnostic ${outputName}`)
+    }
+  }
+
   const compilerSeedPath = join(outputDir, 'lumen-compiler.ll')
   const hiddenCompilerSeedPath = join(outputDir, 'lumen-compiler.seed-hidden.ll')
   await rename(compilerSeedPath, hiddenCompilerSeedPath)
@@ -833,6 +854,27 @@ if (bootstrapCompile.code !== 0) {
       console.error('failed second-stage function-call type diagnostics')
     } else {
       console.log('ok second-stage function-call type diagnostics')
+    }
+
+    const selfExtraDiagnostics = [
+      [join('tests', 'negative', 'duplicate-parameter.lm'), 'duplicate-parameter', 'compile error: duplicate parameter value at line 1 near value\n'],
+      [join('tests', 'negative', 'return-type-mismatch.lm'), 'return-type-mismatch', 'compile error: return type i32 does not match string at line 2 near return\n'],
+      [join('tests', 'bootstrap', 'assignment-type-mismatch.lm'), 'assignment-type-mismatch', 'compile error: cannot assign i32 to string at line 3 near value\n'],
+      [join('tests', 'negative', 'throw-type-mismatch.lm'), 'throw-type-mismatch', 'compile error: throw expects string or error, got i32 at line 2 near throw\n'],
+      [join('tests', 'negative', 'for-of-non-array.lm'), 'for-of-non-array', 'compile error: for-of needs an array at line 3 near of\n'],
+      [join('tests', 'negative', 'switch-case-mismatch.lm'), 'switch-case-mismatch', 'compile error: cannot compare switch i32 with case string at line 4 near case\n']
+    ]
+
+    for (const [file, outputName, stdout] of selfExtraDiagnostics) {
+      const result = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
+        file,
+        join(outputDir, `${outputName}-self2.ll`)
+      ])
+
+      if (result.code === 0 || result.stdout !== stdout) {
+        failures += 1
+        console.error(`failed second-stage expanded diagnostic ${outputName}`)
+      }
     }
   }
 }

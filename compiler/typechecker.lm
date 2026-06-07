@@ -101,7 +101,48 @@ function readTypeName(tokens: string, index: i32, stop: string): string {
   return out
 }
 
-function inferType(tokens: string, index: i32, variables: string): string {
+function functionSignatureParamType(signature: string): string {
+  let index: i32 = 0
+  let length = stringLen(signature)
+
+  while index + 7 <= length do {
+    if stringEquals(signature[index..index + 6], "param:") {
+      let start = index + 6
+      let end = start
+
+      while end + 8 <= length do {
+        if stringEquals(signature[end..end + 8], ":return:") {
+          return signature[start..end]
+        }
+
+        end = end + 1
+      }
+
+      return signature[start..length]
+    }
+
+    index = index + 1
+  }
+
+  return ""
+}
+
+function functionSignatureReturnType(signature: string): string {
+  let index: i32 = 0
+  let length = stringLen(signature)
+
+  while index + 8 <= length do {
+    if stringEquals(signature[index..index + 8], ":return:") {
+      return signature[index + 8..length]
+    }
+
+    index = index + 1
+  }
+
+  return "i32"
+}
+
+function inferType(tokens: string, index: i32, variables: string, functions: string): string {
   let token = listGet(tokens, index)
   let kind = typeTokenKind(token)
   let value = typeTokenValue(token)
@@ -129,7 +170,7 @@ function inferType(tokens: string, index: i32, variables: string): string {
 
   if stringEquals(value, "match") {
     let bodyStart = typeFindNext(tokens, index, "{")
-    return inferType(tokens, bodyStart + 3, variables)
+    return inferType(tokens, bodyStart + 3, variables, functions)
   }
 
   if stringEquals(value, "await") {
@@ -149,13 +190,20 @@ function inferType(tokens: string, index: i32, variables: string): string {
   }
 
   if stringEquals(value, "ok") {
-    let argType = inferType(tokens, index + 2, variables)
+    let argType = inferType(tokens, index + 2, variables, functions)
     return "Result<" + argType + ">"
   }
 
   if stringEquals(value, "some") {
-    let argType = inferType(tokens, index + 2, variables)
+    let argType = inferType(tokens, index + 2, variables, functions)
     return argType + "?"
+  }
+
+  if stringEquals(typeTokenValue(listGet(tokens, index + 1)), "(") {
+    let signature = mapGet(functions, value)
+    if includes(signature, ":return:") {
+      return functionSignatureReturnType(signature)
+    }
   }
 
   let known = mapGet(variables, value)
@@ -185,6 +233,10 @@ function canAssignType(expected: string, actual: string): bool {
     return true
   }
 
+  if stringEquals(expected, "unknown") {
+    return true
+  }
+
   if stringEquals(actual, "none") {
     if includes(expected, "?") {
       return true
@@ -194,7 +246,43 @@ function canAssignType(expected: string, actual: string): bool {
   return false
 }
 
-function typeCheckVariable(tokens: string, index: i32, variables: string): TypeResult {
+function canCompareType(left: string, right: string): bool {
+  if canAssignType(left, right) {
+    return true
+  }
+
+  if canAssignType(right, left) {
+    return true
+  }
+
+  return false
+}
+
+function isStrictActualType(actual: string): bool {
+  if stringEquals(actual, "i32") {
+    return true
+  }
+
+  if stringEquals(actual, "string") {
+    return true
+  }
+
+  if stringEquals(actual, "bool") {
+    return true
+  }
+
+  if stringEquals(actual, "none") {
+    return true
+  }
+
+  if includes(actual, "Result<") {
+    return true
+  }
+
+  return false
+}
+
+function typeCheckVariable(tokens: string, index: i32, variables: string, functions: string): TypeResult {
   let name = typeTokenValue(listGet(tokens, index + 1))
   let next = typeTokenValue(listGet(tokens, index + 2))
   let checked: i32 = 0
@@ -202,13 +290,15 @@ function typeCheckVariable(tokens: string, index: i32, variables: string): TypeR
   if stringEquals(next, ":") {
     let expected = readTypeName(tokens, index + 3, "=")
     let equals = typeFindNext(tokens, index, "=")
-    let actual = inferType(tokens, equals + 1, variables)
+    let actual = inferType(tokens, equals + 1, variables, functions)
     checked = checked + 1
 
     if canAssignType(expected, actual) {
       let okResult = typeOk(checked)
-    } else {
+    } else if isStrictActualType(actual) {
       return typeError("compile error: cannot assign " + actual + " to " + expected, checked, index)
+    } else {
+      return typeOk(checked)
     }
 
     return typeOk(checked)
@@ -217,7 +307,7 @@ function typeCheckVariable(tokens: string, index: i32, variables: string): TypeR
   return typeOk(checked)
 }
 
-function registerVariableType(tokens: string, index: i32, variables: string): string {
+function registerVariableType(tokens: string, index: i32, variables: string, functions: string): string {
   let name = typeTokenValue(listGet(tokens, index + 1))
   let next = typeTokenValue(listGet(tokens, index + 2))
 
@@ -227,7 +317,7 @@ function registerVariableType(tokens: string, index: i32, variables: string): st
   }
 
   let equals = typeFindNext(tokens, index, "=")
-  let inferred = inferType(tokens, equals + 1, variables)
+  let inferred = inferType(tokens, equals + 1, variables, functions)
   return mapSet(variables, name, "type:" + inferred)
 }
 
@@ -235,16 +325,22 @@ function registerFunctionType(tokens: string, index: i32, functions: string): st
   let name = typeTokenValue(listGet(tokens, index + 1))
   let open = typeFindNext(tokens, index, "(")
   let close = typeFindNext(tokens, index, ")")
+  let returnType = "i32"
+  let afterClose = typeTokenValue(listGet(tokens, close + 1))
+
+  if stringEquals(afterClose, ":") {
+    returnType = readTypeName(tokens, close + 2, "{")
+  }
 
   if open + 1 < close {
     let colon = typeFindNext(tokens, open, ":")
     if colon < close {
       let paramType = readTypeName(tokens, colon + 1, ")")
-      return mapSet(functions, name, "param:" + paramType)
+      return mapSet(functions, name, "param:" + paramType + ":return:" + returnType)
     }
   }
 
-  return functions
+  return mapSet(functions, name, "param::return:" + returnType)
 }
 
 function checkFunctionCall(tokens: string, index: i32, variables: string, functions: string): TypeResult {
@@ -252,17 +348,145 @@ function checkFunctionCall(tokens: string, index: i32, variables: string, functi
   let signature = mapGet(functions, name)
 
   if includes(signature, "param:") {
-    let expected = signature[6..stringLen(signature)]
-    let actual = inferType(tokens, index + 2, variables)
+    let expected = functionSignatureParamType(signature)
+
+    if stringEquals(expected, "") {
+      return typeOk(0)
+    }
+
+    let actual = inferType(tokens, index + 2, variables, functions)
 
     if canAssignType(expected, actual) {
       return typeOk(1)
     }
 
-    return typeError("compile error: cannot pass " + actual + " to " + expected, 1, index)
+    if stringEquals(actual, "none") {
+      return typeError("compile error: cannot pass " + actual + " to " + expected, 1, index)
+    }
+
+    if includes(actual, "Result<") {
+      return typeError("compile error: cannot pass " + actual + " to " + expected, 1, index)
+    }
+
+    return typeOk(0)
   }
 
   return typeOk(0)
+}
+
+function checkAssignment(tokens: string, index: i32, variables: string, functions: string): TypeResult {
+  let name = typeTokenValue(listGet(tokens, index))
+  let known = mapGet(variables, name)
+
+  if includes(known, "type:") {
+    let expected = known[5..stringLen(known)]
+    let actual = inferType(tokens, index + 2, variables, functions)
+
+    if canAssignType(expected, actual) {
+      return typeOk(1)
+    }
+
+    if isStrictActualType(actual) {
+      return typeError("compile error: cannot assign " + actual + " to " + expected, 1, index)
+    }
+
+    return typeOk(0)
+  }
+
+  return typeOk(0)
+}
+
+function checkReturnType(tokens: string, index: i32, variables: string, functions: string, expected: string): TypeResult {
+  let actual = inferType(tokens, index + 1, variables, functions)
+
+  if stringEquals(expected, "i32") {
+    return typeOk(0)
+  }
+
+  if canAssignType(expected, actual) {
+    return typeOk(1)
+  }
+
+  if stringEquals(actual, "i32") {
+    let primitiveActual = 1
+  } else if stringEquals(actual, "string") {
+    let primitiveStringActual = 1
+  } else if stringEquals(actual, "bool") {
+    let primitiveBoolActual = 1
+  } else if stringEquals(actual, "none") {
+    let primitiveNoneActual = 1
+  } else {
+    return typeOk(1)
+  }
+
+  return typeError("compile error: return type " + actual + " does not match " + expected, 1, index)
+}
+
+function checkThrowType(tokens: string, index: i32, variables: string, functions: string): TypeResult {
+  let argKind = typeTokenKind(listGet(tokens, index + 1))
+  let actual = inferType(tokens, index + 1, variables, functions)
+
+  if stringEquals(actual, "string") {
+    return typeOk(1)
+  }
+
+  if stringEquals(actual, "error") {
+    return typeOk(1)
+  }
+
+  if stringEquals(actual, "unknown") {
+    return typeOk(1)
+  }
+
+  if stringEquals(argKind, "number") {
+    let literalNumber = 1
+  } else {
+    return typeOk(1)
+  }
+
+  return typeError("compile error: throw expects string or error, got " + actual, 1, index)
+}
+
+function checkForOfType(tokens: string, index: i32, variables: string, functions: string): TypeResult {
+  let actual = inferType(tokens, index + 1, variables, functions)
+
+  if includes(actual, "[]") {
+    return typeOk(1)
+  }
+
+  if stringEquals(actual, "unknown") {
+    return typeOk(0)
+  }
+
+  if isStrictActualType(actual) {
+    return typeError("compile error: for-of needs an array", 1, index)
+  }
+
+  return typeOk(0)
+}
+
+function checkSwitchCases(tokens: string, index: i32, variables: string, functions: string): TypeResult {
+  let subjectType = inferType(tokens, index + 1, variables, functions)
+  let end = typeFindNext(tokens, index, "}")
+  let cursor = index + 1
+
+  while cursor < end do {
+    let current = typeTokenValue(listGet(tokens, cursor))
+
+    if stringEquals(current, "case") {
+      let caseType = inferType(tokens, cursor + 1, variables, functions)
+
+      if canCompareType(subjectType, caseType) {
+        let okCase = 1
+      } else {
+        return typeError("compile error: cannot compare switch " + subjectType + " with case " + caseType, 1, cursor)
+      }
+    }
+
+    cursor = cursor + 1
+  }
+
+  return typeOk(1)
 }
 
 function checkTypes(ast: AstProgram, tokens: string): TypeResult {
@@ -271,6 +495,7 @@ function checkTypes(ast: AstProgram, tokens: string): TypeResult {
   let count = listLen(tokens)
   let index: i32 = 0
   let checked: i32 = 0
+  let currentReturnType = "void"
 
   while index < count do {
     let current = typeTokenValue(listGet(tokens, index))
@@ -287,23 +512,83 @@ function checkTypes(ast: AstProgram, tokens: string): TypeResult {
   while index < count do {
     let current = typeTokenValue(listGet(tokens, index))
 
+    if stringEquals(current, "function") {
+      let close = typeFindNext(tokens, index, ")")
+      let afterClose = typeTokenValue(listGet(tokens, close + 1))
+      if stringEquals(afterClose, ":") {
+        currentReturnType = readTypeName(tokens, close + 2, "{")
+      } else {
+        currentReturnType = "i32"
+      }
+    }
+
     if stringEquals(current, "let") {
-      let result = typeCheckVariable(tokens, index, variables)
+      let result = typeCheckVariable(tokens, index, variables, functions)
       checked = checked + result.checkedCount
       if result.ok {
-        variables = registerVariableType(tokens, index, variables)
+        variables = registerVariableType(tokens, index, variables, functions)
       } else {
         return typeError(result.message, checked, result.tokenIndex)
       }
     }
 
     if stringEquals(current, "const") {
-      let result = typeCheckVariable(tokens, index, variables)
+      let result = typeCheckVariable(tokens, index, variables, functions)
       checked = checked + result.checkedCount
       if result.ok {
-        variables = registerVariableType(tokens, index, variables)
+        variables = registerVariableType(tokens, index, variables, functions)
       } else {
         return typeError(result.message, checked, result.tokenIndex)
+      }
+    }
+
+    if stringEquals(typeTokenValue(listGet(tokens, index + 1)), "=") {
+      let assignResult = checkAssignment(tokens, index, variables, functions)
+      checked = checked + assignResult.checkedCount
+      if assignResult.ok {
+        let okAssign = 1
+      } else {
+        return typeError(assignResult.message, checked, assignResult.tokenIndex)
+      }
+    }
+
+    if stringEquals(current, "return") {
+      let returnResult = checkReturnType(tokens, index, variables, functions, currentReturnType)
+      checked = checked + returnResult.checkedCount
+      if returnResult.ok {
+        let okReturn = 1
+      } else {
+        return typeError(returnResult.message, checked, returnResult.tokenIndex)
+      }
+    }
+
+    if stringEquals(current, "throw") {
+      let throwResult = checkThrowType(tokens, index, variables, functions)
+      checked = checked + throwResult.checkedCount
+      if throwResult.ok {
+        let okThrow = 1
+      } else {
+        return typeError(throwResult.message, checked, throwResult.tokenIndex)
+      }
+    }
+
+    if stringEquals(current, "of") {
+      let forOfResult = checkForOfType(tokens, index, variables, functions)
+      checked = checked + forOfResult.checkedCount
+      if forOfResult.ok {
+        let okForOf = 1
+      } else {
+        return typeError(forOfResult.message, checked, forOfResult.tokenIndex)
+      }
+    }
+
+    if stringEquals(current, "switch") {
+      let switchResult = checkSwitchCases(tokens, index, variables, functions)
+      checked = checked + switchResult.checkedCount
+      if switchResult.ok {
+        let okSwitch = 1
+      } else {
+        return typeError(switchResult.message, checked, switchResult.tokenIndex)
       }
     }
 

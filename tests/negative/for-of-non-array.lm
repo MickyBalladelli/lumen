@@ -1,0 +1,8 @@
+function main(): i32 {
+  let value: i32 = 7
+  for (let item of value) {
+    return item
+  }
+
+  return 0
+}

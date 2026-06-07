@@ -235,6 +235,33 @@ function semanticIsNamedDeclaration(tokens: string, index: i32): bool {
   return false
 }
 
+function semanticCheckDuplicateParameters(tokens: string, functionIndex: i32, symbolCount: i32): SemanticResult {
+  let params = map("unused", "unused")
+  let open = semanticFindNext(tokens, functionIndex, "(")
+  let close = semanticFindNext(tokens, functionIndex, ")")
+  let index = open + 1
+
+  while index < close do {
+    let kind = semanticTokenKind(listGet(tokens, index))
+    let value = semanticTokenValue(listGet(tokens, index))
+    let next = semanticTokenValue(listGet(tokens, index + 1))
+
+    if stringEquals(kind, "identifier") {
+      if stringEquals(next, ":") {
+        if includes(mapGet(params, value), "declared") {
+          return semanticError("compile error: duplicate parameter " + value, symbolCount, index)
+        }
+
+        params = mapSet(params, value, "declared")
+      }
+    }
+
+    index = index + 1
+  }
+
+  return semanticOk(symbolCount)
+}
+
 function analyzeSemantics(ast: AstProgram, tokens: string): SemanticResult {
   let symbols = map("unused", "unused")
   let scopes = ""
@@ -312,10 +339,17 @@ function analyzeSemantics(ast: AstProgram, tokens: string): SemanticResult {
       }
 
       if includes(mapGet(symbols, name), "declared") {
-        let duplicateSymbol = 1
+        let duplicateImportSafe = 1
       } else {
         symbols = mapSet(symbols, name, "declared")
         symbolCount = symbolCount + 1
+      }
+
+      let params = semanticCheckDuplicateParameters(tokens, index, symbolCount)
+      if params.ok {
+        let okParams = 1
+      } else {
+        return params
       }
 
       if stringEquals(current, "async") {

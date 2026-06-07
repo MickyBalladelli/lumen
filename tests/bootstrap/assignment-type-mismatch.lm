@@ -1,0 +1,5 @@
+function main(): i32 {
+  let value: string = "ok"
+  value = 7
+  return 0
+}

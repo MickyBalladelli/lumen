@@ -29,8 +29,7 @@ DONE Make self-host IR real
 
 DONE Make self-host emitter emit from IR
 
-Expand self-host semantic/type checks
-Make Lumen compiler catch same errors as JS compiler.
+DONE Expand self-host semantic/type checks
 
 Fix empty array literals
 Array literal cannot be empty yet is small but visible language gap.

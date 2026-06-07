@@ -1,0 +1,13 @@
+function main(): i32 {
+  let value: i32 = 7
+  switch value {
+    case "bad" {
+      return 1
+    }
+    default {
+      return 0
+    }
+  }
+
+  return 0
+}
