@@ -4,6 +4,12 @@ Foundation for the Lumen programming language.
 
 Lumen aims for JavaScript-like ergonomics with compiled output.
 
+## Install
+
+Use the official install page for global CLI, developer link, tarball, and VS Code extension commands:
+
+[Install Lumen](book/install-lumen.md)
+
 ## What exists now
 
 - Standalone tokenizer
@@ -760,7 +766,13 @@ Run like a scripting language:
 npm run lmsh -- examples/cli-args.lm first second
 ```
 
-Link local CLI tools:
+Install local CLI tools globally from this checkout:
+
+```bash
+npm install -g .
+```
+
+Or link them while developing:
 
 ```bash
 npm link
@@ -772,6 +784,8 @@ lumen-lsp
 
 The package exposes `lmsh`, `photon`, `lumen-format`, and `lumen-lsp` for
 linked or global installs.
+
+Full install docs: [Install Lumen](book/install-lumen.md).
 
 Run all tests:
 

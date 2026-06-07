@@ -8,6 +8,7 @@ so docs can guide the roadmap.
 
 ## Chapters
 
+0. [Install Lumen](install-lumen.md)
 1. [Welcome](01-welcome.md)
 2. [Setup And First Program](02-setup-and-first-program.md)
 3. [Values, Types, And Functions](03-values-types-and-functions.md)
@@ -19,4 +20,3 @@ so docs can guide the roadmap.
 9. [Errors, Results, And Options](09-errors-results-options.md)
 10. [Compiler And Bootstrap](10-compiler-and-bootstrap.md)
 11. [Missing Pieces](11-missing-pieces.md)
-

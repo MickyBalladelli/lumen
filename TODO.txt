@@ -36,9 +36,8 @@ DONE Fix empty array literals
 DONE Add focused unit tests
 
 DONE Clean docs roadmap
-book/11-missing-pieces.md is stale. Many DONE things still listed as missing.
 
-Make packaged install story official
+DONE Make packaged install story official
 Add exact npm install -g, npm link, VSIX install docs. One clear “Install Lumen” page.
 
 Improve Photon package UX

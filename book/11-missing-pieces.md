@@ -30,7 +30,7 @@ This chapter is the living roadmap. It should describe what is actually left, no
 
 ## Tooling
 
-- Make packaged install docs official with exact `npm install -g`, `npm link`, and VSIX install flows
+- Keep packaged install docs current as npm and VS Code packaging change
 - Add clearer project init docs and examples
 - Improve Photon package UX with search, local registry, or `photon add` shortcuts for bundled packages
 

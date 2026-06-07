@@ -1,5 +1,7 @@
 # Setup And First Program
 
+Install the CLI tools first: [Install Lumen](install-lumen.md).
+
 Use the JS compiler to compile a Lumen file:
 
 ```bash
@@ -32,8 +34,5 @@ function main(): i32 {
 
 ## Missing
 
-- Stable install command
-- Clear toolchain check command
 - Better CLI help output
 - Cross-platform setup notes
-
