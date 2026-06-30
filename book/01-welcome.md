@@ -222,8 +222,6 @@ path.
 - Full expression AST (currently uses token-shape heuristics in
   `RawExpression.parsed`, which is created but ignored by semantic analysis,
   type checking, and code generation)
-- Real typed IR (`IRFunction.body` currently contains AST statements rather than
-  typed instructions/basic blocks)
 - Stronger type checker (boolean conditions not enforced, no return-on-all-paths
   analysis, no use-before-initialization rejection)
 - Linux support for `arg`, `argCount`, crypto, and WebSocket (return empty or

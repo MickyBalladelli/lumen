@@ -116,17 +116,6 @@ compiler.
 - Make semantic analysis, type checking, and code generation consume parsed
   expressions instead of inspecting token shapes directly
 
-### Build A Real Typed IR
-
-Current `IRFunction.body` contains AST statements directly. The backend
-traverses AST shapes to emit LLVM.
-
-- Lower expressions and control flow into typed instructions (load, store,
-  branch, call, binary, compare, phi)
-- Organize instructions into basic blocks with terminators
-- Validate the IR (type checking, SSA, block well-formedness)
-- Make the LLVM emitter consume IR only — no AST traversal during emission
-
 ### Split The LLVM Emitter
 
 The current `LLVMEmitter.js` is ~3,480 lines in a single file. It should be

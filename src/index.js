@@ -9,6 +9,15 @@ export { ModuleLoader } from './modules/ModuleLoader.js'
 export { ModuleGraph } from './modules/ModuleGraph.js'
 export { LLVMEmitter } from './backend/LLVMEmitter.js'
 export { IRBuilder } from './ir/IRBuilder.js'
+export { IRValidator } from './ir/IRValidator.js'
+export {
+  IRBasicBlock,
+  IRFunction,
+  IRInstruction,
+  IRModule,
+  IRTerminator,
+  IRValue
+} from './ir/IR.js'
 export { SemanticAnalyzer } from './semantics/SemanticAnalyzer.js'
 export { ModuleRegistry } from './semantics/ModuleRegistry.js'
 export { TypeChecker } from './semantics/TypeChecker.js'

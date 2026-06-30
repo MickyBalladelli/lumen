@@ -27,6 +27,10 @@ export class LLVMEmitter {
   }
 
   emit(irModule, { sourcePath = null } = {}) {
+    if (irModule?.kind !== 'IRModule') {
+      throw new Diagnostic('LLVM backend expects validated IRModule', null, 'backend')
+    }
+
     this.globals = []
     this.debug = this.createDebugContext(sourcePath)
     this.stringId = 0
@@ -52,7 +56,7 @@ export class LLVMEmitter {
     this.usesErrorRuntime = false
     this.usesArrayRuntime = false
     this.usesThread = false
-    this.astCallArguments = []
+    this.irCallArguments = []
     this.functionSignatures = new Map([
       ...irModule.functions.map(func => [func.name, func]),
       ...(irModule.externs ?? []).map(func => [func.name, func])
@@ -219,7 +223,11 @@ export class LLVMEmitter {
       this.lines.push(`  store ${this.llvmType(param.type)} %${param.name}, ptr ${pointer}`)
     }
 
-    for (const statement of func.body) this.emitStatement(statement)
+    const entry = func.blocks.find(block => block.name === func.entry)
+    if (!entry) throw new Diagnostic(`IR function ${func.name} has no entry block`, func.location, 'backend')
+
+    for (const instruction of entry.instructions) this.emitIRInstruction(instruction)
+    this.emitIRTerminator(entry.terminator)
 
     if (!this.hasTerminator()) {
       this.emitDeferred()
@@ -231,33 +239,55 @@ export class LLVMEmitter {
     return this.lines
   }
 
-  emitStatement(node) {
+  emitIRInstruction(instruction) {
     const previousDebugLocation = this.activeDebugLocation
-    const debugLocation = this.createDebugLocation(node)
+    const debugLocation = this.createDebugLocation(instruction)
     if (debugLocation) this.activeDebugLocation = debugLocation
 
     try {
-      if (node.kind === 'VariableDeclaration') return this.emitVariableDeclaration(node)
-      if (node.kind === 'ExpressionStatement') return this.emitExpression(node.expression)
-      if (node.kind === 'DeferStatement') return this.emitDefer(node)
-      if (node.kind === 'ReturnStatement') return this.emitReturn(node)
-      if (node.kind === 'BreakStatement') return this.emitBreak(node)
-      if (node.kind === 'ContinueStatement') return this.emitContinue(node)
-      if (node.kind === 'ThrowStatement') return this.emitThrow(node)
-      if (node.kind === 'TryCatchStatement') return this.emitTryCatch(node)
-      if (node.kind === 'IfStatement') return this.emitIf(node)
-      if (node.kind === 'SwitchStatement') return this.emitSwitch(node)
-      if (node.kind === 'BlockStatement') return this.emitBlock(node)
-      if (node.kind === 'ForOfStatement') return this.emitForOf(node)
-      if (node.kind === 'ForRangeStatement') return this.emitForRange(node)
-      if (node.kind === 'ForStatement') return this.emitFor(node)
-      if (node.kind === 'WhileStatement') return this.emitWhile(node)
-      if (node.kind === 'DoUntilStatement') return this.emitDoUntil(node)
+      if (instruction.op === 'declare') return this.emitVariableDeclaration(instruction)
+      if (instruction.op === 'evaluate') return this.emitExpression(instruction.expression)
+      if (instruction.op === 'defer') return this.emitDefer(instruction)
+      if (instruction.op === 'block') return this.emitIRBlock(instruction.body)
+      if (instruction.op === 'tryCatch') return this.emitTryCatch(instruction)
+      if (instruction.op === 'if') return this.emitIf(instruction)
+      if (instruction.op === 'switch') return this.emitSwitch(instruction)
+      if (instruction.op === 'forOf') return this.emitForOf(instruction)
+      if (instruction.op === 'forRange') return this.emitForRange(instruction)
+      if (instruction.op === 'for') return this.emitFor(instruction)
+      if (instruction.op === 'while') return this.emitWhile(instruction)
+      if (instruction.op === 'doUntil') return this.emitDoUntil(instruction)
 
-      throw new Diagnostic(`LLVM backend does not support ${node.kind}`, node.location, 'backend')
+      throw new Diagnostic(`LLVM backend does not support IR instruction ${instruction.op}`, instruction.location, 'backend')
     } finally {
       this.activeDebugLocation = previousDebugLocation
     }
+  }
+
+  emitIRTerminator(terminator) {
+    if (!terminator || terminator.op === 'fallthrough') return
+    if (terminator.op === 'return') return this.emitReturn(terminator)
+    if (terminator.op === 'throw') return this.emitThrow(terminator)
+    if (terminator.op === 'break') return this.emitBreak(terminator)
+    if (terminator.op === 'continue') return this.emitContinue(terminator)
+    throw new Diagnostic(`LLVM backend does not support IR terminator ${terminator.op}`, terminator.location, 'backend')
+  }
+
+  emitIRBlock(block, { scoped = true } = {}) {
+    if (scoped) this.pushScope()
+    for (const instruction of block.instructions) {
+      if (this.hasTerminator()) break
+      this.emitIRInstruction(instruction)
+    }
+    if (!this.hasTerminator()) this.emitIRTerminator(block.terminator)
+    if (scoped) this.popScope()
+  }
+
+  emitStatement(node) {
+    if (node?.kind === 'IRBasicBlock') return this.emitIRBlock(node)
+    if (node?.kind === 'IRInstruction') return this.emitIRInstruction(node)
+    if (node?.kind === 'IRTerminator') return this.emitIRTerminator(node)
+    throw new Diagnostic('LLVM backend accepts IR nodes only', node?.location, 'backend')
   }
 
   createLineBuffer() {
@@ -315,7 +345,7 @@ export class LLVMEmitter {
   createDebugSubprogram(func) {
     if (!this.debug) return null
 
-    const line = func.body[0]?.location?.line ?? 1
+    const line = func.location?.line ?? func.blocks[0]?.location?.line ?? 1
     return this.addDebugMetadata(
       this.debug,
       `distinct !DISubprogram(name: "${this.escapeDebugString(func.name)}", linkageName: "${this.escapeDebugString(func.name)}", scope: ${this.debug.file}, file: ${this.debug.file}, line: ${line}, type: ${this.debug.subroutineType}, scopeLine: ${line}, spFlags: DISPFlagDefinition, unit: ${this.debug.unit}, retainedNodes: ${this.debug.empty})`
@@ -396,15 +426,6 @@ export class LLVMEmitter {
     return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')
   }
 
-  emitBlock(node) {
-    this.pushScope()
-    for (const statement of node.body) {
-      if (this.hasTerminator()) break
-      this.emitStatement(statement)
-    }
-    this.popScope()
-  }
-
   emitTryCatch(node) {
     const catchLabel = this.nextLabel('catch')
     const endLabel = this.nextLabel('try.end')
@@ -447,7 +468,7 @@ export class LLVMEmitter {
       throw new Diagnostic('throw needs active try/catch', node.location, 'backend')
     }
 
-    const value = this.emitExpression(node.argument)
+    const value = this.emitExpression(node.value)
 
     if (value.type !== LumenTypes.String && value.type !== LumenTypes.Error) {
       throw new Diagnostic('throw expects string or error', node.location, 'backend')
@@ -459,20 +480,20 @@ export class LLVMEmitter {
 
   emitVariableDeclaration(node) {
     for (const declaration of node.declarations) {
-      const type = declaration.inferredType ?? LumenTypes.I32
-      const pointer = this.alloca(declaration.id.name, type, {
+      const type = declaration.type ?? LumenTypes.I32
+      const pointer = this.alloca(declaration.name, type, {
         length: declaration.arrayLength,
-        debugLocation: declaration.id.location ?? node.location
+        debugLocation: declaration.location ?? node.location
       })
 
       if (declaration.initializer) {
-        if (declaration.initializer.parsed?.kind === 'ArrayExpression') {
-          this.emitArrayInitializerNode(pointer, type, declaration.initializer.parsed)
+        if (declaration.initializer.op === 'array') {
+          this.emitArrayInitializerNode(pointer, type, declaration.initializer)
           continue
         }
 
-        if (declaration.initializer.parsed?.kind === 'StructExpression') {
-          this.emitStructInitializerNode(pointer, type, declaration.initializer.parsed)
+        if (declaration.initializer.op === 'struct') {
+          this.emitStructInitializerNode(pointer, type, declaration.initializer)
           continue
         }
 
@@ -485,12 +506,12 @@ export class LLVMEmitter {
   emitReturn(node) {
     this.emitDeferred()
 
-    if (!node.argument) {
+    if (!node.value) {
       this.lines.push('  ret void')
       return
     }
 
-    const value = this.emitExpression(node.argument)
+    const value = this.emitExpression(node.value)
     this.lines.push(`  ret ${this.llvmType(this.returnType)} ${this.cast(value, this.returnType)}`)
   }
 
@@ -523,7 +544,7 @@ export class LLVMEmitter {
     const thenLabel = this.nextLabel('if.then')
     const elseLabel = this.nextLabel('if.else')
     const endLabel = this.nextLabel('if.end')
-    const condition = this.emitExpression(node.test)
+    const condition = this.emitExpression(node.condition)
 
     this.lines.push(`  br i1 ${this.cast(condition, LumenTypes.Bool)}, label %${thenLabel}, label %${node.alternate ? elseLabel : endLabel}`)
     this.lines.push(`${thenLabel}:`)
@@ -556,7 +577,7 @@ export class LLVMEmitter {
   }
 
   emitSelectableIfValue(node, targetName) {
-    const condition = this.emitExpression(node.test)
+    const condition = this.emitExpression(node.condition)
     const consequent = this.emitSelectableBranchValue(node.consequent, targetName)
     const alternate = this.emitSelectableBranchValue(node.alternate, targetName)
     const type = this.typeSystem.widest(consequent.type, alternate.type)
@@ -571,13 +592,13 @@ export class LLVMEmitter {
 
   emitSelectableBranchValue(branch, targetName) {
     const statement = this.singleBlockStatement(branch)
-    if (statement.kind === 'IfStatement') return this.emitSelectableIfValue(statement, targetName)
+    if (statement.op === 'if') return this.emitSelectableIfValue(statement, targetName)
 
-    return this.emitExpression(statement.expression.parsed.right)
+    return this.emitExpression(statement.expression.right)
   }
 
   selectableIfAssignment(node, { allowConditionRemainder = false } = {}) {
-    if (!node.alternate || !this.isSideEffectFreeExpression(node.test, { allowRemainder: allowConditionRemainder })) return null
+    if (!node.alternate || !this.isSideEffectFreeExpression(node.condition, { allowRemainder: allowConditionRemainder })) return null
 
     const consequent = this.selectableBranchAssignment(node.consequent)
     const alternate = this.selectableBranchAssignment(node.alternate)
@@ -592,12 +613,12 @@ export class LLVMEmitter {
     const statement = this.singleBlockStatement(branch)
     if (!statement) return null
 
-    if (statement.kind === 'IfStatement') return this.selectableIfAssignment(statement)
-    if (statement.kind !== 'ExpressionStatement') return null
+    if (statement.op === 'if') return this.selectableIfAssignment(statement)
+    if (statement.op !== 'evaluate') return null
 
-    const expression = statement.expression.parsed
-    if (expression?.kind !== 'AssignmentExpression' ||
-      expression.left.kind !== 'IdentifierExpression' ||
+    const expression = statement.expression
+    if (expression?.op !== 'assign' ||
+      expression.left.op !== 'reference' ||
       !this.isSideEffectFreeExpression(expression.right)) return null
 
     return {
@@ -608,26 +629,25 @@ export class LLVMEmitter {
 
   singleBlockStatement(statement) {
     if (!statement) return null
-    if (statement.kind === 'BlockStatement') return statement.body.length === 1 ? statement.body[0] : null
-
-    return statement
+    if (statement.kind !== 'IRBasicBlock') return null
+    if (statement.terminator.op !== 'fallthrough') return null
+    return statement.instructions.length === 1 ? statement.instructions[0] : null
   }
 
   isSideEffectFreeExpression(expression, { allowRemainder = false } = {}) {
-    const node = expression?.kind === 'RawExpression' ? expression.parsed : expression
-    if (!node) return false
-    if (node.kind === 'LiteralExpression' || node.kind === 'IdentifierExpression') return true
-    if (node.kind === 'UnaryExpression') {
-      return this.isSideEffectFreeExpression(node.argument, { allowRemainder })
+    if (!expression) return false
+    if (expression.op === 'constant' || expression.op === 'reference') return true
+    if (expression.op === 'unary') {
+      return this.isSideEffectFreeExpression(expression.argument, { allowRemainder })
     }
-    if (node.kind === 'BinaryExpression') {
-      if (node.operator === '/' || (!allowRemainder && node.operator === '%')) return false
-      return this.isSideEffectFreeExpression(node.left, { allowRemainder }) &&
-        this.isSideEffectFreeExpression(node.right, { allowRemainder })
+    if (expression.op === 'binary') {
+      if (expression.operator === '/' || (!allowRemainder && expression.operator === '%')) return false
+      return this.isSideEffectFreeExpression(expression.left, { allowRemainder }) &&
+        this.isSideEffectFreeExpression(expression.right, { allowRemainder })
     }
-    if (node.kind === 'MemberExpression') {
-      return this.isSideEffectFreeExpression(node.object, { allowRemainder }) &&
-        (!node.computed || this.isSideEffectFreeExpression(node.property, { allowRemainder }))
+    if (expression.op === 'access') {
+      return this.isSideEffectFreeExpression(expression.object, { allowRemainder }) &&
+        (!expression.computed || this.isSideEffectFreeExpression(expression.property, { allowRemainder }))
     }
     return false
   }
@@ -712,10 +732,10 @@ export class LLVMEmitter {
   emitFor(node) {
     this.pushScope()
 
-    if (node.init?.kind === 'VariableDeclaration') {
-      this.emitVariableDeclaration(node.init)
-    } else if (node.init) {
-      this.emitExpression(node.init)
+    if (node.initializer?.kind === 'IRInstruction') {
+      this.emitIRInstruction(node.initializer)
+    } else if (node.initializer) {
+      this.emitExpression(node.initializer)
     }
 
     const conditionLabel = this.nextLabel('for.cond')
@@ -765,7 +785,7 @@ export class LLVMEmitter {
     this.lines.push(`  br label %${conditionLabel}`)
     this.lines.push(`${conditionLabel}:`)
 
-    const condition = this.emitExpression(node.test)
+    const condition = this.emitExpression(node.condition)
     this.lines.push(`  br i1 ${this.cast(condition, LumenTypes.Bool)}, label %${bodyLabel}, label %${endLabel}`)
 
     this.lines.push(`${bodyLabel}:`)
@@ -794,7 +814,7 @@ export class LLVMEmitter {
     if (!this.hasTerminator()) this.lines.push(`  br label %${conditionLabel}`)
 
     this.lines.push(`${conditionLabel}:`)
-    const condition = this.emitExpression(node.test)
+    const condition = this.emitExpression(node.condition)
     this.lines.push(`  br i1 ${this.cast(condition, LumenTypes.Bool)}, label %${endLabel}, label %${bodyLabel}`)
 
     this.lines.push(`${endLabel}:`)
@@ -803,14 +823,14 @@ export class LLVMEmitter {
   }
 
   emitForOf(node) {
-    const iterableNode = node.iterable.parsed
-    if (iterableNode?.kind === 'CallExpression' &&
-      iterableNode.callee.kind === 'IdentifierExpression' &&
+    const iterableNode = node.iterable
+    if (iterableNode?.op === 'call' &&
+      iterableNode.callee.op === 'reference' &&
       iterableNode.callee.name === SystemFunctions.Filter) {
       return this.emitFilteredForOf(node)
     }
 
-    if (iterableNode?.kind !== 'IdentifierExpression') {
+    if (iterableNode?.op !== 'reference') {
       throw new Diagnostic('for-of iterable must be an array variable', node.iterable.location, 'backend')
     }
     const iterableName = iterableNode.name
@@ -868,11 +888,11 @@ export class LLVMEmitter {
   }
 
   emitFilteredForOf(node) {
-    const call = node.iterable.parsed
+    const call = node.iterable
     const collection = call.arguments[0]
     const predicate = call.arguments[1]
-    if (collection?.kind !== 'IdentifierExpression' ||
-      predicate?.kind !== 'ArrowFunctionExpression' ||
+    if (collection?.op !== 'reference' ||
+      predicate?.op !== 'arrow' ||
       predicate.params.length !== 1) {
       throw new Diagnostic('filter expects array and predicate', node.iterable.location, 'backend')
     }
@@ -942,11 +962,9 @@ export class LLVMEmitter {
   }
 
   emitExpression(expression) {
-    const node = expression?.kind === 'RawExpression'
-      ? expression.parsed
-      : expression?.kind
-        ? expression
-        : expression?.tokens?.parsed ?? null
+    const node = expression?.kind === 'IRValue'
+      ? expression
+      : expression?.tokens?.irValue ?? null
 
     if (node) return this.emitExpressionNode(node)
     return this.emitTokenExpression(expression)
@@ -955,25 +973,30 @@ export class LLVMEmitter {
   emitExpressionNode(node) {
     if (!node) return { type: LumenTypes.Void, value: '' }
 
-    if (node.kind === 'AwaitExpression') return this.emitExpression(node.argument)
-    if (node.kind === 'CallExpression') {
+    if (node.op === 'await') return this.emitExpression(node.argument)
+    if (node.op === 'call') {
       return this.emitCallExpressionNode(node)
     }
-    if (node.kind === 'MemberExpression') {
+    if (node.op === 'access') {
       return this.emitMemberNode(node)
     }
-    if (node.kind === 'AssignmentExpression') {
+    if (node.op === 'assign') {
       return this.emitAssignmentNode(node)
     }
-    if (node.kind === 'UpdateExpression') {
-      if (node.argument.kind !== 'IdentifierExpression') {
+    if (node.op === 'update') {
+      if (node.argument.op !== 'reference') {
         throw new Diagnostic('Update target must be an identifier', node.location, 'backend')
       }
       return this.emitUpdate(node.argument, node.operator)
     }
-    if (node.kind === 'MatchExpression') return this.emitMatchNode(node)
-    if (node.kind === 'LiteralExpression') {
-      const token = node.token
+    if (node.op === 'match') return this.emitMatchNode(node)
+    if (node.op === 'constant') {
+      const token = {
+        type: node.tokenType,
+        lexeme: node.lexeme,
+        literal: node.value,
+        location: node.location
+      }
       if (token.type === TokenType.String) {
         if (token.literal.includes('${')) return this.emitInterpolatedString(token)
         const value = this.globalCString(token.literal)
@@ -989,14 +1012,14 @@ export class LLVMEmitter {
         value: type === LumenTypes.F32 ? this.floatConstant(token.literal) : String(token.literal)
       }
     }
-    if (node.kind === 'IdentifierExpression') {
+    if (node.op === 'reference') {
       if (this.enumConstants.has(node.name)) return this.enumConstants.get(node.name)
       const symbol = this.resolve(node.name)
       const value = this.nextTemp()
       this.lines.push(`  ${value} = load ${this.llvmType(symbol.type)}, ptr ${symbol.pointer}`)
       return { type: symbol.type, value }
     }
-    if (node.kind === 'UnaryExpression') {
+    if (node.op === 'unary') {
       const value = this.emitExpression(node.argument)
       if (node.operator === '+') return value
       if (node.operator === '-') {
@@ -1014,7 +1037,7 @@ export class LLVMEmitter {
         )
       }
     }
-    if (node.kind === 'BinaryExpression') {
+    if (node.op === 'binary') {
       const left = this.emitExpression(node.left)
       const right = this.emitExpression(node.right)
       if (node.operator === '&&' || node.operator === '||') {
@@ -1031,7 +1054,7 @@ export class LLVMEmitter {
       return this.emitBinary({ lexeme: operator, location: node.location }, left, right)
     }
 
-    throw new Diagnostic(`Unsupported ${node.kind}`, node.location, 'backend')
+    throw new Diagnostic(`Unsupported IR value ${node.op}`, node.location, 'backend')
   }
 
   emitAssignmentNode(node) {
@@ -1043,14 +1066,14 @@ export class LLVMEmitter {
   }
 
   emitMemberNode(node) {
-    if (node.computed && node.object.kind === 'IdentifierExpression') {
+    if (node.computed && node.object.op === 'reference') {
       const base = this.resolve(node.object.name)
       if (base.type === LumenTypes.String) {
         this.usesBounds = true
         const source = this.nextTemp()
         this.lines.push(`  ${source} = load ptr, ptr ${base.pointer}`)
 
-        if (node.property.kind === 'SliceExpression') {
+        if (node.property.op === 'slice') {
           this.usesSlice = true
           const start = this.emitExpression(node.property.start)
           const end = this.emitExpression(node.property.end)
@@ -1073,7 +1096,7 @@ export class LLVMEmitter {
   }
 
   emitLValueNode(node) {
-    if (node.kind === 'IdentifierExpression') {
+    if (node.op === 'reference') {
       const symbol = this.resolve(node.name)
       return {
         pointer: symbol.pointer,
@@ -1082,13 +1105,13 @@ export class LLVMEmitter {
       }
     }
 
-    if (node.kind !== 'MemberExpression') {
+    if (node.op !== 'access') {
       throw new Diagnostic('Assignment target must be identifier or access', node.location, 'backend')
     }
 
     const object = this.emitLValueNode(node.object)
     if (node.computed) {
-      if (node.property.kind === 'SliceExpression') {
+      if (node.property.op === 'slice') {
         throw new Diagnostic('Slice cannot be assigned', node.location, 'backend')
       }
       if (!this.typeSystem.isArray(object.type) || object.length === null) {
@@ -1105,10 +1128,10 @@ export class LLVMEmitter {
       }
     }
 
-    const field = this.typeSystem.getField(object.type, node.property.name)
+    const field = this.typeSystem.getField(object.type, node.field)
     const struct = this.typeSystem.getStruct(object.type)
     if (!field || !struct) {
-      throw new Diagnostic(`Unknown field "${node.property.name}"`, node.property.location, 'backend')
+      throw new Diagnostic(`Unknown field "${node.field}"`, node.location, 'backend')
     }
     const pointer = this.nextTemp()
     const fieldIndex = struct.fields.indexOf(field)
@@ -1121,7 +1144,7 @@ export class LLVMEmitter {
   }
 
   emitCallExpressionNode(node) {
-    if (node.callee.kind !== 'IdentifierExpression') {
+    if (node.callee.op !== 'reference') {
       throw new Diagnostic('Call target must be a function name', node.location, 'backend')
     }
 
@@ -1129,10 +1152,10 @@ export class LLVMEmitter {
       return this.emitUserCallNode(node)
     }
 
-    this.astCallArguments.push({
+    this.irCallArguments.push({
       arguments: node.arguments.map(argument => {
-        const tokens = [...argument.tokens]
-        tokens.parsed = argument
+        const tokens = []
+        tokens.irValue = argument
         return tokens
       }),
       consumed: false,
@@ -1142,18 +1165,20 @@ export class LLVMEmitter {
     try {
       const tokens = [
         {
-          ...node.tokens[0],
+          type: TokenType.Identifier,
           lexeme: node.callee.name,
-          literal: node.callee.name
+          literal: node.callee.name,
+          location: node.location
         },
-        ...node.tokens.slice(1)
+        { lexeme: '(', location: node.location },
+        { lexeme: ')', location: node.location }
       ]
       return this.emitTokenExpression({
         tokens,
         location: node.location
       })
     } finally {
-      this.astCallArguments.pop()
+      this.irCallArguments.pop()
     }
   }
 
@@ -1443,7 +1468,7 @@ export class LLVMEmitter {
       const fieldPointer = this.nextTemp()
       this.lines.push(`  ${fieldPointer} = getelementptr inbounds ${this.llvmType(type)}, ptr ${pointer}, i32 0, i32 ${index}`)
 
-      if (valueNode.kind === 'StructExpression') {
+      if (valueNode.op === 'struct') {
         this.emitStructInitializerNode(fieldPointer, field.type, valueNode)
         continue
       }
@@ -1460,7 +1485,7 @@ export class LLVMEmitter {
       const elementPointer = this.nextTemp()
       this.lines.push(`  ${elementPointer} = getelementptr inbounds ${this.typeSystem.llvmArray(type, node.elements.length)}, ptr ${pointer}, i32 0, i32 ${index}`)
 
-      if (node.elements[index].kind === 'StructExpression') {
+      if (node.elements[index].op === 'struct') {
         this.emitStructInitializerNode(elementPointer, elementType, node.elements[index])
         continue
       }
@@ -1479,12 +1504,23 @@ export class LLVMEmitter {
     }
 
     const arg = args[0]
+    const constant = arg.irValue?.op === 'constant' &&
+      arg.irValue.tokenType === TokenType.String
+      ? {
+          type: TokenType.String,
+          literal: arg.irValue.value,
+          location: arg.irValue.location
+        }
+      : null
+    const stringToken = constant ?? (
+      arg.length === 1 && arg[0].type === TokenType.String ? arg[0] : null
+    )
 
-    if (arg.length === 1 && arg[0].type === TokenType.String) {
-      if (arg[0].literal.includes('${')) return this.emitInterpolatedPrintln(arg[0])
+    if (stringToken) {
+      if (stringToken.literal.includes('${')) return this.emitInterpolatedPrintln(stringToken)
 
       const format = this.globalCString('%s\n')
-      const value = this.globalCString(arg[0].literal)
+      const value = this.globalCString(stringToken.literal)
       this.lines.push(`  call i32 (ptr, ...) @printf(ptr ${format.pointer}, ptr ${value.pointer})`)
       return {
         type: LumenTypes.Void,
@@ -3171,7 +3207,7 @@ export class LLVMEmitter {
     }
 
     const discriminant = this.emitExpression(node.discriminant)
-    const resultType = node.inferredType ?? this.emitExpression(node.arms[0].value).type
+    const resultType = node.type ?? this.emitExpression(node.arms[0].value).type
     const resultPointer = this.alloca('.match.result', resultType)
     const endLabel = this.nextLabel('match.end')
     const defaultArm = node.arms.find(arm => arm.pattern === null)
@@ -3325,7 +3361,7 @@ export class LLVMEmitter {
   }
 
   isCall(tokens, name) {
-    const active = this.astCallArguments.at(-1)
+    const active = this.irCallArguments.at(-1)
     if (active && !active.matched) {
       if (active.name !== name) return false
       active.matched = true
@@ -3604,6 +3640,9 @@ export class LLVMEmitter {
   }
 
   singleIdentifierName(expression) {
+    if (expression.tokens.irValue?.op === 'reference') {
+      return expression.tokens.irValue.name
+    }
     if (expression.tokens.length === 1 && expression.tokens[0].type === TokenType.Identifier) {
       return expression.tokens[0].lexeme
     }
@@ -3625,7 +3664,7 @@ export class LLVMEmitter {
   }
 
   callArguments(tokens) {
-    const active = this.astCallArguments.at(-1)
+    const active = this.irCallArguments.at(-1)
     if (active && !active.consumed) {
       active.consumed = true
       return active.arguments

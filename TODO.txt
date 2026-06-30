@@ -48,7 +48,7 @@ Project audit: 2026-06-30
   and code generation. Represent calls, access, assignment, unary/binary operators,
   arrays, structs, match, and await as real nodes.
 
-- [ ] Build a real typed IR.
+- [x] Build a real typed IR.
   Current `IRFunction.body` contains AST statements. Lower expressions and control
   flow into typed instructions/basic blocks, validate IR, and make the backend
   consume IR only.

@@ -257,10 +257,9 @@ The stage compiler can emit LLVM for:
 
 ### Emitter Architecture
 
-The emitter has an `emitIr(...)` entry point that accepts an `IrModule`.
-Internally, it still delegates through a compatibility map produced from the
-AST shape. The long-term goal is to remove the AST-to-map bridge and emit
-directly from typed IR.
+The emitter accepts an `IRModule` and dispatches typed IR instructions, values,
+basic blocks, and terminators directly. AST statements do not cross the backend
+boundary.
 
 ### Diagnostic Format
 
@@ -463,9 +462,6 @@ and UBSan (UndefinedBehaviorSanitizer) to verify memory safety.
   Represent calls, access, assignment, unary/binary operators, arrays, structs,
   match, and await as real AST nodes consumed by semantic analysis, type
   checking, and code generation.
-- **Real typed IR** — `IRFunction.body` currently contains AST statements.
-  Lower to typed instructions/basic blocks, validate IR, and make the backend
-  consume IR only.
 - **Split LLVM emitter** — the 3,480-line `LLVMEmitter.js` needs to be split
   into focused lowering modules: control flow, values, aggregates, built-ins,
   debug metadata, runtime ABI. Add golden LLVM tests per lowering family.

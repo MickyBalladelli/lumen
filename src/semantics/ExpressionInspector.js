@@ -1,6 +1,7 @@
 import { TokenType } from '../lexer/TokenType.js'
 import { Diagnostic } from '../diagnostics/Diagnostic.js'
 import { LumenTypes } from './TypeSystem.js'
+import { Scope } from './Scope.js'
 import { SystemFunctions, SystemLibrary } from '../system/SystemLibrary.js'
 import { FsFunctions, FsLibrary } from '../fs/FsLibrary.js'
 import { HttpFunctions, HttpLibrary } from '../http/HttpLibrary.js'
@@ -118,6 +119,13 @@ export class ExpressionInspector {
 
   inferNode(node) {
     if (!node) return LumenTypes.Void
+    const type = this.inferNodeType(node)
+    node.inferredType = type
+    return type
+  }
+
+  inferNodeType(node) {
+    if (!node) return LumenTypes.Void
 
     if (node.kind === 'LiteralExpression') return this.literalType(node)
     if (node.kind === 'IdentifierExpression') return this.identifierType(node)
@@ -214,12 +222,13 @@ export class ExpressionInspector {
   }
 
   binaryType(node) {
+    const left = this.inferNode(node.left)
+    const right = this.inferNode(node.right)
+
     if (['<', '<=', '>', '>=', '==', '===', '!=', '!==', '&&', '||'].includes(node.operator)) {
       return LumenTypes.Bool
     }
 
-    const left = this.inferNode(node.left)
-    const right = this.inferNode(node.right)
     if (node.operator === '+' && left === LumenTypes.String && right === LumenTypes.String) {
       return LumenTypes.String
     }
@@ -240,7 +249,28 @@ export class ExpressionInspector {
       if (node.arguments.length !== 2 || node.arguments[1].kind !== 'ArrowFunctionExpression') {
         throw new Diagnostic('filter expects array and predicate', node.location, 'semantic')
       }
-      return this.inferNode(node.arguments[0])
+      const collectionType = this.inferNode(node.arguments[0])
+      const predicate = node.arguments[1]
+      const parameterType = this.typeSystem.elementType(collectionType) ?? LumenTypes.Unknown
+      const predicateScope = new Scope(this.scope)
+      predicate.params[0].inferredType = parameterType
+      predicateScope.define(predicate.params[0].name, {
+        kind: 'param',
+        node: predicate.params[0],
+        type: parameterType,
+        mutable: false
+      })
+      const predicateInspector = new ExpressionInspector(
+        predicateScope,
+        this.typeSystem,
+        this.systemLibrary,
+        this.fsLibrary,
+        this.httpLibrary,
+        this.threadLibrary
+      )
+      predicateInspector.inferNode(predicate.body)
+      predicate.inferredType = LumenTypes.Unknown
+      return collectionType
     }
     if (name === SystemFunctions.Includes) {
       if (node.arguments.length !== 2) {
