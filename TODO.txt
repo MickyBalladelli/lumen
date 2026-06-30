@@ -43,7 +43,7 @@ Project audit: 2026-06-30
 
 ## P1 - Compiler architecture
 
-- [ ] Finish the expression AST and stop using token-shape heuristics.
+- [x] Finish the expression AST and stop using token-shape heuristics.
   `RawExpression.parsed` is created but ignored by semantic analysis, type checking,
   and code generation. Represent calls, access, assignment, unary/binary operators,
   arrays, structs, match, and await as real nodes.

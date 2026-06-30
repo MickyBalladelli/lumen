@@ -249,7 +249,7 @@ export class Parser {
     if (this.peek()?.type === TokenType.Identifier && this.peekNextToken()?.is(TokenType.Keyword, 'in')) {
       const item = this.identifier()
       this.consumeKeyword('in', 'Expected in after range loop variable')
-      const range = this.rawExpressionUntil(['{'])
+      const range = this.rawExpressionUntil(['{'], { parse: false })
       const dots = range.tokens.findIndex((token, index) => token.lexeme === '.' && range.tokens[index + 1]?.lexeme === '.')
       if (dots < 0) throw this.error(range.tokens[0] ?? this.peek(), 'Expected ".." in range loop')
 
@@ -419,10 +419,7 @@ export class Parser {
     return new ExpressionStatementNode(expression, expression.location)
   }
 
-  rawExpressionUntil(delimiters) {
-    // Expression parsing is intentionally shallow for the foundation.
-    // Later, replace this with a Pratt or precedence parser while keeping
-    // statement/declaration parsing stable.
+  rawExpressionUntil(delimiters, { parse = true } = {}) {
     const tokens = []
     let depth = 0
 
@@ -438,7 +435,7 @@ export class Parser {
     }
 
     const expression = new RawExpressionNode(tokens, tokens[0]?.location ?? this.peek().location)
-    expression.parsed = this.expressionParser.parse(tokens)
+    if (parse) expression.parsed = this.expressionParser.parse(tokens)
     return expression
   }
 

@@ -1,7 +1,13 @@
 import {
+  ArrayExpressionNode,
+  ArrowFunctionExpressionNode,
+  AssignmentExpressionNode,
   AstNode,
+  AwaitExpressionNode,
+  BinaryExpressionNode,
   BlockStatementNode,
   BreakStatementNode,
+  CallExpressionNode,
   ContinueStatementNode,
   DeferStatementNode,
   DoUntilStatementNode,
@@ -11,19 +17,29 @@ import {
   ForRangeStatementNode,
   ForStatementNode,
   FunctionDeclarationNode,
+  IdentifierExpressionNode,
   IdentifierNode,
   IfStatementNode,
   ImportDeclarationNode,
+  LiteralExpressionNode,
+  MatchArmNode,
+  MatchExpressionNode,
+  MemberExpressionNode,
   ProgramNode,
   RawExpressionNode,
   ReturnStatementNode,
+  SliceExpressionNode,
   StructDeclarationNode,
+  StructExpressionNode,
   StructFieldNode,
+  StructPropertyNode,
   SwitchCaseNode,
   SwitchStatementNode,
   ThrowStatementNode,
   TryCatchStatementNode,
   TypeAnnotationNode,
+  UnaryExpressionNode,
+  UpdateExpressionNode,
   VariableDeclarationNode,
   VariableDeclaratorNode,
   WhileStatementNode
@@ -83,5 +99,21 @@ export class AstNodeRegistry {
       .register('TryCatchStatement', TryCatchStatementNode)
       .register('ExpressionStatement', ExpressionStatementNode)
       .register('RawExpression', RawExpressionNode)
+      .register('LiteralExpression', LiteralExpressionNode)
+      .register('IdentifierExpression', IdentifierExpressionNode)
+      .register('CallExpression', CallExpressionNode)
+      .register('MemberExpression', MemberExpressionNode)
+      .register('AssignmentExpression', AssignmentExpressionNode)
+      .register('UpdateExpression', UpdateExpressionNode)
+      .register('UnaryExpression', UnaryExpressionNode)
+      .register('BinaryExpression', BinaryExpressionNode)
+      .register('ArrayExpression', ArrayExpressionNode)
+      .register('StructExpression', StructExpressionNode)
+      .register('StructProperty', StructPropertyNode)
+      .register('MatchExpression', MatchExpressionNode)
+      .register('MatchArm', MatchArmNode)
+      .register('AwaitExpression', AwaitExpressionNode)
+      .register('ArrowFunctionExpression', ArrowFunctionExpressionNode)
+      .register('SliceExpression', SliceExpressionNode)
   }
 }

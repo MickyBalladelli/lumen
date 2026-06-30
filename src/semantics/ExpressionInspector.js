@@ -6,8 +6,101 @@ import { FsFunctions, FsLibrary } from '../fs/FsLibrary.js'
 import { HttpFunctions, HttpLibrary } from '../http/HttpLibrary.js'
 import { ThreadFunctions, ThreadLibrary } from '../thread/ThreadLibrary.js'
 
+const FIXED_CALL_TYPES = new Map([
+  [SystemFunctions.Println, LumenTypes.Void],
+  [SystemFunctions.Len, LumenTypes.I32],
+  [SystemFunctions.Uuid, LumenTypes.String],
+  [SystemFunctions.Date, LumenTypes.String],
+  [SystemFunctions.Env, LumenTypes.String],
+  [SystemFunctions.Encrypt, LumenTypes.String],
+  [SystemFunctions.Decrypt, LumenTypes.String],
+  [SystemFunctions.Arg, LumenTypes.String],
+  [SystemFunctions.ArgCount, LumenTypes.I32],
+  [SystemFunctions.Map, LumenTypes.String],
+  [SystemFunctions.MapGet, LumenTypes.String],
+  [SystemFunctions.MapHas, LumenTypes.Bool],
+  [SystemFunctions.Err, 'Result<unknown>'],
+  [SystemFunctions.IsOk, LumenTypes.Bool],
+  [SystemFunctions.ErrorMessage, LumenTypes.String],
+  [SystemFunctions.None, LumenTypes.Unknown],
+  [SystemFunctions.HasValue, LumenTypes.Bool],
+  [SystemFunctions.Assert, LumenTypes.Void],
+  [SystemFunctions.Channel, LumenTypes.String],
+  [SystemFunctions.Send, LumenTypes.Void],
+  [SystemFunctions.Receive, LumenTypes.String],
+  [SystemFunctions.Json, LumenTypes.Json],
+  [SystemFunctions.JsonGet, LumenTypes.String],
+  [SystemFunctions.JsonGetRaw, LumenTypes.String],
+  [SystemFunctions.JsonSet, LumenTypes.Json],
+  [SystemFunctions.JsonSetPath, LumenTypes.Json],
+  [SystemFunctions.JsonQuote, LumenTypes.String],
+  [SystemFunctions.JsonStringify, LumenTypes.String],
+  [SystemFunctions.JsonValid, LumenTypes.Bool],
+  [SystemFunctions.NewError, LumenTypes.Error],
+  [SystemFunctions.ErrorCode, LumenTypes.I32],
+  [SystemFunctions.ErrorText, LumenTypes.String],
+  [SystemFunctions.ArraySum, LumenTypes.I32],
+  [SystemFunctions.ArrayJoin, LumenTypes.String],
+  [SystemFunctions.Exec, LumenTypes.I32],
+  [SystemFunctions.SourceSnippet, LumenTypes.String],
+  [SystemFunctions.StringBuilder, LumenTypes.String],
+  [SystemFunctions.StringBuilderAppend, LumenTypes.String],
+  [SystemFunctions.StringLen, LumenTypes.I32],
+  [SystemFunctions.StringEquals, LumenTypes.Bool],
+  [SystemFunctions.Trim, LumenTypes.String],
+  [SystemFunctions.Lower, LumenTypes.String],
+  [SystemFunctions.Upper, LumenTypes.String],
+  [SystemFunctions.StartsWith, LumenTypes.Bool],
+  [SystemFunctions.EndsWith, LumenTypes.Bool],
+  [SystemFunctions.Replace, LumenTypes.String],
+  [SystemFunctions.Split, LumenTypes.String],
+  [SystemFunctions.IndexOf, LumenTypes.I32],
+  [SystemFunctions.LastIndexOf, LumenTypes.I32],
+  [SystemFunctions.Contains, LumenTypes.Bool],
+  [SystemFunctions.Repeat, LumenTypes.String],
+  [SystemFunctions.PadStart, LumenTypes.String],
+  [SystemFunctions.PadEnd, LumenTypes.String],
+  [SystemFunctions.IntToString, LumenTypes.String],
+  [SystemFunctions.StringToInt, LumenTypes.I32],
+  [SystemFunctions.ParseI32, LumenTypes.I32],
+  [SystemFunctions.ParseF32, LumenTypes.F32],
+  [SystemFunctions.List, LumenTypes.String],
+  [SystemFunctions.ListPush, LumenTypes.String],
+  [SystemFunctions.ListGet, LumenTypes.String],
+  [SystemFunctions.ListLen, LumenTypes.I32],
+  [SystemFunctions.MapSet, LumenTypes.String],
+  [SystemFunctions.MapDelete, LumenTypes.String],
+  [SystemFunctions.MapKeys, LumenTypes.String],
+  [SystemFunctions.TokenizeSource, LumenTypes.String],
+  [SystemFunctions.ParseSummary, LumenTypes.String],
+  [SystemFunctions.CompilerImage, LumenTypes.String],
+  [FsFunctions.ReadFile, LumenTypes.String],
+  [FsFunctions.WriteFile, LumenTypes.I32],
+  [HttpFunctions.ServeFiles, LumenTypes.I32],
+  [HttpFunctions.ServeApi, LumenTypes.I32],
+  [HttpFunctions.ServeHttp, LumenTypes.I32],
+  [HttpFunctions.ServeSocketIoChat, LumenTypes.I32],
+  [HttpFunctions.SocketIoEvent, LumenTypes.String],
+  [HttpFunctions.SocketIoEmit, LumenTypes.String],
+  [HttpFunctions.HttpRequest, LumenTypes.String],
+  [HttpFunctions.HttpResponse, LumenTypes.String],
+  [ThreadFunctions.CreateSemaphore, LumenTypes.Semaphore],
+  [ThreadFunctions.SemaphoreWait, LumenTypes.I32],
+  [ThreadFunctions.SemaphoreSignal, LumenTypes.I32],
+  [ThreadFunctions.StartThread, LumenTypes.Thread],
+  [ThreadFunctions.JoinThread, LumenTypes.I32],
+  [ThreadFunctions.AppendFile, LumenTypes.I32]
+])
+
 export class ExpressionInspector {
-  constructor(scope, typeSystem, systemLibrary = new SystemLibrary(), fsLibrary = new FsLibrary(), httpLibrary = new HttpLibrary(), threadLibrary = new ThreadLibrary()) {
+  constructor(
+    scope,
+    typeSystem,
+    systemLibrary = new SystemLibrary(),
+    fsLibrary = new FsLibrary(),
+    httpLibrary = new HttpLibrary(),
+    threadLibrary = new ThreadLibrary()
+  ) {
     this.scope = scope
     this.typeSystem = typeSystem
     this.systemLibrary = systemLibrary
@@ -16,531 +109,308 @@ export class ExpressionInspector {
     this.threadLibrary = threadLibrary
   }
 
-  infer(rawExpression) {
-    if (!rawExpression || rawExpression.tokens.length === 0) return LumenTypes.Void
-    if (rawExpression.tokens.length === 1 && ['true', 'false'].includes(rawExpression.tokens[0].lexeme)) return LumenTypes.Bool
-    if (rawExpression.tokens[0]?.lexeme === 'await') {
-      return this.infer({
-        tokens: rawExpression.tokens.slice(1)
-      })
-    }
-    if (this.isCall(rawExpression, SystemFunctions.Println)) return LumenTypes.Void
-    if (this.isCall(rawExpression, SystemFunctions.Len)) return LumenTypes.I32
-    if (this.isCall(rawExpression, SystemFunctions.Min)) return this.numericPairType(rawExpression.tokens, 'min')
-    if (this.isCall(rawExpression, SystemFunctions.Max)) return this.numericPairType(rawExpression.tokens, 'max')
-    if (this.isCall(rawExpression, SystemFunctions.Filter)) return this.filterType(rawExpression.tokens)
-    if (this.isCall(rawExpression, SystemFunctions.Includes)) return this.includesType(rawExpression.tokens)
-    if (this.isCall(rawExpression, SystemFunctions.Uuid)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.Date)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.Env)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.Encrypt)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.Decrypt)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.Arg)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.ArgCount)) return LumenTypes.I32
-    if (this.isCall(rawExpression, SystemFunctions.Map)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.MapGet)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.MapHas)) return LumenTypes.Bool
-    if (this.isCall(rawExpression, SystemFunctions.Ok)) return this.resultOkType(rawExpression.tokens)
-    if (this.isCall(rawExpression, SystemFunctions.Err)) return 'Result<unknown>'
-    if (this.isCall(rawExpression, SystemFunctions.IsOk)) return LumenTypes.Bool
-    if (this.isCall(rawExpression, SystemFunctions.ResultValue)) return this.resultValueType(rawExpression.tokens)
-    if (this.isCall(rawExpression, SystemFunctions.ErrorMessage)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.Some)) return this.someType(rawExpression.tokens)
-    if (this.isCall(rawExpression, SystemFunctions.None)) return LumenTypes.Unknown
-    if (this.isCall(rawExpression, SystemFunctions.HasValue)) return LumenTypes.Bool
-    if (this.isCall(rawExpression, SystemFunctions.ValueOr)) return this.valueOrType(rawExpression.tokens)
-    if (this.isCall(rawExpression, SystemFunctions.Assert)) return LumenTypes.Void
-    if (this.isCall(rawExpression, SystemFunctions.Channel)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.Send)) return LumenTypes.Void
-    if (this.isCall(rawExpression, SystemFunctions.Receive)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.Json)) return LumenTypes.Json
-    if (this.isCall(rawExpression, SystemFunctions.JsonGet)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.JsonGetRaw)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.JsonSet)) return LumenTypes.Json
-    if (this.isCall(rawExpression, SystemFunctions.JsonSetPath)) return LumenTypes.Json
-    if (this.isCall(rawExpression, SystemFunctions.JsonQuote)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.JsonStringify)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.JsonValid)) return LumenTypes.Bool
-    if (this.isCall(rawExpression, SystemFunctions.NewError)) return LumenTypes.Error
-    if (this.isCall(rawExpression, SystemFunctions.ErrorCode)) return LumenTypes.I32
-    if (this.isCall(rawExpression, SystemFunctions.ErrorText)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.ArraySum)) return LumenTypes.I32
-    if (this.isCall(rawExpression, SystemFunctions.ArrayFirst)) return this.arrayElementCallType(rawExpression.tokens)
-    if (this.isCall(rawExpression, SystemFunctions.ArrayLast)) return this.arrayElementCallType(rawExpression.tokens)
-    if (this.isCall(rawExpression, SystemFunctions.ArrayJoin)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.Exec)) return LumenTypes.I32
-    if (this.isCall(rawExpression, SystemFunctions.SourceSnippet)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.StringBuilder)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.StringBuilderAppend)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.StringLen)) return LumenTypes.I32
-    if (this.isCall(rawExpression, SystemFunctions.StringEquals)) return LumenTypes.Bool
-    if (this.isCall(rawExpression, SystemFunctions.Trim)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.Lower)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.Upper)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.StartsWith)) return LumenTypes.Bool
-    if (this.isCall(rawExpression, SystemFunctions.EndsWith)) return LumenTypes.Bool
-    if (this.isCall(rawExpression, SystemFunctions.Replace)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.Split)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.IndexOf)) return LumenTypes.I32
-    if (this.isCall(rawExpression, SystemFunctions.LastIndexOf)) return LumenTypes.I32
-    if (this.isCall(rawExpression, SystemFunctions.Contains)) return LumenTypes.Bool
-    if (this.isCall(rawExpression, SystemFunctions.Repeat)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.PadStart)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.PadEnd)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.IntToString)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.StringToInt)) return LumenTypes.I32
-    if (this.isCall(rawExpression, SystemFunctions.ParseI32)) return LumenTypes.I32
-    if (this.isCall(rawExpression, SystemFunctions.ParseF32)) return LumenTypes.F32
-    if (this.isCall(rawExpression, SystemFunctions.List)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.ListPush)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.ListGet)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.ListLen)) return LumenTypes.I32
-    if (this.isCall(rawExpression, SystemFunctions.MapSet)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.MapDelete)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.MapKeys)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.TokenizeSource)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.ParseSummary)) return LumenTypes.String
-    if (this.isCall(rawExpression, SystemFunctions.CompilerImage)) return LumenTypes.String
-    if (this.isCall(rawExpression, FsFunctions.ReadFile)) return LumenTypes.String
-    if (this.isCall(rawExpression, FsFunctions.WriteFile)) return LumenTypes.I32
-    if (this.isCall(rawExpression, HttpFunctions.ServeFiles)) return LumenTypes.I32
-    if (this.isCall(rawExpression, HttpFunctions.ServeApi)) return LumenTypes.I32
-    if (this.isCall(rawExpression, HttpFunctions.ServeHttp)) return LumenTypes.I32
-    if (this.isCall(rawExpression, HttpFunctions.ServeSocketIoChat)) return LumenTypes.I32
-    if (this.isCall(rawExpression, HttpFunctions.SocketIoEvent)) return LumenTypes.String
-    if (this.isCall(rawExpression, HttpFunctions.SocketIoEmit)) return LumenTypes.String
-    if (this.isCall(rawExpression, HttpFunctions.HttpRequest)) return LumenTypes.String
-    if (this.isCall(rawExpression, HttpFunctions.HttpResponse)) return LumenTypes.String
-    if (this.isCall(rawExpression, ThreadFunctions.CreateSemaphore)) return LumenTypes.Semaphore
-    if (this.isCall(rawExpression, ThreadFunctions.SemaphoreWait)) return LumenTypes.I32
-    if (this.isCall(rawExpression, ThreadFunctions.SemaphoreSignal)) return LumenTypes.I32
-    if (this.isCall(rawExpression, ThreadFunctions.StartThread)) return LumenTypes.Thread
-    if (this.isCall(rawExpression, ThreadFunctions.JoinThread)) return LumenTypes.I32
-    if (this.isCall(rawExpression, ThreadFunctions.AppendFile)) return LumenTypes.I32
-    if (this.isStructLiteral(rawExpression.tokens)) return rawExpression.tokens[0].lexeme
-    if (this.isFieldAccess(rawExpression.tokens)) return this.fieldAccessType(rawExpression.tokens)
-    if (this.isArrayLiteral(rawExpression.tokens)) return this.arrayLiteralType(rawExpression.tokens)
-    if (this.isArrayAccess(rawExpression.tokens)) return this.arrayAccessType(rawExpression.tokens)
-    if (this.isUserCall(rawExpression.tokens)) return this.userCallType(rawExpression.tokens)
-    if (this.isMatch(rawExpression.tokens)) return this.matchType(rawExpression.tokens)
-    if (this.isSingleIdentifier(rawExpression.tokens)) {
-      return this.scope.resolve(rawExpression.tokens[0].lexeme)?.type ??
-        this.typeSystem.enumVariant(rawExpression.tokens[0].lexeme)?.enumName ??
-        LumenTypes.Unknown
-    }
-
-    let numericType = LumenTypes.I32
-
-    for (let index = 0; index < rawExpression.tokens.length; index += 1) {
-      const token = rawExpression.tokens[index]
-      if (token.type === TokenType.String) return LumenTypes.String
-      if (['<', '<=', '>', '>=', '==', '!='].includes(token.lexeme)) return LumenTypes.Bool
-      if (token.type === TokenType.Identifier && rawExpression.tokens[index + 1]?.lexeme === '[') {
-        const accessType = this.arrayAccessTypeAt(rawExpression.tokens, index)
-        if (this.typeSystem.isNumeric(accessType)) {
-          numericType = this.typeSystem.widest(numericType, accessType)
-        }
-        continue
-      }
-      if (token.type === TokenType.Number && token.lexeme.includes('.')) {
-        numericType = this.typeSystem.widest(numericType, LumenTypes.F32)
-      }
-      if (token.type === TokenType.Number && Math.abs(token.literal) > 2147483647) {
-        numericType = this.typeSystem.widest(numericType, LumenTypes.I64)
-      }
-      if (token.type === TokenType.Identifier) {
-        const symbol = this.scope.resolve(token.lexeme)
-        if (symbol?.type && this.typeSystem.isNumeric(symbol.type)) {
-          numericType = this.typeSystem.widest(numericType, symbol.type)
-        }
-      }
-    }
-
-    return numericType
-  }
-
-  validateNames(rawExpression) {
-    if (!rawExpression) return
-
-    for (const token of rawExpression.tokens) {
-      if (token.type !== TokenType.Identifier) continue
-      if (this.isBuiltinCallName(rawExpression.tokens, token)) continue
-      if (this.isFsCallName(rawExpression.tokens, token)) continue
-      if (this.isHttpCallName(rawExpression.tokens, token)) continue
-      if (this.isThreadCallName(rawExpression.tokens, token)) continue
-      if (this.isUserCallName(rawExpression.tokens, token)) continue
-      if (this.isMatchKeyword(token)) continue
-      if (this.typeSystem.enumVariant(token.lexeme)) continue
-      if (this.isFilterParameter(rawExpression.tokens, token)) continue
-      if (this.isStructLiteralName(rawExpression.tokens, token)) continue
-      if (this.isKnownStructName(rawExpression.tokens, token)) continue
-      if (this.isStructFieldKey(rawExpression.tokens, token)) continue
-      if (this.isAnyFieldKey(rawExpression.tokens, token)) continue
-      if (this.isFieldAccessName(rawExpression.tokens, token)) continue
-      if (this.isFieldName(rawExpression.tokens, token)) continue
-      if (['await', 'true', 'false', 'null'].includes(token.lexeme)) continue
-      if (!this.scope.resolve(token.lexeme)) {
-        throw new Diagnostic(`Unknown symbol "${token.lexeme}"`, token.location, 'semantic')
-      }
-    }
-  }
-
-  isStructLiteral(tokens) {
-    return tokens[0]?.type === TokenType.Identifier &&
-      tokens[1]?.lexeme === '{' &&
-      tokens.at(-1)?.lexeme === '}' &&
-      this.typeSystem.getStruct(tokens[0].lexeme)
-  }
-
-  isArrayLiteral(tokens) {
-    return tokens[0]?.lexeme === '[' && tokens.at(-1)?.lexeme === ']'
-  }
-
-  isSingleIdentifier(tokens) {
-    return tokens.length === 1 && tokens[0]?.type === TokenType.Identifier
-  }
-
-  arrayLiteralType(tokens) {
-    const elements = this.splitDelimited(tokens.slice(1, -1))
-    if (elements.length === 0) return LumenTypes.Unknown
-
-    const firstType = this.infer({
-      tokens: elements[0]
-    })
-    let type = firstType
-
-    for (const element of elements.slice(1)) {
-      const elementType = this.infer({
-        tokens: element
-      })
-      type = this.typeSystem.isNumeric(type) && this.typeSystem.isNumeric(elementType)
-        ? this.typeSystem.widest(type, elementType)
-        : type
-    }
-
-    return `${type}[]`
-  }
-
-  isArrayAccess(tokens) {
-    return tokens[0]?.type === TokenType.Identifier &&
-      tokens[1]?.lexeme === '['
-  }
-
-  arrayAccessType(tokens) {
-    return this.arrayAccessTypeAt(tokens, 0)
-  }
-
-  arrayAccessTypeAt(tokens, index) {
-    const base = this.scope.resolve(tokens[index].lexeme)
-    if (base?.type === LumenTypes.String) return LumenTypes.String
-
-    if (!base || !this.typeSystem.isArray(base.type)) {
-      throw new Diagnostic(`Expected array "${tokens[index].lexeme}"`, tokens[index].location, 'semantic')
-    }
-
-    let type = this.typeSystem.elementType(base.type)
-    const closeIndex = this.findMatching(tokens, index + 1, '[', ']')
-
-    if (tokens[closeIndex + 1]?.lexeme === '.') {
-      const fieldName = tokens[closeIndex + 2]?.lexeme
-      const field = this.typeSystem.getField(type, fieldName)
-
-      if (!field) {
-        throw new Diagnostic(`Unknown field "${fieldName}"`, tokens[closeIndex + 2]?.location, 'semantic')
-      }
-
-      type = field.type
-    }
-
+  infer(expression) {
+    const node = this.expressionNode(expression)
+    const type = this.inferNode(node)
+    if (node) node.inferredType = type
     return type
   }
 
-  isStructLiteralName(tokens, token) {
-    return tokens.indexOf(token) === 0 && this.isStructLiteral(tokens)
-  }
+  inferNode(node) {
+    if (!node) return LumenTypes.Void
 
-  isKnownStructName(tokens, token) {
-    const index = tokens.indexOf(token)
-    return this.typeSystem.getStruct(token.lexeme) && tokens[index + 1]?.lexeme === '{'
-  }
-
-  isStructFieldKey(tokens, token) {
-    const index = tokens.indexOf(token)
-    return this.isStructLiteral(tokens) && tokens[index + 1]?.lexeme === ':'
-  }
-
-  isFieldAccess(tokens) {
-    return tokens.length === 3 &&
-      tokens[0]?.type === TokenType.Identifier &&
-      tokens[1]?.lexeme === '.' &&
-      tokens[2]?.type === TokenType.Identifier
-  }
-
-  isFieldAccessName(tokens, token) {
-    return this.isFieldAccess(tokens) && tokens.indexOf(token) === 2
-  }
-
-  isFieldName(tokens, token) {
-    const index = tokens.indexOf(token)
-    return tokens[index - 1]?.lexeme === '.'
-  }
-
-  isAnyFieldKey(tokens, token) {
-    const index = tokens.indexOf(token)
-    return tokens[index + 1]?.lexeme === ':'
-  }
-
-  fieldAccessType(tokens) {
-    const base = this.scope.resolve(tokens[0].lexeme)
-    const field = base ? this.typeSystem.getField(base.type, tokens[2].lexeme) : null
-
-    if (!field) {
-      throw new Diagnostic(`Unknown field "${tokens[2].lexeme}"`, tokens[2].location, 'semantic')
+    if (node.kind === 'LiteralExpression') return this.literalType(node)
+    if (node.kind === 'IdentifierExpression') return this.identifierType(node)
+    if (node.kind === 'AwaitExpression') return this.inferNode(node.argument)
+    if (node.kind === 'UnaryExpression') {
+      return node.operator === '!' ? LumenTypes.Bool : this.inferNode(node.argument)
     }
-
-    return field.type
-  }
-
-  isCall(rawExpression, name) {
-    return rawExpression.tokens[0]?.lexeme === name &&
-      rawExpression.tokens[1]?.lexeme === '(' &&
-      rawExpression.tokens.at(-1)?.lexeme === ')'
-  }
-
-  isMatch(tokens) {
-    return tokens[0]?.lexeme === 'match'
-  }
-
-  matchType(tokens) {
-    const arrow = tokens.findIndex(token => token.lexeme === '=>')
-    if (arrow < 0) return LumenTypes.Unknown
-    return this.infer({
-      tokens: this.readMatchArmExpression(tokens, arrow + 1)
-    })
-  }
-
-  readMatchArmExpression(tokens, start) {
-    const value = []
-    let depth = 0
-    for (let index = start; index < tokens.length - 1; index += 1) {
-      const token = tokens[index]
-      if (depth === 0 && token.type === TokenType.Semicolon) break
-      if (depth === 0 && (token.lexeme === '=>' || token.lexeme === '_')) break
-      if (['(', '[', '{'].includes(token.lexeme)) depth += 1
-      if ([')', ']', '}'].includes(token.lexeme)) depth -= 1
-      value.push(token)
-    }
-    return value
-  }
-
-  isMatchKeyword(token) {
-    return ['match', '_'].includes(token.lexeme)
-  }
-
-  isBuiltinCallName(tokens, token) {
-    const index = tokens.indexOf(token)
-    return this.systemLibrary.has(token.lexeme) && tokens[index + 1]?.lexeme === '('
-  }
-
-  isFsCallName(tokens, token) {
-    const index = tokens.indexOf(token)
-    return this.fsLibrary.has(token.lexeme) && tokens[index + 1]?.lexeme === '('
-  }
-
-  isHttpCallName(tokens, token) {
-    const index = tokens.indexOf(token)
-    return this.httpLibrary.has(token.lexeme) && tokens[index + 1]?.lexeme === '('
-  }
-
-  isThreadCallName(tokens, token) {
-    const index = tokens.indexOf(token)
-    return this.threadLibrary.has(token.lexeme) && tokens[index + 1]?.lexeme === '('
-  }
-
-  isUserCall(tokens) {
-    return tokens[0]?.type === TokenType.Identifier &&
-      tokens[1]?.lexeme === '(' &&
-      tokens.at(-1)?.lexeme === ')' &&
-      this.scope.resolve(tokens[0].lexeme)?.kind === 'function'
-  }
-
-  userCallType(tokens) {
-    const symbol = this.scope.resolve(tokens[0].lexeme)
-    const args = this.callArguments(tokens)
-    const params = symbol?.node?.params ?? []
-
-    if (args.length !== params.length) {
-      throw new Diagnostic(`Invalid call to ${tokens[0].lexeme}`, tokens[0].location, 'semantic')
-    }
-
-    for (const [index, arg] of args.entries()) {
-      const actual = this.infer({
-        tokens: arg
-      })
-      const expected = params[index].inferredType ?? params[index].typeAnnotation?.name ?? LumenTypes.I32
-
-      if (!this.typeSystem.canAssign(actual, expected)) {
-        throw new Diagnostic(`Cannot pass ${actual} to ${expected}`, tokens[0].location, 'semantic')
+    if (node.kind === 'BinaryExpression') return this.binaryType(node)
+    if (node.kind === 'CallExpression') return this.callType(node)
+    if (node.kind === 'MemberExpression') return this.memberType(node)
+    if (node.kind === 'AssignmentExpression') return this.assignmentType(node)
+    if (node.kind === 'UpdateExpression') {
+      const type = this.inferNode(node.argument)
+      if (!this.typeSystem.isNumeric(type)) {
+        throw new Diagnostic(`${node.operator} needs numeric target`, node.location, 'type')
       }
+      return type
     }
+    if (node.kind === 'ArrayExpression') return this.arrayType(node)
+    if (node.kind === 'StructExpression') return node.name
+    if (node.kind === 'MatchExpression') return this.matchType(node)
+    if (node.kind === 'ArrowFunctionExpression') return LumenTypes.Unknown
+    if (node.kind === 'SliceExpression') return LumenTypes.String
 
-    return symbol?.type ?? LumenTypes.Unknown
+    return LumenTypes.Unknown
   }
 
-  isUserCallName(tokens, token) {
-    const index = tokens.indexOf(token)
-    return this.scope.resolve(token.lexeme)?.kind === 'function' && tokens[index + 1]?.lexeme === '('
+  validateNames(expression) {
+    this.validateNode(this.expressionNode(expression), new Set())
   }
 
-  isFilterParameter(tokens, token) {
-    if (!this.isCall({ tokens }, SystemFunctions.Filter)) return false
+  validateNode(node, locals) {
+    if (!node) return
 
-    const args = this.callArguments(tokens)
-    const predicate = args[1] ?? []
-    const arrow = predicate.findIndex(part => part.lexeme === '=>')
-    const name = predicate[arrow - 1]?.lexeme
+    if (node.kind === 'IdentifierExpression') {
+      if (locals.has(node.name) || this.scope.resolve(node.name) || this.typeSystem.enumVariant(node.name)) return
+      throw new Diagnostic(`Unknown symbol "${node.name}"`, node.location, 'semantic')
+    }
 
-    return token.lexeme === name
+    if (node.kind === 'CallExpression') {
+      const name = this.calleeName(node)
+      if (!name || !this.isKnownCall(name)) this.validateNode(node.callee, locals)
+      for (const argument of node.arguments) this.validateNode(argument, locals)
+      return
+    }
+
+    if (node.kind === 'MemberExpression') {
+      this.validateNode(node.object, locals)
+      if (node.computed) this.validateNode(node.property, locals)
+      return
+    }
+
+    if (node.kind === 'StructExpression') {
+      if (!this.typeSystem.getStruct(node.name)) {
+        throw new Diagnostic(`Unknown struct "${node.name}"`, node.location, 'semantic')
+      }
+      for (const field of node.fields) this.validateNode(field.value, locals)
+      return
+    }
+
+    if (node.kind === 'ArrowFunctionExpression') {
+      const arrowLocals = new Set(locals)
+      for (const param of node.params) arrowLocals.add(param.name)
+      this.validateNode(node.body, arrowLocals)
+      return
+    }
+
+    if (node.kind === 'MatchExpression') {
+      this.validateNode(node.discriminant, locals)
+      for (const arm of node.arms) {
+        this.validateNode(arm.pattern, locals)
+        this.validateNode(arm.value, locals)
+      }
+      return
+    }
+
+    for (const child of this.expressionChildren(node)) this.validateNode(child, locals)
   }
 
-  filterType(tokens) {
-    const args = this.callArguments(tokens)
-    if (args.length !== 2) {
-      throw new Diagnostic('filter expects array and predicate', tokens[0].location, 'semantic')
-    }
-
-    return this.infer({
-      tokens: args[0]
-    })
+  literalType(node) {
+    const token = node.token
+    if (token.type === TokenType.String) return LumenTypes.String
+    if (token.lexeme === 'true' || token.lexeme === 'false') return LumenTypes.Bool
+    if (token.lexeme === 'null') return LumenTypes.Unknown
+    if (token.type === TokenType.Number && token.lexeme.includes('.')) return LumenTypes.F32
+    if (token.type === TokenType.Number && Math.abs(token.literal) > 2147483647) return LumenTypes.I64
+    return LumenTypes.I32
   }
 
-  includesType(tokens) {
-    const args = this.callArguments(tokens)
-    if (args.length !== 2) {
-      throw new Diagnostic('includes expects collection and value', tokens[0].location, 'semantic')
-    }
-
-    const haystackType = this.infer({
-      tokens: args[0]
-    })
-
-    if (haystackType !== LumenTypes.String && !this.typeSystem.isArray(haystackType)) {
-      throw new Diagnostic('includes needs string or array', tokens[0].location, 'semantic')
-    }
-
-    return LumenTypes.Bool
+  identifierType(node) {
+    return this.scope.resolve(node.name)?.type ??
+      this.typeSystem.enumVariant(node.name)?.enumName ??
+      LumenTypes.Unknown
   }
 
-  numericPairType(tokens, name) {
-    const args = this.callArguments(tokens)
-    if (args.length !== 2) {
-      throw new Diagnostic(`${name} expects two numbers`, tokens[0].location, 'semantic')
+  binaryType(node) {
+    if (['<', '<=', '>', '>=', '==', '===', '!=', '!==', '&&', '||'].includes(node.operator)) {
+      return LumenTypes.Bool
     }
 
-    const left = this.infer({
-      tokens: args[0]
-    })
-    const right = this.infer({
-      tokens: args[1]
-    })
-
+    const left = this.inferNode(node.left)
+    const right = this.inferNode(node.right)
+    if (node.operator === '+' && left === LumenTypes.String && right === LumenTypes.String) {
+      return LumenTypes.String
+    }
     if (!this.typeSystem.isNumeric(left) || !this.typeSystem.isNumeric(right)) {
-      throw new Diagnostic(`${name} expects numeric arguments`, tokens[0].location, 'semantic')
+      throw new Diagnostic(`Operator ${node.operator} needs numbers`, node.location, 'type')
     }
-
     return this.typeSystem.widest(left, right)
   }
 
-  arrayElementCallType(tokens) {
-    const args = this.callArguments(tokens)
-    if (args.length !== 1) return LumenTypes.Unknown
-    const collectionType = this.infer({
-      tokens: args[0]
-    })
-    return this.typeSystem.isArray(collectionType)
-      ? this.typeSystem.elementType(collectionType)
-      : LumenTypes.Unknown
-  }
+  callType(node) {
+    const name = this.calleeName(node)
+    if (!name) return LumenTypes.Unknown
 
-  resultOkType(tokens) {
-    const args = this.callArguments(tokens)
-    if (args.length !== 1) return 'Result<unknown>'
-    const valueType = this.infer({
-      tokens: args[0]
-    })
-    return `Result<${valueType}>`
-  }
-
-  resultValueType(tokens) {
-    const args = this.callArguments(tokens)
-    if (args.length !== 1) return LumenTypes.Unknown
-    const resultType = this.infer({
-      tokens: args[0]
-    })
-    if (!this.typeSystem.isGeneric(resultType) || this.typeSystem.genericBase(resultType) !== 'Result') {
-      throw new Diagnostic('resultValue expects Result<T>', tokens[0].location, 'semantic')
+    if (name === SystemFunctions.Min || name === SystemFunctions.Max) {
+      return this.numericPairType(node, name)
     }
-
-    return this.typeSystem.genericArgs(resultType)[0] ?? LumenTypes.Unknown
-  }
-
-  someType(tokens) {
-    const args = this.callArguments(tokens)
-    if (args.length !== 1) return LumenTypes.Unknown
-    const valueType = this.infer({
-      tokens: args[0]
-    })
-    return `${valueType}?`
-  }
-
-  valueOrType(tokens) {
-    const args = this.callArguments(tokens)
-    if (args.length !== 2) return LumenTypes.Unknown
-    const maybeType = this.infer({
-      tokens: args[0]
-    })
-    if (this.typeSystem.isNullable(maybeType)) return this.typeSystem.nonNullable(maybeType)
-    return this.infer({
-      tokens: args[1]
-    })
-  }
-
-  splitDelimited(tokens) {
-    const parts = []
-    let current = []
-    let depth = 0
-
-    for (const token of tokens) {
-      if (depth === 0 && token.lexeme === ',') {
-        parts.push(current)
-        current = []
-        continue
+    if (name === SystemFunctions.Filter) {
+      if (node.arguments.length !== 2 || node.arguments[1].kind !== 'ArrowFunctionExpression') {
+        throw new Diagnostic('filter expects array and predicate', node.location, 'semantic')
       }
+      return this.inferNode(node.arguments[0])
+    }
+    if (name === SystemFunctions.Includes) {
+      if (node.arguments.length !== 2) {
+        throw new Diagnostic('includes expects collection and value', node.location, 'semantic')
+      }
+      const collection = this.inferNode(node.arguments[0])
+      if (collection !== LumenTypes.String && !this.typeSystem.isArray(collection)) {
+        throw new Diagnostic('includes needs string or array', node.location, 'semantic')
+      }
+      return LumenTypes.Bool
+    }
+    if (name === SystemFunctions.Ok) {
+      return `Result<${node.arguments[0] ? this.inferNode(node.arguments[0]) : LumenTypes.Unknown}>`
+    }
+    if (name === SystemFunctions.ResultValue) {
+      const result = node.arguments[0] ? this.inferNode(node.arguments[0]) : LumenTypes.Unknown
+      if (!this.typeSystem.isGeneric(result) || this.typeSystem.genericBase(result) !== 'Result') {
+        throw new Diagnostic('resultValue expects Result<T>', node.location, 'semantic')
+      }
+      return this.typeSystem.genericArgs(result)[0] ?? LumenTypes.Unknown
+    }
+    if (name === SystemFunctions.Some) {
+      return `${node.arguments[0] ? this.inferNode(node.arguments[0]) : LumenTypes.Unknown}?`
+    }
+    if (name === SystemFunctions.ValueOr) {
+      const maybe = node.arguments[0] ? this.inferNode(node.arguments[0]) : LumenTypes.Unknown
+      return this.typeSystem.isNullable(maybe)
+        ? this.typeSystem.nonNullable(maybe)
+        : node.arguments[1] ? this.inferNode(node.arguments[1]) : LumenTypes.Unknown
+    }
+    if (name === SystemFunctions.ArrayFirst || name === SystemFunctions.ArrayLast) {
+      const collection = node.arguments[0] ? this.inferNode(node.arguments[0]) : LumenTypes.Unknown
+      return this.typeSystem.isArray(collection)
+        ? this.typeSystem.elementType(collection)
+        : LumenTypes.Unknown
+    }
+    if (FIXED_CALL_TYPES.has(name)) return FIXED_CALL_TYPES.get(name)
 
-      if (['(', '[', '{'].includes(token.lexeme)) depth += 1
-      if ([')', ']', '}'].includes(token.lexeme)) depth -= 1
-      current.push(token)
+    const symbol = this.scope.resolve(name)
+    if (symbol?.kind !== 'function') return LumenTypes.Unknown
+    const params = symbol.node?.params ?? []
+    if (node.arguments.length !== params.length) {
+      throw new Diagnostic(`Invalid call to ${name}`, node.location, 'semantic')
     }
 
-    if (current.length > 0) parts.push(current)
-    return parts
-  }
-
-  callArguments(tokens) {
-    return this.splitDelimited(tokens.slice(2, -1))
-  }
-
-  findMatching(tokens, start, open, close) {
-    let depth = 0
-
-    for (let index = start; index < tokens.length; index += 1) {
-      if (tokens[index].lexeme === open) depth += 1
-      if (tokens[index].lexeme === close) {
-        depth -= 1
-        if (depth === 0) return index
+    for (const [index, argument] of node.arguments.entries()) {
+      const actual = this.inferNode(argument)
+      const expected = params[index].inferredType ??
+        params[index].typeAnnotation?.name ??
+        LumenTypes.I32
+      if (!this.typeSystem.canAssign(actual, expected)) {
+        throw new Diagnostic(`Cannot pass ${actual} to ${expected}`, node.location, 'semantic')
       }
     }
+    return symbol.type ?? LumenTypes.Unknown
+  }
 
-    return -1
+  numericPairType(node, name) {
+    if (node.arguments.length !== 2) {
+      throw new Diagnostic(`${name} expects two numbers`, node.location, 'semantic')
+    }
+    const left = this.inferNode(node.arguments[0])
+    const right = this.inferNode(node.arguments[1])
+    if (!this.typeSystem.isNumeric(left) || !this.typeSystem.isNumeric(right)) {
+      throw new Diagnostic(`${name} expects numeric arguments`, node.location, 'semantic')
+    }
+    return this.typeSystem.widest(left, right)
+  }
+
+  memberType(node) {
+    const objectType = this.inferNode(node.object)
+    if (node.computed) {
+      if (node.property.kind === 'SliceExpression') {
+        if (objectType !== LumenTypes.String) {
+          throw new Diagnostic('Slice needs string', node.location, 'semantic')
+        }
+        return LumenTypes.String
+      }
+      if (objectType === LumenTypes.String) return LumenTypes.String
+      if (!this.typeSystem.isArray(objectType)) {
+        throw new Diagnostic('Expected array', node.location, 'semantic')
+      }
+      return this.typeSystem.elementType(objectType)
+    }
+
+    const field = this.typeSystem.getField(objectType, node.property.name)
+    if (!field) {
+      throw new Diagnostic(`Unknown field "${node.property.name}"`, node.property.location, 'semantic')
+    }
+    return field.type
+  }
+
+  assignmentType(node) {
+    const target = this.inferNode(node.left)
+    const value = this.inferNode(node.right)
+    if (target !== LumenTypes.Unknown && !this.typeSystem.canAssign(value, target)) {
+      throw new Diagnostic(`Cannot assign ${value} to ${target}`, node.location, 'type')
+    }
+    return target === LumenTypes.Unknown ? value : target
+  }
+
+  arrayType(node) {
+    if (node.elements.length === 0) return LumenTypes.Unknown
+    let type = this.inferNode(node.elements[0])
+    for (const element of node.elements.slice(1)) {
+      const elementType = this.inferNode(element)
+      if (this.typeSystem.isNumeric(type) && this.typeSystem.isNumeric(elementType)) {
+        type = this.typeSystem.widest(type, elementType)
+      }
+    }
+    return `${type}[]`
+  }
+
+  matchType(node) {
+    if (node.arms.length === 0) return LumenTypes.Unknown
+    const discriminantType = this.inferNode(node.discriminant)
+    for (const arm of node.arms) {
+      if (!arm.pattern) continue
+      const patternType = this.inferNode(arm.pattern)
+      if (!this.typeSystem.canAssign(patternType, discriminantType) &&
+        !this.typeSystem.canAssign(discriminantType, patternType)) {
+        throw new Diagnostic(
+          `Cannot match ${discriminantType} with ${patternType}`,
+          arm.location,
+          'type'
+        )
+      }
+    }
+
+    let type = this.inferNode(node.arms[0].value)
+    for (const arm of node.arms.slice(1)) {
+      const armType = this.inferNode(arm.value)
+      if (this.typeSystem.isNumeric(type) && this.typeSystem.isNumeric(armType)) {
+        type = this.typeSystem.widest(type, armType)
+      } else if (!this.typeSystem.canAssign(armType, type) && !this.typeSystem.canAssign(type, armType)) {
+        throw new Diagnostic(`Match arms return ${type} and ${armType}`, arm.location, 'type')
+      }
+    }
+    return type
+  }
+
+  calleeName(node) {
+    return node.callee.kind === 'IdentifierExpression'
+      ? node.callee.name
+      : null
+  }
+
+  isKnownCall(name) {
+    return this.systemLibrary.has(name) ||
+      this.fsLibrary.has(name) ||
+      this.httpLibrary.has(name) ||
+      this.threadLibrary.has(name) ||
+      this.scope.resolve(name)?.kind === 'function'
+  }
+
+  expressionNode(expression) {
+    return expression?.kind === 'RawExpression'
+      ? expression.parsed
+      : expression
+  }
+
+  expressionChildren(node) {
+    if (node.kind === 'UnaryExpression' || node.kind === 'AwaitExpression' || node.kind === 'UpdateExpression') {
+      return [node.argument]
+    }
+    if (node.kind === 'BinaryExpression' || node.kind === 'AssignmentExpression') {
+      return [node.left, node.right]
+    }
+    if (node.kind === 'ArrayExpression') return node.elements
+    if (node.kind === 'SliceExpression') return [node.start, node.end]
+    return []
   }
 }

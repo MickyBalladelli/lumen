@@ -227,8 +227,145 @@ export class ExpressionStatementNode extends AstNode {
 }
 
 export class RawExpressionNode extends AstNode {
-  constructor(tokens = [], location = null) {
+  constructor(tokens = [], location = null, parsed = null) {
     super('RawExpression', location)
     this.tokens = tokens
+    this.parsed = parsed
+  }
+}
+
+export class ExpressionNode extends AstNode {
+  constructor(kind, location = null, tokens = []) {
+    super(kind, location)
+    this.tokens = tokens
+  }
+}
+
+export class LiteralExpressionNode extends ExpressionNode {
+  constructor(token, tokens = [token]) {
+    super('LiteralExpression', token.location, tokens)
+    this.token = token
+    this.value = token.literal
+  }
+}
+
+export class IdentifierExpressionNode extends ExpressionNode {
+  constructor(name, location = null, tokens = []) {
+    super('IdentifierExpression', location, tokens)
+    this.name = name
+  }
+}
+
+export class CallExpressionNode extends ExpressionNode {
+  constructor(callee, args, location = null, tokens = []) {
+    super('CallExpression', location, tokens)
+    this.callee = callee
+    this.arguments = args
+  }
+}
+
+export class MemberExpressionNode extends ExpressionNode {
+  constructor(object, property, computed, location = null, tokens = []) {
+    super('MemberExpression', location, tokens)
+    this.object = object
+    this.property = property
+    this.computed = computed
+  }
+}
+
+export class AssignmentExpressionNode extends ExpressionNode {
+  constructor(operator, left, right, location = null, tokens = []) {
+    super('AssignmentExpression', location, tokens)
+    this.operator = operator
+    this.left = left
+    this.right = right
+  }
+}
+
+export class UpdateExpressionNode extends ExpressionNode {
+  constructor(operator, argument, prefix, location = null, tokens = []) {
+    super('UpdateExpression', location, tokens)
+    this.operator = operator
+    this.argument = argument
+    this.prefix = prefix
+  }
+}
+
+export class UnaryExpressionNode extends ExpressionNode {
+  constructor(operator, argument, location = null, tokens = []) {
+    super('UnaryExpression', location, tokens)
+    this.operator = operator
+    this.argument = argument
+  }
+}
+
+export class BinaryExpressionNode extends ExpressionNode {
+  constructor(operator, left, right, location = null, tokens = []) {
+    super('BinaryExpression', location, tokens)
+    this.operator = operator
+    this.left = left
+    this.right = right
+  }
+}
+
+export class ArrayExpressionNode extends ExpressionNode {
+  constructor(elements, location = null, tokens = []) {
+    super('ArrayExpression', location, tokens)
+    this.elements = elements
+  }
+}
+
+export class StructExpressionNode extends ExpressionNode {
+  constructor(name, fields, location = null, tokens = []) {
+    super('StructExpression', location, tokens)
+    this.name = name
+    this.fields = fields
+  }
+}
+
+export class StructPropertyNode extends ExpressionNode {
+  constructor(key, value, location = null, tokens = []) {
+    super('StructProperty', location, tokens)
+    this.key = key
+    this.value = value
+  }
+}
+
+export class MatchExpressionNode extends ExpressionNode {
+  constructor(discriminant, arms, location = null, tokens = []) {
+    super('MatchExpression', location, tokens)
+    this.discriminant = discriminant
+    this.arms = arms
+  }
+}
+
+export class MatchArmNode extends ExpressionNode {
+  constructor(pattern, value, location = null, tokens = []) {
+    super('MatchArm', location, tokens)
+    this.pattern = pattern
+    this.value = value
+  }
+}
+
+export class AwaitExpressionNode extends ExpressionNode {
+  constructor(argument, location = null, tokens = []) {
+    super('AwaitExpression', location, tokens)
+    this.argument = argument
+  }
+}
+
+export class ArrowFunctionExpressionNode extends ExpressionNode {
+  constructor(params, body, location = null, tokens = []) {
+    super('ArrowFunctionExpression', location, tokens)
+    this.params = params
+    this.body = body
+  }
+}
+
+export class SliceExpressionNode extends ExpressionNode {
+  constructor(start, end, location = null, tokens = []) {
+    super('SliceExpression', location, tokens)
+    this.start = start
+    this.end = end
   }
 }

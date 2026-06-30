@@ -152,6 +152,7 @@ export class ModuleGraph {
     }
     if (node.kind === 'RawExpression') {
       this.rewriteExpression(node, names, scope)
+      this.rewriteExpressionNode(node.parsed, names, typeNames, scope)
       return
     }
     if (node.kind === 'FunctionDeclaration' || node.kind === 'ExternFunctionDeclaration') {
@@ -234,6 +235,66 @@ export class ModuleGraph {
 
       token.lexeme = names.get(token.lexeme)
       if (typeof token.literal === 'string') token.literal = token.lexeme
+    }
+  }
+
+  rewriteExpressionNode(node, names, typeNames, scope) {
+    if (!node) return
+
+    if (node.kind === 'IdentifierExpression') {
+      if (names.has(node.name) && !scope.has(node.name)) {
+        node.name = names.get(node.name)
+      }
+      return
+    }
+
+    if (node.kind === 'StructExpression') {
+      node.name = typeNames.get(node.name) ?? node.name
+      for (const field of node.fields) {
+        this.rewriteExpressionNode(field.value, names, typeNames, scope)
+      }
+      return
+    }
+
+    if (node.kind === 'ArrowFunctionExpression') {
+      const arrowScope = new Set(scope)
+      for (const param of node.params) arrowScope.add(param.name)
+      this.rewriteExpressionNode(node.body, names, typeNames, arrowScope)
+      return
+    }
+
+    if (node.kind === 'CallExpression') {
+      this.rewriteExpressionNode(node.callee, names, typeNames, scope)
+      for (const argument of node.arguments) {
+        this.rewriteExpressionNode(argument, names, typeNames, scope)
+      }
+      return
+    }
+
+    if (node.kind === 'MemberExpression') {
+      this.rewriteExpressionNode(node.object, names, typeNames, scope)
+      if (node.computed) this.rewriteExpressionNode(node.property, names, typeNames, scope)
+      return
+    }
+
+    if (node.kind === 'MatchExpression') {
+      this.rewriteExpressionNode(node.discriminant, names, typeNames, scope)
+      for (const arm of node.arms) {
+        this.rewriteExpressionNode(arm.pattern, names, typeNames, scope)
+        this.rewriteExpressionNode(arm.value, names, typeNames, scope)
+      }
+      return
+    }
+
+    const children = []
+    if (node.argument) children.push(node.argument)
+    if (node.left) children.push(node.left)
+    if (node.right) children.push(node.right)
+    if (node.start) children.push(node.start)
+    if (node.end) children.push(node.end)
+    if (node.elements) children.push(...node.elements)
+    for (const child of children) {
+      this.rewriteExpressionNode(child, names, typeNames, scope)
     }
   }
 }

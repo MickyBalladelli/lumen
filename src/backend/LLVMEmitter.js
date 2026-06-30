@@ -52,6 +52,7 @@ export class LLVMEmitter {
     this.usesErrorRuntime = false
     this.usesArrayRuntime = false
     this.usesThread = false
+    this.astCallArguments = []
     this.functionSignatures = new Map([
       ...irModule.functions.map(func => [func.name, func]),
       ...(irModule.externs ?? []).map(func => [func.name, func])
@@ -465,13 +466,13 @@ export class LLVMEmitter {
       })
 
       if (declaration.initializer) {
-        if (this.isArrayLiteral(declaration.initializer.tokens)) {
-          this.emitArrayInitializer(pointer, type, declaration.initializer.tokens)
+        if (declaration.initializer.parsed?.kind === 'ArrayExpression') {
+          this.emitArrayInitializerNode(pointer, type, declaration.initializer.parsed)
           continue
         }
 
-        if (this.isStructLiteral(declaration.initializer.tokens)) {
-          this.emitStructInitializer(pointer, type, declaration.initializer.tokens)
+        if (declaration.initializer.parsed?.kind === 'StructExpression') {
+          this.emitStructInitializerNode(pointer, type, declaration.initializer.parsed)
           continue
         }
 
@@ -544,7 +545,7 @@ export class LLVMEmitter {
     })
     if (!assignment) return null
 
-    const targetPointer = this.emitAssignmentTargetPointer(assignment.targetTokens)
+    const targetPointer = this.emitLValueNode(assignment.target)
     const value = this.emitSelectableIfValue(node, assignment.targetName)
 
     this.lines.push(`  store ${this.llvmType(targetPointer.type)} ${this.cast(value, targetPointer.type)}, ptr ${targetPointer.pointer}`)
@@ -572,11 +573,7 @@ export class LLVMEmitter {
     const statement = this.singleBlockStatement(branch)
     if (statement.kind === 'IfStatement') return this.emitSelectableIfValue(statement, targetName)
 
-    const assignmentIndex = this.findTopLevelOperator(statement.expression.tokens, '=')
-    return this.emitExpression({
-      tokens: statement.expression.tokens.slice(assignmentIndex + 1),
-      location: statement.expression.location
-    })
+    return this.emitExpression(statement.expression.parsed.right)
   }
 
   selectableIfAssignment(node, { allowConditionRemainder = false } = {}) {
@@ -598,16 +595,14 @@ export class LLVMEmitter {
     if (statement.kind === 'IfStatement') return this.selectableIfAssignment(statement)
     if (statement.kind !== 'ExpressionStatement') return null
 
-    const tokens = statement.expression.tokens
-    const assignmentIndex = this.findTopLevelOperator(tokens, '=')
-    if (assignmentIndex <= 0 || !this.isSideEffectFreeExpression(statement.expression)) return null
-
-    const targetTokens = tokens.slice(0, assignmentIndex)
-    if (targetTokens.length !== 1 || targetTokens[0].type !== TokenType.Identifier) return null
+    const expression = statement.expression.parsed
+    if (expression?.kind !== 'AssignmentExpression' ||
+      expression.left.kind !== 'IdentifierExpression' ||
+      !this.isSideEffectFreeExpression(expression.right)) return null
 
     return {
-      targetName: targetTokens[0].lexeme,
-      targetTokens
+      targetName: expression.left.name,
+      target: expression.left
     }
   }
 
@@ -619,13 +614,22 @@ export class LLVMEmitter {
   }
 
   isSideEffectFreeExpression(expression, { allowRemainder = false } = {}) {
-    return expression?.tokens.every(token => {
-      if (token.type === TokenType.Operator && (token.lexeme === '/' || (!allowRemainder && token.lexeme === '%'))) return false
-      if ([TokenType.Number, TokenType.Identifier, TokenType.Operator, TokenType.Punctuation].includes(token.type)) return true
-      if (token.type === TokenType.Keyword && ['true', 'false'].includes(token.lexeme)) return true
-
-      return false
-    })
+    const node = expression?.kind === 'RawExpression' ? expression.parsed : expression
+    if (!node) return false
+    if (node.kind === 'LiteralExpression' || node.kind === 'IdentifierExpression') return true
+    if (node.kind === 'UnaryExpression') {
+      return this.isSideEffectFreeExpression(node.argument, { allowRemainder })
+    }
+    if (node.kind === 'BinaryExpression') {
+      if (node.operator === '/' || (!allowRemainder && node.operator === '%')) return false
+      return this.isSideEffectFreeExpression(node.left, { allowRemainder }) &&
+        this.isSideEffectFreeExpression(node.right, { allowRemainder })
+    }
+    if (node.kind === 'MemberExpression') {
+      return this.isSideEffectFreeExpression(node.object, { allowRemainder }) &&
+        (!node.computed || this.isSideEffectFreeExpression(node.property, { allowRemainder }))
+    }
+    return false
   }
 
   emitSwitch(node) {
@@ -799,11 +803,17 @@ export class LLVMEmitter {
   }
 
   emitForOf(node) {
-    if (this.isCall(node.iterable.tokens, SystemFunctions.Filter)) {
+    const iterableNode = node.iterable.parsed
+    if (iterableNode?.kind === 'CallExpression' &&
+      iterableNode.callee.kind === 'IdentifierExpression' &&
+      iterableNode.callee.name === SystemFunctions.Filter) {
       return this.emitFilteredForOf(node)
     }
 
-    const iterableName = this.singleIdentifierName(node.iterable)
+    if (iterableNode?.kind !== 'IdentifierExpression') {
+      throw new Diagnostic('for-of iterable must be an array variable', node.iterable.location, 'backend')
+    }
+    const iterableName = iterableNode.name
     const iterable = this.resolve(iterableName)
 
     if (!this.typeSystem.isArray(iterable.type) || iterable.length === null) {
@@ -858,18 +868,30 @@ export class LLVMEmitter {
   }
 
   emitFilteredForOf(node) {
-    const args = this.callArguments(node.iterable.tokens)
-    const iterableName = this.singleIdentifierName({ tokens: args[0], location: node.iterable.location })
+    const call = node.iterable.parsed
+    const collection = call.arguments[0]
+    const predicate = call.arguments[1]
+    if (collection?.kind !== 'IdentifierExpression' ||
+      predicate?.kind !== 'ArrowFunctionExpression' ||
+      predicate.params.length !== 1) {
+      throw new Diagnostic('filter expects array and predicate', node.iterable.location, 'backend')
+    }
+
+    const iterableName = collection.name
     const iterable = this.resolve(iterableName)
 
     if (!this.typeSystem.isArray(iterable.type) || iterable.length === null) {
       throw new Diagnostic('filter needs fixed array', node.location, 'backend')
     }
 
-    const predicate = this.filterPredicate(args[1], node.iterable.location)
     const elementType = this.typeSystem.elementType(iterable.type)
     const indexPointer = this.alloca(`.${node.item.name}.index`, LumenTypes.I32)
     const itemPointer = this.alloca(node.item.name, elementType)
+    this.define(predicate.params[0].name, {
+      pointer: itemPointer,
+      type: elementType,
+      length: null
+    })
     const conditionLabel = this.nextLabel('filter.cond')
     const predicateLabel = this.nextLabel('filter.pred')
     const bodyLabel = this.nextLabel('filter.body')
@@ -899,7 +921,7 @@ export class LLVMEmitter {
     this.lines.push(`  ${elementValue} = load ${this.llvmType(elementType)}, ptr ${elementPointer}`)
     this.lines.push(`  store ${this.llvmType(elementType)} ${elementValue}, ptr ${itemPointer}`)
 
-    const passes = this.emitRpn(this.toRpn(predicate.tokens), node.iterable.location)
+    const passes = this.emitExpression(predicate.body)
     this.lines.push(`  br i1 ${this.cast(passes, LumenTypes.Bool)}, label %${bodyLabel}, label %${updateLabel}`)
     this.lines.push(`${bodyLabel}:`)
 
@@ -920,6 +942,243 @@ export class LLVMEmitter {
   }
 
   emitExpression(expression) {
+    const node = expression?.kind === 'RawExpression'
+      ? expression.parsed
+      : expression?.kind
+        ? expression
+        : expression?.tokens?.parsed ?? null
+
+    if (node) return this.emitExpressionNode(node)
+    return this.emitTokenExpression(expression)
+  }
+
+  emitExpressionNode(node) {
+    if (!node) return { type: LumenTypes.Void, value: '' }
+
+    if (node.kind === 'AwaitExpression') return this.emitExpression(node.argument)
+    if (node.kind === 'CallExpression') {
+      return this.emitCallExpressionNode(node)
+    }
+    if (node.kind === 'MemberExpression') {
+      return this.emitMemberNode(node)
+    }
+    if (node.kind === 'AssignmentExpression') {
+      return this.emitAssignmentNode(node)
+    }
+    if (node.kind === 'UpdateExpression') {
+      if (node.argument.kind !== 'IdentifierExpression') {
+        throw new Diagnostic('Update target must be an identifier', node.location, 'backend')
+      }
+      return this.emitUpdate(node.argument, node.operator)
+    }
+    if (node.kind === 'MatchExpression') return this.emitMatchNode(node)
+    if (node.kind === 'LiteralExpression') {
+      const token = node.token
+      if (token.type === TokenType.String) {
+        if (token.literal.includes('${')) return this.emitInterpolatedString(token)
+        const value = this.globalCString(token.literal)
+        return { type: LumenTypes.String, value: value.pointer }
+      }
+      if (token.lexeme === 'true' || token.lexeme === 'false') {
+        return { type: LumenTypes.Bool, value: token.lexeme === 'true' ? '1' : '0' }
+      }
+      if (token.lexeme === 'null') return { type: LumenTypes.Unknown, value: 'null' }
+      const type = this.numberLiteralType(token)
+      return {
+        type,
+        value: type === LumenTypes.F32 ? this.floatConstant(token.literal) : String(token.literal)
+      }
+    }
+    if (node.kind === 'IdentifierExpression') {
+      if (this.enumConstants.has(node.name)) return this.enumConstants.get(node.name)
+      const symbol = this.resolve(node.name)
+      const value = this.nextTemp()
+      this.lines.push(`  ${value} = load ${this.llvmType(symbol.type)}, ptr ${symbol.pointer}`)
+      return { type: symbol.type, value }
+    }
+    if (node.kind === 'UnaryExpression') {
+      const value = this.emitExpression(node.argument)
+      if (node.operator === '+') return value
+      if (node.operator === '-') {
+        return this.emitBinary(
+          { lexeme: '-', location: node.location },
+          { type: value.type, value: value.type === LumenTypes.F32 ? '0.000000e+00' : '0' },
+          value
+        )
+      }
+      if (node.operator === '!') {
+        return this.emitBinary(
+          { lexeme: '==', location: node.location },
+          value,
+          { type: LumenTypes.Bool, value: '0' }
+        )
+      }
+    }
+    if (node.kind === 'BinaryExpression') {
+      const left = this.emitExpression(node.left)
+      const right = this.emitExpression(node.right)
+      if (node.operator === '&&' || node.operator === '||') {
+        const value = this.nextTemp()
+        const instruction = node.operator === '&&' ? 'and' : 'or'
+        this.lines.push(`  ${value} = ${instruction} i1 ${this.cast(left, LumenTypes.Bool)}, ${this.cast(right, LumenTypes.Bool)}`)
+        return { type: LumenTypes.Bool, value }
+      }
+      const operator = node.operator === '==='
+        ? '=='
+        : node.operator === '!=='
+          ? '!='
+          : node.operator
+      return this.emitBinary({ lexeme: operator, location: node.location }, left, right)
+    }
+
+    throw new Diagnostic(`Unsupported ${node.kind}`, node.location, 'backend')
+  }
+
+  emitAssignmentNode(node) {
+    const target = this.emitLValueNode(node.left)
+    const value = this.emitExpression(node.right)
+    const stored = this.cast(value, target.type)
+    this.lines.push(`  store ${this.llvmType(target.type)} ${stored}, ptr ${target.pointer}`)
+    return { type: target.type, value: stored }
+  }
+
+  emitMemberNode(node) {
+    if (node.computed && node.object.kind === 'IdentifierExpression') {
+      const base = this.resolve(node.object.name)
+      if (base.type === LumenTypes.String) {
+        this.usesBounds = true
+        const source = this.nextTemp()
+        this.lines.push(`  ${source} = load ptr, ptr ${base.pointer}`)
+
+        if (node.property.kind === 'SliceExpression') {
+          this.usesSlice = true
+          const start = this.emitExpression(node.property.start)
+          const end = this.emitExpression(node.property.end)
+          const result = this.nextTemp()
+          this.lines.push(`  ${result} = call ptr @lumen_string_slice(ptr ${source}, i32 ${this.cast(start, LumenTypes.I32)}, i32 ${this.cast(end, LumenTypes.I32)})`)
+          return { type: LumenTypes.String, value: result }
+        }
+
+        const index = this.emitExpression(node.property)
+        const result = this.nextTemp()
+        this.lines.push(`  ${result} = call ptr @lumen_string_at(ptr ${source}, i32 ${this.cast(index, LumenTypes.I32)})`)
+        return { type: LumenTypes.String, value: result }
+      }
+    }
+
+    const target = this.emitLValueNode(node)
+    const value = this.nextTemp()
+    this.lines.push(`  ${value} = load ${this.llvmType(target.type)}, ptr ${target.pointer}`)
+    return { type: target.type, value }
+  }
+
+  emitLValueNode(node) {
+    if (node.kind === 'IdentifierExpression') {
+      const symbol = this.resolve(node.name)
+      return {
+        pointer: symbol.pointer,
+        type: symbol.type,
+        length: symbol.length
+      }
+    }
+
+    if (node.kind !== 'MemberExpression') {
+      throw new Diagnostic('Assignment target must be identifier or access', node.location, 'backend')
+    }
+
+    const object = this.emitLValueNode(node.object)
+    if (node.computed) {
+      if (node.property.kind === 'SliceExpression') {
+        throw new Diagnostic('Slice cannot be assigned', node.location, 'backend')
+      }
+      if (!this.typeSystem.isArray(object.type) || object.length === null) {
+        throw new Diagnostic('Array access needs fixed array', node.location, 'backend')
+      }
+      const index = this.emitExpression(node.property)
+      const checked = this.emitBoundsCheck(this.cast(index, LumenTypes.I32), object.length)
+      const pointer = this.nextTemp()
+      this.lines.push(`  ${pointer} = getelementptr inbounds ${this.typeSystem.llvmArray(object.type, object.length)}, ptr ${object.pointer}, i32 0, i32 ${checked}`)
+      return {
+        pointer,
+        type: this.typeSystem.elementType(object.type),
+        length: null
+      }
+    }
+
+    const field = this.typeSystem.getField(object.type, node.property.name)
+    const struct = this.typeSystem.getStruct(object.type)
+    if (!field || !struct) {
+      throw new Diagnostic(`Unknown field "${node.property.name}"`, node.property.location, 'backend')
+    }
+    const pointer = this.nextTemp()
+    const fieldIndex = struct.fields.indexOf(field)
+    this.lines.push(`  ${pointer} = getelementptr inbounds ${this.llvmType(object.type)}, ptr ${object.pointer}, i32 0, i32 ${fieldIndex}`)
+    return {
+      pointer,
+      type: field.type,
+      length: null
+    }
+  }
+
+  emitCallExpressionNode(node) {
+    if (node.callee.kind !== 'IdentifierExpression') {
+      throw new Diagnostic('Call target must be a function name', node.location, 'backend')
+    }
+
+    if (this.functionSignatures.has(node.callee.name)) {
+      return this.emitUserCallNode(node)
+    }
+
+    this.astCallArguments.push({
+      arguments: node.arguments.map(argument => {
+        const tokens = [...argument.tokens]
+        tokens.parsed = argument
+        return tokens
+      }),
+      consumed: false,
+      name: node.callee.name,
+      matched: false
+    })
+    try {
+      const tokens = [
+        {
+          ...node.tokens[0],
+          lexeme: node.callee.name,
+          literal: node.callee.name
+        },
+        ...node.tokens.slice(1)
+      ]
+      return this.emitTokenExpression({
+        tokens,
+        location: node.location
+      })
+    } finally {
+      this.astCallArguments.pop()
+    }
+  }
+
+  emitUserCallNode(node) {
+    const name = node.callee.name
+    const signature = this.functionSignatures.get(name)
+    if (!signature || node.arguments.length !== signature.params.length) {
+      throw new Diagnostic(`Invalid call to ${name}`, node.location, 'backend')
+    }
+
+    const values = node.arguments.map(argument => this.emitExpression(argument))
+    const result = signature.returnType === LumenTypes.Void ? null : this.nextTemp()
+    const callArgs = values.map((value, index) => {
+      const paramType = signature.params[index].type
+      return `${this.llvmType(paramType)} ${this.cast(value, paramType)}`
+    }).join(', ')
+    const prefix = result ? `${result} = ` : ''
+    this.lines.push(`  ${prefix}call ${this.llvmType(signature.returnType)} @${name}(${callArgs})`)
+    return {
+      type: signature.returnType,
+      value: result ?? ''
+    }
+  }
+
+  emitTokenExpression(expression) {
     if (!expression || expression.tokens.length === 0) {
       return { type: LumenTypes.Void, value: '' }
     }
@@ -1145,10 +1404,23 @@ export class LLVMEmitter {
   }
 
   emitIncrement(token) {
+    return this.emitUpdate({
+      name: token.lexeme,
+      location: token.location
+    }, '++')
+  }
+
+  emitUpdate(identifier, operator) {
+    const token = {
+      lexeme: identifier.name,
+      location: identifier.location
+    }
     const symbol = this.resolve(token.lexeme)
     const current = this.nextTemp()
     const next = this.nextTemp()
-    const instruction = symbol.type === LumenTypes.F32 ? 'fadd' : 'add'
+    const instruction = symbol.type === LumenTypes.F32
+      ? operator === '++' ? 'fadd' : 'fsub'
+      : operator === '++' ? 'add' : 'sub'
     const one = symbol.type === LumenTypes.F32 ? '1.000000e+00' : '1'
 
     this.lines.push(`  ${current} = load ${this.llvmType(symbol.type)}, ptr ${symbol.pointer}`)
@@ -1158,6 +1430,43 @@ export class LLVMEmitter {
     return {
       type: symbol.type,
       value: next
+    }
+  }
+
+  emitStructInitializerNode(pointer, type, node) {
+    const struct = this.typeSystem.getStruct(type)
+    const values = new Map(node.fields.map(field => [field.key, field.value]))
+
+    for (let index = 0; index < struct.fields.length; index += 1) {
+      const field = struct.fields[index]
+      const valueNode = values.get(field.name)
+      const fieldPointer = this.nextTemp()
+      this.lines.push(`  ${fieldPointer} = getelementptr inbounds ${this.llvmType(type)}, ptr ${pointer}, i32 0, i32 ${index}`)
+
+      if (valueNode.kind === 'StructExpression') {
+        this.emitStructInitializerNode(fieldPointer, field.type, valueNode)
+        continue
+      }
+
+      const value = this.emitExpression(valueNode)
+      this.lines.push(`  store ${this.llvmType(field.type)} ${this.cast(value, field.type)}, ptr ${fieldPointer}`)
+    }
+  }
+
+  emitArrayInitializerNode(pointer, type, node) {
+    const elementType = this.typeSystem.elementType(type)
+
+    for (let index = 0; index < node.elements.length; index += 1) {
+      const elementPointer = this.nextTemp()
+      this.lines.push(`  ${elementPointer} = getelementptr inbounds ${this.typeSystem.llvmArray(type, node.elements.length)}, ptr ${pointer}, i32 0, i32 ${index}`)
+
+      if (node.elements[index].kind === 'StructExpression') {
+        this.emitStructInitializerNode(elementPointer, elementType, node.elements[index])
+        continue
+      }
+
+      const value = this.emitExpression(node.elements[index])
+      this.lines.push(`  store ${this.llvmType(elementType)} ${this.cast(value, elementType)}, ptr ${elementPointer}`)
     }
   }
 
@@ -2856,6 +3165,47 @@ export class LLVMEmitter {
     }
   }
 
+  emitMatchNode(node) {
+    if (node.arms.length === 0) {
+      throw new Diagnostic('match needs at least one arm', node.location, 'backend')
+    }
+
+    const discriminant = this.emitExpression(node.discriminant)
+    const resultType = node.inferredType ?? this.emitExpression(node.arms[0].value).type
+    const resultPointer = this.alloca('.match.result', resultType)
+    const endLabel = this.nextLabel('match.end')
+    const defaultArm = node.arms.find(arm => arm.pattern === null)
+    const testArms = node.arms.filter(arm => arm.pattern !== null)
+    const testLabels = testArms.map(() => this.nextLabel('match.test'))
+    const bodyLabels = testArms.map(() => this.nextLabel('match.body'))
+    const defaultLabel = defaultArm ? this.nextLabel('match.default') : endLabel
+
+    this.lines.push(`  br label %${testLabels[0] ?? defaultLabel}`)
+    for (let index = 0; index < testArms.length; index += 1) {
+      const arm = testArms[index]
+      this.lines.push(`${testLabels[index]}:`)
+      const test = this.emitExpression(arm.pattern)
+      const matches = this.emitEqualityComparison(discriminant, test)
+      this.lines.push(`  br i1 ${matches.value}, label %${bodyLabels[index]}, label %${testLabels[index + 1] ?? defaultLabel}`)
+      this.lines.push(`${bodyLabels[index]}:`)
+      const value = this.emitExpression(arm.value)
+      this.lines.push(`  store ${this.llvmType(resultType)} ${this.cast(value, resultType)}, ptr ${resultPointer}`)
+      this.lines.push(`  br label %${endLabel}`)
+    }
+
+    if (defaultArm) {
+      this.lines.push(`${defaultLabel}:`)
+      const value = this.emitExpression(defaultArm.value)
+      this.lines.push(`  store ${this.llvmType(resultType)} ${this.cast(value, resultType)}, ptr ${resultPointer}`)
+      this.lines.push(`  br label %${endLabel}`)
+    }
+
+    this.lines.push(`${endLabel}:`)
+    const result = this.nextTemp()
+    this.lines.push(`  ${result} = load ${this.llvmType(resultType)}, ptr ${resultPointer}`)
+    return { type: resultType, value: result }
+  }
+
   matchArms(tokens, location) {
     const arms = []
     let index = 0
@@ -2975,6 +3325,13 @@ export class LLVMEmitter {
   }
 
   isCall(tokens, name) {
+    const active = this.astCallArguments.at(-1)
+    if (active && !active.matched) {
+      if (active.name !== name) return false
+      active.matched = true
+      return true
+    }
+
     return tokens[0]?.lexeme === name &&
       tokens[1]?.lexeme === '(' &&
       tokens.at(-1)?.lexeme === ')'
@@ -3268,6 +3625,12 @@ export class LLVMEmitter {
   }
 
   callArguments(tokens) {
+    const active = this.astCallArguments.at(-1)
+    if (active && !active.consumed) {
+      active.consumed = true
+      return active.arguments
+    }
+
     const args = []
     let current = []
     let depth = 0

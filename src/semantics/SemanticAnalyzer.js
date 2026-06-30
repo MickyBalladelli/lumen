@@ -90,6 +90,10 @@ export class SemanticAnalyzer {
     if (node.kind === 'BreakStatement') return
     if (node.kind === 'ContinueStatement') return
     if (node.kind === 'TryCatchStatement') return this.visitTryCatch(node, scope)
+    if (node.kind === 'ExpressionStatement') return this.visitExpression(node.expression, scope)
+    if (node.kind === 'DeferStatement') return this.visitExpression(node.expression, scope)
+    if (node.kind === 'ReturnStatement') return this.visitExpression(node.argument, scope)
+    if (node.kind === 'ThrowStatement') return this.visitExpression(node.argument, scope)
   }
 
   visitFunction(node, scope) {
@@ -134,6 +138,7 @@ export class SemanticAnalyzer {
 
   visitVariableDeclaration(node, scope) {
     for (const declaration of node.declarations) {
+      this.visitExpression(declaration.initializer, scope)
       if (!scope.define(declaration.id.name, {
         kind: 'variable',
         node: declaration,
@@ -149,13 +154,18 @@ export class SemanticAnalyzer {
 
     if (node.init?.kind === 'VariableDeclaration') {
       this.visitVariableDeclaration(node.init, loopScope)
+    } else {
+      this.visitExpression(node.init, loopScope)
     }
 
+    this.visitExpression(node.test, loopScope)
+    this.visitExpression(node.update, loopScope)
     this.visit(node.body, loopScope)
   }
 
   visitForOf(node, scope) {
     const loopScope = new Scope(scope)
+    this.visitExpression(node.iterable, scope)
 
     loopScope.define(node.item.name, {
       kind: 'variable',
@@ -168,6 +178,8 @@ export class SemanticAnalyzer {
 
   visitForRange(node, scope) {
     const loopScope = new Scope(scope)
+    this.visitExpression(node.start, scope)
+    this.visitExpression(node.end, scope)
 
     loopScope.define(node.item.name, {
       kind: 'variable',
@@ -179,16 +191,22 @@ export class SemanticAnalyzer {
   }
 
   visitLoop(node, scope) {
+    this.visitExpression(node.test, scope)
     this.visit(node.body, new Scope(scope))
   }
 
   visitIf(node, scope) {
+    this.visitExpression(node.test, scope)
     this.visit(node.consequent, new Scope(scope))
     if (node.alternate) this.visit(node.alternate, new Scope(scope))
   }
 
   visitSwitch(node, scope) {
-    for (const switchCase of node.cases) this.visit(switchCase.body, new Scope(scope))
+    this.visitExpression(node.discriminant, scope)
+    for (const switchCase of node.cases) {
+      this.visitExpression(switchCase.test, scope)
+      this.visit(switchCase.body, new Scope(scope))
+    }
     if (node.defaultCase) this.visit(node.defaultCase, new Scope(scope))
   }
 
@@ -204,4 +222,47 @@ export class SemanticAnalyzer {
 
     this.visit(node.catchBlock, catchScope)
   }
+
+  visitExpression(expression, scope) {
+    const node = expression?.kind === 'RawExpression' ? expression.parsed : expression
+    if (!node) return
+
+    if (node.kind === 'ArrowFunctionExpression') {
+      const arrowScope = new Scope(scope)
+      for (const param of node.params) {
+        arrowScope.define(param.name, {
+          kind: 'param',
+          node: param,
+          mutable: false
+        })
+      }
+      this.visitExpression(node.body, arrowScope)
+      return
+    }
+
+    for (const child of expressionChildren(node)) this.visitExpression(child, scope)
+  }
+}
+
+function expressionChildren(node) {
+  if (node.kind === 'CallExpression') return [node.callee, ...node.arguments]
+  if (node.kind === 'MemberExpression') {
+    return node.computed ? [node.object, node.property] : [node.object]
+  }
+  if (node.kind === 'AssignmentExpression' || node.kind === 'BinaryExpression') {
+    return [node.left, node.right]
+  }
+  if (node.kind === 'UnaryExpression' || node.kind === 'UpdateExpression' || node.kind === 'AwaitExpression') {
+    return [node.argument]
+  }
+  if (node.kind === 'ArrayExpression') return node.elements
+  if (node.kind === 'StructExpression') return node.fields.map(field => field.value)
+  if (node.kind === 'MatchExpression') {
+    return [
+      node.discriminant,
+      ...node.arms.flatMap(arm => [arm.pattern, arm.value])
+    ]
+  }
+  if (node.kind === 'SliceExpression') return [node.start, node.end]
+  return []
 }
