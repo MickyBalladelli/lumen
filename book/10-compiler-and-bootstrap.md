@@ -1,156 +1,158 @@
 # Compiler And Bootstrap
 
+This chapter covers the full compiler architecture: the JavaScript compiler in
+`src/`, the self-host compiler in `compiler/`, the module graph, the bootstrap
+process, the formatter, the language server, and using the compiler as a
+JavaScript library.
+
 ## JS Compiler Pipeline
 
-The main compiler is in `src/`. Pipeline:
+The JavaScript compiler is the primary implementation. It lives in `src/` and
+compiles Lumen source through seven stages:
 
-1. **Tokenizer** (`src/lexer/Tokenizer.js`): source to tokens
-2. **Parser** (`src/parser/Parser.js`): tokens to AST
-3. **Semantic analyzer** (`src/semantics/SemanticAnalyzer.js`): scope and symbol checks
-4. **Type checker** (`src/semantics/TypeChecker.js`): simple i32/bool/string/void typing
-5. **IR builder** (`src/ir/IRBuilder.js`): typed AST to compiler IR
-6. **LLVM emitter** (`src/backend/LLVMEmitter.js`): IR to LLVM text
-7. **Native linker** (`clang`): LLVM to native executable
+### 1. Lexer — `src/lexer/`
 
-Supporting modules:
+The tokenizer converts source text into a stream of tokens.
 
-- `src/modules/ModuleGraph.js`: resolves imports, detects cycles, isolates private names
-- `src/modules/ModuleLoader.js`: loads local and Photon module sources
-- `src/semantics/ExpressionInspector.js`: inspects built-in function calls
-- `src/semantics/ModuleRegistry.js`: registers available module names and exports
-- `src/semantics/Scope.js`: scope tracking
-- `src/semantics/TypeSystem.js`: type definitions
-- `src/runtime/CompilerOptions.js`: ownership and safety settings (placeholders today)
-- `src/compiler/Compiler.js`: end-to-end pipeline and clang driver
-- `src/diagnostics/Diagnostic.js`: error formatting with source snippet and caret
-- `src/formatter/Formatter.js`: source formatting
+| File | Purpose |
+| --- | --- |
+| `Tokenizer.js` | Main tokenizer — reads characters, produces tokens |
+| `Token.js` | Token data structure (type, lexeme, location) |
+| `TokenType.js` | Token type enum (keyword, identifier, number, string, operator, etc.) |
 
-The C runtime is built as one translation unit for easy linking, organized
-internally by system, fs, http, thread, crypto, string, map, result, option, and
-CLI helper sections:
+Keywords recognized: `function`, `let`, `const`, `if`, `else`, `for`, `of`,
+`in`, `while`, `do`, `until`, `return`, `struct`, `enum`, `match`, `switch`,
+`case`, `default`, `break`, `continue`, `defer`, `throw`, `try`, `catch`,
+`import`, `from`, `extern`, `async`, `await`, `true`, `false`, `none`, `ok`,
+`err`, `some`.
 
-- `src/runtime/system.c`
-- `src/runtime/fs.c`
-- `src/runtime/http_runtime.c`
-- `src/runtime/http.c` (contains all HTTP code despite split file comments)
-- `src/runtime/thread.c`
-- `src/runtime/crypto.c`
-- `src/runtime/string.c`
+The tokenizer handles comments, string literals, numeric literals, identifiers,
+operators, and whitespace. It tracks line and column for error reporting.
 
-Platform-specific bits use macOS guards and Linux-safe fallbacks where a native
-provider is not wired yet.
+### 2. Parser — `src/parser/`
 
-Heap strings, JSON values, lists, maps, and runtime objects are runtime-owned.
-Returned allocations stay valid for the process lifetime; internal temporary
-allocations are released when no longer needed; all remaining owned values are
-released at process exit.
+The parser converts tokens into an AST (Abstract Syntax Tree).
 
-## Self-Host Compiler
+| File | Purpose |
+| --- | --- |
+| `Parser.js` | Main parser — recursive descent, builds AST nodes |
+| `ExpressionParser.js` | Expression parsing with operator precedence |
 
-The bootstrap compiler is in `compiler/`. It is written in Lumen and compiles
-a growing subset of the language.
+The parser produces AST nodes for: program, function declaration, variable
+declaration, assignment, binary expression, call expression, return statement,
+if statement, for loop, for-of loop, range loop, while-do loop, do-until loop,
+break, continue, match expression, switch statement, defer statement, throw
+statement, try/catch, import declaration, extern declaration, struct
+declaration, enum declaration, array literal, struct literal, index expression,
+member expression, and string slice.
 
-Files:
+The expression parser uses a recursive descent approach. Currently,
+`RawExpression.parsed` fields are created but **not used** by semantic analysis
+or code generation — those stages currently inspect token shapes directly. This
+is a known architectural gap.
 
-- `compiler/tokenizer.lm`: tokenizes a Lumen subset
-- `compiler/ast.lm`: typed AST entry point with `parseAst(...)`
-- `compiler/parser.lm`: extracts a program model with functions, statements,
-  calls, and expression metadata
-- `compiler/semantics.lm`: `SemanticResult` — checks for `main`, duplicate
-  top-level symbols, unsupported `while 1`, and `break`/`continue` outside
-  valid control-flow regions
-- `compiler/typechecker.lm`: `TypeResult` — checks simple annotated variable
-  initializers plus first-argument function calls, including `none()` and
-  `ok(...)` helper shapes
-- `compiler/ir.lm`: `IrModule` — lowers AST/statement bridge into module facts,
-  instruction counts, return values, print counts, and call/binary/loop flags
-- `compiler/emitter.lm`: LLVM emission with `emitIr(...)` entry point
-- `compiler/modules.lm`: recursively loads local imports and bare package
-  `main.lm` files, skips duplicates, removes handled import declarations, and
-  feeds flattened source into the self-host parser path
-- `compiler/main.lm`: CLI-shaped tiny compiler
+### 3. AST — `src/ast/`
 
-### Bootstrap Flow
+| File | Purpose |
+| --- | --- |
+| `nodes.js` | AST node class definitions (Program, FunctionDecl, VarDecl, etc.) |
+| `AstNodeRegistry.js` | Node class registry for extensibility |
+| `AstVisitor.js` | Visitor base class for compiler passes |
 
-The bootstrap is tested by `npm run test`. That command:
+### 4. Semantic Analyzer — `src/semantics/`
 
-1. Builds the stage-1 compiler from `compiler/main.lm`
-2. Compiles examples, links binaries, runs expected-output checks
-3. Builds the stage-2 delegate compiler
-4. Runs stage-2 against stage-3 and compares byte-for-byte
-5. Runs the stage-3 compiler independently
-6. Runs negative compile tests
+The semantic analyzer checks scope, symbols, and semantic rules.
 
-The stage-1 LLVM seed file is hidden, proving it no longer reads
-`build/lumen-compiler.ll`. The stage-2 compiler no longer contains the
-source-shape example dispatcher; it delegates compile requests to the stage-1
-self-host compiler executable and rejects compiler self-compilation explicitly.
+| File | Purpose |
+| --- | --- |
+| `SemanticAnalyzer.js` | Checks `main` existence, duplicate symbols, break/continue validity, return type compatibility |
+| `Scope.js` | Scope tracking (block scopes, function scopes) |
+| `TypeChecker.js` | Simple type checking for i32, bool, string, void |
+| `TypeSystem.js` | Type definitions and compatibility rules |
+| `ModuleRegistry.js` | Registers known module names and their exported functions |
+| `ExpressionInspector.js` | Inspects expression shapes for built-in function call detection |
 
-Manual use:
+The semantic analyzer:
+- Verifies `main` function exists for executable programs
+- Checks for duplicate top-level declarations
+- Validates `break` and `continue` are inside loop bodies
+- Ensures return types match function declarations (for simple cases)
+- Performs basic type compatibility checks
 
-```bash
-npm run bootstrap
-npm run compile -- examples/basic.lm build/basic-self.ll
-clang -Wno-override-module build/basic-self.ll src/runtime/http.c -pthread -o build/basic-self
-./build/basic-self
-```
+### 5. IR Builder — `src/ir/`
 
-### Self-Host Coverage
+| File | Purpose |
+| --- | --- |
+| `IRBuilder.js` | Converts AST statements into an intermediate representation |
+| `IR.js` | IR data structure definitions |
 
-The self-host parser recognizes imports, extern declarations, structs, enums,
-async functions, `let`/`const`, `if`, classic `for`, for-of, range loops,
-`while`, do-until, `switch`, `defer`, `break`, `continue`, `try`/`catch`,
-`throw`, `return`, and match-expression initializers.
+The IR is currently a simplified representation. `IRFunction.body` still
+contains AST statements rather than fully typed instructions with basic blocks.
+This is a known architectural gap — the goal is to lower expressions and
+control flow into typed instructions before the backend consumes them.
 
-The stage compiler can emit: the tiny bootstrap input; simple `let`/`println`/
-`return` programs; helper function calls; `if`; classic loop smoke cases;
-while-loop smoke cases; struct literals with named integer fields and field
-access; integer array literals/indexing; enum-backed match expressions;
-numeric switch cases; throw/catch recovery; and awaiting simple async
-functions.
+### 6. LLVM Emitter — `src/backend/`
 
-The emit path uses a compatibility map produced from the AST shape. The
-emitter now has an `emitIr(...)` entry point and the compiler calls that
-IR-based path, though its internals still delegate through the legacy statement
-bridge for supported code generation.
+| File | Purpose |
+| --- | --- |
+| `LLVMEmitter.js` | Generates LLVM IR text from the compiler IR |
 
-The command-line self-host compiler reports semantic and type errors with a
-source line and nearby token.
+The emitter is the largest single file at ~3,480 lines. It handles:
+- Function declarations and definitions
+- Variable allocation (LLVM `alloca`)
+- Binary operations (LLVM `add`, `sub`, `mul`, `sdiv`, `srem`, `fadd`, etc.)
+- Comparison operations (LLVM `icmp`, `fcmp`)
+- Control flow (conditional branches, loops)
+- Struct and array lowering (LLVM aggregate types)
+- Built-in function lowering (calls into the C runtime)
+- String emission (global string constants)
+- Module initialization and cleanup
 
-## Module Graph
+### 7. Compiler Driver — `src/compiler/`
 
-The module graph resolves imports separately for each file, deduplicates by
-canonical path, rejects import cycles, honors package export lists, and exposes
-only explicitly imported names while keeping dependency-private names isolated.
-Local imports, bare package imports, and Photon-package imports all flow
-through the same graph.
+| File | Purpose |
+| --- | --- |
+| `Compiler.js` | End-to-end pipeline orchestration and `clang` invocation |
 
-## Formatter
+The compiler driver:
+1. Runs the tokenizer, parser, semantic analyzer, type checker, IR builder, and
+   LLVM emitter in sequence
+2. Writes the LLVM IR to a `.ll` file
+3. Invokes `clang` to compile and link the IR with the C runtime
+4. Produces a native executable
 
-Format Lumen files:
+Each compilation creates fresh instances of semantic, type, IR, and backend
+components — there is no shared mutable state between compilations.
 
-```bash
-lumen-format examples/basic.lm
-lumen-format --check examples/basic.lm
-```
+### Supporting Files
 
-Also available as `npm run format`.
+| File | Purpose |
+| --- | --- |
+| `src/modules/ModuleGraph.js` | Resolves imports, detects cycles, isolates private names |
+| `src/modules/ModuleLoader.js` | Loads local and Photon module sources |
+| `src/runtime/CompilerOptions.js` | Ownership mode, garbage collector, and safety settings (currently placeholders) |
+| `src/diagnostics/Diagnostic.js` | Error formatting with source line and caret |
+| `src/formatter/Formatter.js` | Source code formatting |
+| `src/lsp/LspServer.js` | Language Server Protocol implementation |
 
-## Language Server
+### C Runtime — `src/runtime/`
 
-Start the LSP server:
+The C runtime backs all built-in functions. Despite having split files, all C
+code is compiled as one translation unit for easy linking:
 
-```bash
-lumen-lsp
-```
+| File | Purpose |
+| --- | --- |
+| `system.c` | Print, len, min, max, includes, uuid, date, env, encrypt, decrypt, arg, argCount, maps, results, options, channels, JSON, errors, arrays, string builder |
+| `fs.c` | File read/write |
+| `http_runtime.c` | HTTP helper logic |
+| `http.c` | ~2,272 lines — contains ALL HTTP code (serveFiles, serveApi, serveHttp, chat, WebSocket). The split file comments exist but the code has not been separated |
+| `thread.c` | Semaphores, threading, appendFile |
+| `crypto.c` | AES-256 encryption/decryption |
+| `string.c` | String helpers (len, equals, trim, lower, upper, startsWith, endsWith, replace, split, indexOf, lastIndexOf, contains, repeat, padStart, padEnd, intToString, stringToInt) |
 
-Also available as `npm run lsp`.
+### Library API — `src/index.js`
 
-The VS Code extension bundles syntax highlighting, snippets, formatting,
-diagnostics through `lumen-lsp`, compile command, and native debug launch
-support.
-
-## Use As A Library
+The compiler can be used as a JavaScript library:
 
 ```js
 import { Parser, Tokenizer } from './src/index.js'
@@ -168,33 +170,363 @@ const ast = new Parser(tokens).parseProgram()
 console.log(ast)
 ```
 
+This exports: `Parser`, `Tokenizer`, and other compiler components for
+programmatic use. The module graph, type checker, and LLVM emitter are also
+accessible.
+
+## Module Graph
+
+The module graph in `src/modules/` manages import resolution:
+
+### How It Works
+
+1. **Scan** — the compiler scans the source for `import` declarations
+2. **Resolve** — each import path is resolved to a canonical file path:
+   - Bare module names (`"system"`, `"fs"`, `"http"`, `"thread"`) map to
+     registered modules
+   - Relative paths (`"./modules/math.lm"`) are resolved relative to the
+     importing file
+   - Photon packages in `.photon/packages/` are checked for matching names
+3. **Parse** — each imported file is parsed independently into its own AST
+4. **Deduplicate** — each canonical path is loaded only once, even if imported
+   by multiple files
+5. **Detect cycles** — circular imports produce an error diagnostic
+6. **Isolate names** — only the explicitly imported symbols are visible to the
+   importing file. Dependency-private symbols are inaccessible
+
+### Module Loading In The Self-Host Path
+
+The self-host module loader (`compiler/modules.lm`) recursively loads:
+
+- **Local imports** — files on disk relative to the importing file
+- **Bare package `main.lm`** — packages that have a `main.lm` entry point
+- **Duplicate skipping** — already-loaded paths are not reloaded
+- **Import removal** — handled import declarations are stripped from the source
+  before feeding the flattened program to the parser
+
+## Self-Host Compiler
+
+The bootstrap compiler in `compiler/` is written in Lumen. It compiles a
+growing subset of the language and is verified through a three-stage bootstrap.
+
+### Source Files
+
+| File | Lines | Purpose |
+| --- | --- | --- |
+| `compiler/tokenizer.lm` | | Tokenizes a Lumen subset into tokens |
+| `compiler/ast.lm` | | Typed AST entry point with `parseAst(...)` |
+| `compiler/parser.lm` | | Parses tokens into program model: functions, statements, calls, expressions |
+| `compiler/semantics.lm` | | `SemanticResult` — checks `main`, duplicate symbols, `while 1`, `break`/`continue` validity |
+| `compiler/typechecker.lm` | | `TypeResult` — checks annotated variable initializers and first-argument function calls including `none()` and `ok(...)` shapes |
+| `compiler/ir.lm` | | `IrModule` — lowers AST/statement bridge into module facts, instruction counts, return values, print counts, call/binary/loop flags |
+| `compiler/emitter.lm` | | LLVM emission with `emitIr(...)` entry point. Internals still delegate through the legacy statement bridge |
+| `compiler/modules.lm` | | Recursive module loader for local imports and package `main.lm` files |
+| `compiler/main.lm` | | CLI entry point — reads source, runs pipeline, writes LLVM IR |
+
+### Parser Coverage
+
+The self-host parser recognizes:
+- Imports, extern declarations
+- Structs, enums
+- Async functions
+- `let`/`const` variable declarations
+- `if`/`else` branching
+- Classic `for`, for-of, range loops
+- `while`, do-until
+- `switch` with cases and default
+- `defer`, `break`, `continue`
+- `try`/`catch`, `throw`
+- `return` statements
+- Match expression initializers
+
+### Code Generation Coverage
+
+The stage compiler can emit LLVM for:
+- The tiny bootstrap self-compilation input
+- Simple `let`/`println`/`return` programs
+- Helper function calls
+- `if` branching
+- Classic loop smoke cases
+- While-loop smoke cases
+- Struct literals with named integer fields and field access
+- Integer array literals and indexing
+- Enum-backed match expressions
+- Numeric switch cases
+- Throw/catch recovery
+- Awaiting simple async functions
+
+### Emitter Architecture
+
+The emitter has an `emitIr(...)` entry point that accepts an `IrModule`.
+Internally, it still delegates through a compatibility map produced from the
+AST shape. The long-term goal is to remove the AST-to-map bridge and emit
+directly from typed IR.
+
+### Diagnostic Format
+
+The command-line self-host compiler reports errors with:
+
+```
+Error: <message>
+  at <file>:<line>:<column>
+  <source line>
+  <caret marker>
+```
+
+Semantic errors (missing `main`, duplicate symbols, invalid break/continue) and
+type errors (mismatched variable initializer types) are both reported this way.
+
+## Bootstrap Process
+
+The bootstrap is verified by `npm run test`. It proves the compiler is
+genuinely self-hosting through three stages:
+
+### Stage 1
+
+The JavaScript compiler compiles `compiler/main.lm` into a native executable
+(`build/lumen-compiler`). This is the first self-host compiler. The LLVM seed
+file is **hidden** during testing to prove the compiler does not depend on a
+pre-existing binary or seed IR.
+
+### Stage 2
+
+The stage-1 compiler compiles `compiler/main.lm` again, producing a **second**
+native executable. This second compiler delegates all compilation requests to
+the stage-1 compiler. It explicitly **rejects** compiler self-compilation
+requests, proving it is not using the same code path as stage 1.
+
+The stage-2 compiler no longer contains the source-shape example dispatcher
+that was present in earlier versions. The C source-to-LLVM fallback has been
+completely removed from the runtime.
+
+### Stage 3
+
+The stage-2 compiler compiles a renamed copy of `compiler/main.lm`, producing
+a **third** native executable. This stage-3 compiler is compared **byte for
+byte** with the stage-2 compiler. If they match, the bootstrap is proven — the
+compiler can reproduce itself deterministically.
+
+The stage-3 compiler is then run independently to verify it can compile
+example programs correctly.
+
+### Manual Bootstrap
+
+You can run the bootstrap manually:
+
+```bash
+# Build stage 1
+npm run bootstrap
+
+# Use the self-host compiler
+npm run compile -- examples/basic.lm build/basic.ll
+
+# Link and run
+clang -Wno-override-module build/basic.ll src/runtime/http.c -pthread -o build/basic
+./build/basic
+```
+
+## Formatter
+
+The formatter (`src/formatter/Formatter.js`) formats Lumen source files.
+
+### Usage
+
+```bash
+# Format a file in place
+lumen-format examples/basic.lm
+
+# Check formatting without modifying
+lumen-format --check examples/basic.lm
+
+# Via npm
+npm run format -- examples/basic.lm
+npm run format -- --check examples/basic.lm
+```
+
+### Formatting Rules
+
+The formatter currently uses line-based regex patterns. It normalizes:
+- Indentation (spaces)
+- Spacing around operators and braces
+- Line breaks between top-level declarations
+
+### Limitations
+
+- **Regex-based** — formatting is done with line regexes, not from tokens/AST.
+  This means it cannot handle all syntactic edge cases correctly.
+- **Comments** — comment formatting may not preserve original placement.
+- **Nested literals** — complex nested expressions may not format correctly.
+- **Strings with braces** — `"${...}"` interpolation inside strings may confuse
+  brace matching.
+- **CRLF** — line ending handling is not fully tested.
+- **Idempotency** — formatting twice may produce different output in edge
+  cases.
+
+## Language Server (LSP)
+
+The language server (`src/lsp/LspServer.js`) implements a subset of the
+Language Server Protocol over stdio.
+
+### Capabilities
+
+- **Diagnostics** — reports compilation errors on file open and save
+- **Formatting** — formats documents via the formatter
+- **Compile** — VS Code extension provides a compile command
+
+### Usage
+
+```bash
+# Start the LSP server
+lumen-lsp
+
+# Via npm
+npm run lsp
+```
+
+The server listens on stdio for LSP messages. Configure your editor to launch
+`lumen-lsp` for `.lm` files, or install the VS Code extension which does this
+automatically.
+
+### Known Gaps
+
+- **Local imports** — `import { ... } from "./file.lm"` currently produces
+  `Unknown module` in LSP diagnostics because the LSP uses a different
+  compilation path than the CLI module graph.
+- **No `didClose`** — closing a file does not clean up its diagnostics.
+- **No debounce** — every keystroke triggers a full recompile; diagnostics are
+  not debounced or cancelled.
+- **Single document** — compiler state is not isolated per document/build.
+- **No language intelligence** — go-to-definition, references, hover types,
+  completion, rename, symbols, semantic tokens, and code actions are not
+  implemented. The current extension re-parses files rather than using compiler
+  data.
+
+## VS Code Extension
+
+The VS Code extension in `vscode-lumen/` provides:
+
+| Feature | Description |
+| --- | --- |
+| **Syntax highlighting** | TextMate grammar for `.lm` files (keywords, types, strings, comments, numbers) |
+| **Snippets** | Pre-built snippets for function, for, while, if, match, struct, enum |
+| **Language configuration** | Auto-closing braces, brackets, quotes; comment toggling |
+| **Formatting** | Format on save via `lumen-lsp` |
+| **Diagnostics** | Error squiggles with source snippets and carets via `lumen-lsp` |
+| **Compile** | Command palette action to compile the current file |
+| **Debug** | Native debug launch configuration for CodeLLDB |
+
+Package the extension:
+
+```bash
+cd vscode-lumen
+npm install
+npm run package
+code --install-extension lumen-language-0.1.0.vsix
+```
+
+## Memory Management
+
+The C runtime owns all heap-allocated values:
+
+- **Strings** returned by helpers are owned by the runtime and stay valid for
+  the process lifetime
+- **JSON** values, **maps**, **lists**, and **runtime objects** are similarly
+  owned
+- **Internal temporaries** are freed when no longer needed
+- **All remaining owned values** are released at process exit
+- **Borrowed pointers** (arguments, environment strings, literals, static data)
+  are not registered as owned — the runtime does not free them
+
+`CompilerOptions` in `src/runtime/CompilerOptions.js` has exposed settings for
+`ownership` with values `manual`, `arc`, `borrow`, `gc`, and `hybrid`. These
+are **reserved placeholders** — changing them currently has no effect on
+behavior.
+
+## Bounds Checking
+
+Runtime bounds checking applies to:
+
+- **Array reads** — indexing out of bounds produces a diagnostic and exits
+- **Array writes** — assigning out of bounds produces a diagnostic and exits
+- **Loop indices** — for-of and range loop indices are bounded
+- **String indexing** — slice indices are validated
+- **String slicing** — start and end indices are bounds-checked
+
+The sanitizer test suite runs compiled programs under ASan (AddressSanitizer)
+and UBSan (UndefinedBehaviorSanitizer) to verify memory safety.
+
 ## Missing
 
-- Finish the expression AST and stop using token-shape heuristics.
-  `RawExpression.parsed` is created but ignored by semantic analysis, type
-  checking, and code generation
-- Build a real typed IR. Current `IRFunction.body` contains AST statements.
-  Lower expressions and control flow into typed instructions/basic blocks
-- Split the 3,480-line LLVM emitter into focused lowering modules
-- Strengthen the type checker: require boolean conditions, prove non-void
-  functions return on every path, reject use before initialization
-- Define one built-in/runtime ABI registry instead of duplicating function
-  names and signatures across module registry, expression inspection, type
-  checking, emitter code, and C
-- Make diagnostics module-aware and recoverable: preserve file/range data
-  through parsing, module loading, IR, and LLVM emission; report multiple
-  diagnostics per run
-- Create a JS/self-host parity matrix: differentially compile every supported
-  feature with both compilers and compare
-- Support Linux instead of returning silent fallbacks for `arg`, `argCount`,
-  crypto, and WebSocket
-- Split `src/runtime/http.c` into real runtime units (currently all 2,272
-  lines in one file despite split file comments)
-- Grow the self-host compiler beyond the current AST-to-map bridge for
-  emitter internals
-- Make LSP compilation use the same module graph as CLI compilation (local
-  imports currently produce `Unknown module` in the editor)
-- Make formatting syntax-aware and idempotent (currently line regexes, not
-  token/AST-based)
-- Either wire `CompilerOptions` into behavior or remove it (GC, ownership,
-  target, and safety settings are public placeholders)
+### Architecture
+
+- **Full expression AST** — `RawExpression.parsed` is created but ignored.
+  Represent calls, access, assignment, unary/binary operators, arrays, structs,
+  match, and await as real AST nodes consumed by semantic analysis, type
+  checking, and code generation.
+- **Real typed IR** — `IRFunction.body` currently contains AST statements.
+  Lower to typed instructions/basic blocks, validate IR, and make the backend
+  consume IR only.
+- **Split LLVM emitter** — the 3,480-line `LLVMEmitter.js` needs to be split
+  into focused lowering modules: control flow, values, aggregates, built-ins,
+  debug metadata, runtime ABI. Add golden LLVM tests per lowering family.
+- **ABI registry** — function names and signatures are duplicated across
+  `ModuleRegistry.js`, `ExpressionInspector.js`, `TypeChecker.js`,
+  `LLVMEmitter.js`, and the C runtime. Generate from one typed definition.
+
+### Type Checker
+
+- **Boolean conditions** — `if` and loop conditions are not validated as `bool`
+- **Return on all paths** — non-void functions are not checked for definite
+  return
+- **Use before initialization** — variables used before assignment are not
+  caught
+- **Match arms** — arms are not validated for exhaustiveness or type consistency
+- **Generics** — `Result<T>`, `Map<K,V>`, and `T?` type parameters are not
+  enforced
+
+### Diagnostics
+
+- **Module-aware errors** — file/range data is not preserved through parsing,
+  module loading, IR, and LLVM emission
+- **Multiple diagnostics** — only the first error is reported per compilation
+- **Snippets** — errors include source line and caret but no notes or related
+  file paths
+
+### Self-Host Compiler
+
+- **Emitter bridge** — the self-host emitter still uses the AST-to-map
+  compatibility bridge internally
+- **Parser coverage** — not all JS compiler features are covered by the
+  self-host parser
+- **Type checking** — only simple annotated initializers and first-argument
+  calls are checked
+- **Semantic checks** — only basic checks exist; many JS compiler diagnostic
+  cases are not covered
+- **Module loading** — only local and bare-package `main.lm` loading are
+  supported in the self-host path
+
+### Parity
+
+- **JS/self-host matrix** — no differential testing that compiles every
+  supported feature with both compilers and compares diagnostics, LLVM
+  behavior, and executable output
+
+### Platform Support
+
+- **Linux** — `arg`, `argCount`, crypto, and WebSocket return empty or zero on
+  Linux. Only macOS is fully supported.
+- **Runtime split** — `src/runtime/http.c` contains all 2,272 lines of HTTP
+  code despite having separate `http_runtime.c`, `system.c`, `fs.c`, etc. in
+  the directory.
+
+### Tooling
+
+- **Formatter** — regex-based, not token/AST-based. Not idempotent in edge
+  cases.
+- **LSP** — local imports show `Unknown module`. No debounce, no `didClose`,
+  state not isolated per document.
+- **No `lumen` command** — the npm package only exposes `lmsh`, `photon`,
+  `lumen-format`, and `lumen-lsp`. There is no packaged `lumen` binary for
+  compilation workflows.
+- **CompilerOptions** — ownership, GC, target, and safety settings are
+  placeholders with no effect on behavior.
