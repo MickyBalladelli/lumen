@@ -1,6 +1,19 @@
 #!/usr/bin/env node
-import { access, cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
-import { basename, dirname, join, resolve } from 'node:path'
+import {
+  access,
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  rename,
+  rm,
+  stat,
+  writeFile
+} from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
+import { basename, dirname, join, resolve, sep } from 'node:path'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
@@ -13,92 +26,109 @@ const packageRoot = join('.photon', 'packages')
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const bundledPackageRoot = join(repoRoot, 'packages')
 
-if (!command || command === '-h' || command === '--help') {
-  usage()
-  process.exit(command ? 0 : 1)
+try {
+  await main()
+} catch (error) {
+  fail(error instanceof Error ? error.message : String(error))
 }
 
-if (command === 'init') {
-  if (await exists(manifestPath)) fail('photon.json already exists')
-
-  const name = args[0] ?? basename(process.cwd())
-
-  await writeJson(manifestPath, {
-    name,
-    version: '0.1.0',
-    main: 'main.lm',
-    dependencies: {}
-  })
-  if (!await exists('main.lm')) {
-    await writeFile('main.lm', 'function main(): i32 {\n  println("hello lumen")\n  return 0\n}\n')
-    console.log('created main.lm')
+async function main() {
+  if (!command || command === '-h' || command === '--help') {
+    usage()
+    process.exit(command ? 0 : 1)
   }
-  if (!await exists('lumen.json')) {
-    await writeJson('lumen.json', {
-      entry: 'main.lm',
-      output: join('build', name)
+
+  if (command === 'init') {
+    if (await exists(manifestPath)) fail('photon.json already exists')
+
+    const name = args[0] ?? basename(process.cwd())
+
+    await writeJson(manifestPath, {
+      name,
+      version: '0.1.0',
+      main: 'main.lm',
+      dependencies: {}
     })
-    console.log('created lumen.json')
-  }
-  console.log('created photon.json')
-} else if (command === 'add') {
-  const [name, source] = args
-  if (!name) fail('usage: photon add name [source]')
-  const resolvedSource = source ?? await bundledPackageSource(name)
+    if (!await exists('main.lm')) {
+      await writeFile('main.lm', 'function main(): i32 {\n  println("hello lumen")\n  return 0\n}\n')
+      console.log('created main.lm')
+    }
+    if (!await exists('lumen.json')) {
+      await writeJson('lumen.json', {
+        entry: 'main.lm',
+        output: join('build', name)
+      })
+      console.log('created lumen.json')
+    }
+    console.log('created photon.json')
+  } else if (command === 'add') {
+    const [name, source] = args
+    if (!name) fail('usage: photon add name [source]')
+    validateDependencyName(name)
+    const resolvedSource = source ?? await bundledPackageSource(name)
 
-  const manifest = await readManifest()
-  manifest.dependencies ??= {}
-  manifest.dependencies[name] = resolvedSource
-  await writeJson(manifestPath, manifest)
-  await install()
-} else if (command === 'remove') {
-  const [name] = args
-  if (!name) fail('usage: photon remove name')
+    const manifest = await readManifest()
+    manifest.dependencies ??= {}
+    manifest.dependencies[name] = resolvedSource
+    await writeJson(manifestPath, manifest)
+    await install(manifest)
+  } else if (command === 'remove') {
+    const [name] = args
+    if (!name) fail('usage: photon remove name')
+    validateDependencyName(name)
 
-  const manifest = await readManifest()
-  delete manifest.dependencies?.[name]
-  await writeJson(manifestPath, manifest)
-  await rm(join(packageRoot, name), { recursive: true, force: true })
-  await install()
-} else if (command === 'install') {
-  await install()
-} else if (command === 'search') {
-  await search(args.join(' '))
-} else if (command === 'list') {
-  const manifest = await readManifest()
-  for (const [name, source] of Object.entries(manifest.dependencies ?? {})) {
-    console.log(`${name} ${source}`)
+    const manifest = await readManifest()
+    delete manifest.dependencies?.[name]
+    await writeJson(manifestPath, manifest)
+    await install(manifest)
+  } else if (command === 'install') {
+    await install()
+  } else if (command === 'search') {
+    await search(args.join(' '))
+  } else if (command === 'list') {
+    const manifest = await readManifest()
+    for (const [name, source] of dependenciesFromManifest(manifest)) {
+      console.log(`${name} ${source}`)
+    }
+  } else {
+    fail(`unknown command: ${command}`)
   }
-} else {
-  fail(`unknown command: ${command}`)
 }
 
-async function install() {
-  const manifest = await readManifest()
+async function install(providedManifest = null) {
+  const manifest = providedManifest ?? await readManifest()
+  const dependencies = dependenciesFromManifest(manifest)
   const lock = {
     packages: {}
   }
 
-  await rm(packageRoot, { recursive: true, force: true })
-  await mkdir(packageRoot, { recursive: true })
+  await mkdir(dirname(packageRoot), { recursive: true })
+  const stageRoot = await mkdtemp(join(dirname(packageRoot), '.packages-stage-'))
+  let committed = false
 
-  for (const [name, source] of Object.entries(manifest.dependencies ?? {})) {
-    const target = join(packageRoot, name)
-    await rm(target, { recursive: true, force: true })
-    await installPackage(source, target)
-    await validatePackage(name, target)
+  try {
+    for (const [name, source] of dependencies) {
+      const target = join(stageRoot, name)
+      await installPackage(source, target)
+      await validatePackage(name, target)
 
-    lock.packages[name] = {
-      source,
-      resolved: isLocalSource(source)
-        ? 'local'
-        : await resolvePackageVersion(target)
+      lock.packages[name] = {
+        source,
+        resolved: isLocalSource(source)
+          ? 'local'
+          : await resolvePackageVersion(target)
+      }
     }
 
-    console.log(`installed ${name}`)
+    await commitInstall(stageRoot, lock)
+    committed = true
+  } finally {
+    if (!committed) {
+      await rm(stageRoot, { recursive: true, force: true }).catch(() => {})
+    }
   }
 
-  await writeJson(lockPath, lock)
+  for (const [name] of dependencies) console.log(`installed ${name}`)
 }
 
 async function search(query = '') {
@@ -156,15 +186,124 @@ async function bundledPackages() {
 async function validatePackage(name, target) {
   let main = 'main.lm'
   const packageManifestPath = join(target, 'photon.json')
+  const canonicalTarget = await realpath(target)
 
   if (await exists(packageManifestPath)) {
-    const manifest = JSON.parse(await readFile(packageManifestPath, 'utf8'))
+    const canonicalManifest = await realpath(packageManifestPath)
+    if (!isInside(canonicalTarget, canonicalManifest)) {
+      throw new Error(`package ${name} has photon.json outside its install`)
+    }
+
+    let manifest
+    try {
+      manifest = JSON.parse(await readFile(canonicalManifest, 'utf8'))
+    } catch {
+      throw new Error(`package ${name} has invalid photon.json`)
+    }
     main = manifest.main ?? main
   }
 
-  if (!await exists(join(target, main))) {
-    fail(`package ${name} missing ${main}`)
+  if (typeof main !== 'string' || main.length === 0) {
+    throw new Error(`package ${name} has invalid main`)
   }
+
+  const requestedMain = resolve(canonicalTarget, main)
+  if (!isInside(canonicalTarget, requestedMain) || !await exists(requestedMain)) {
+    throw new Error(`package ${name} missing ${main}`)
+  }
+
+  const canonicalMain = await realpath(requestedMain)
+  if (!isInside(canonicalTarget, canonicalMain)) {
+    throw new Error(`package ${name} has main outside its install`)
+  }
+
+  const mainStat = await stat(canonicalMain)
+  if (!mainStat.isFile()) {
+    throw new Error(`package ${name} missing ${main}`)
+  }
+}
+
+async function commitInstall(stageRoot, lock) {
+  const transaction = `${process.pid}-${randomUUID()}`
+  const backupRoot = join(dirname(packageRoot), `.packages-backup-${transaction}`)
+  const stagedLock = join(dirname(resolve(lockPath)), `.photon-lock-stage-${transaction}`)
+  const backupLock = join(dirname(resolve(lockPath)), `.photon-lock-backup-${transaction}`)
+  const hadPackages = await exists(packageRoot)
+  const hadLock = await exists(lockPath)
+  let oldPackagesMoved = false
+  let newPackagesMoved = false
+  let oldLockMoved = false
+  let newLockMoved = false
+
+  await writeJson(stagedLock, lock)
+
+  try {
+    if (hadPackages) {
+      await rename(packageRoot, backupRoot)
+      oldPackagesMoved = true
+    }
+
+    await rename(stageRoot, packageRoot)
+    newPackagesMoved = true
+
+    if (hadLock) {
+      await rename(lockPath, backupLock)
+      oldLockMoved = true
+    }
+
+    await rename(stagedLock, lockPath)
+    newLockMoved = true
+  } catch (error) {
+    if (newLockMoved) await rm(lockPath, { force: true }).catch(() => {})
+    if (oldLockMoved) await rename(backupLock, lockPath).catch(() => {})
+
+    if (newPackagesMoved) {
+      await rm(packageRoot, { recursive: true, force: true }).catch(() => {})
+    }
+    if (oldPackagesMoved) await rename(backupRoot, packageRoot).catch(() => {})
+
+    throw error
+  } finally {
+    await rm(stagedLock, { force: true }).catch(() => {})
+  }
+
+  await rm(backupRoot, { recursive: true, force: true }).catch(() => {})
+  await rm(backupLock, { force: true }).catch(() => {})
+}
+
+function dependenciesFromManifest(manifest) {
+  const dependencies = manifest.dependencies ?? {}
+  if (!dependencies || typeof dependencies !== 'object' || Array.isArray(dependencies)) {
+    throw new Error('photon.json dependencies must be an object')
+  }
+
+  return Object.entries(dependencies).map(([name, source]) => {
+    validateDependencyName(name)
+    if (typeof source !== 'string' || source.length === 0) {
+      throw new Error(`dependency ${name} has invalid source`)
+    }
+    return [name, source]
+  })
+}
+
+function validateDependencyName(name) {
+  if (typeof name !== 'string' ||
+    name.length > 214 ||
+    !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name) ||
+    name === '.' ||
+    name === '..' ||
+    name.includes('/') ||
+    name.includes('\\')) {
+    throw new Error(`invalid dependency name "${name}"`)
+  }
+
+  const root = resolve(packageRoot)
+  const target = resolve(root, name)
+  if (dirname(target) !== root) throw new Error(`invalid dependency name "${name}"`)
+}
+
+function isInside(root, target) {
+  return target === root || target.startsWith(`${root}${sep}`)
 }
 
 async function installPackage(source, target) {

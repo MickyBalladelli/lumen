@@ -26,12 +26,12 @@ Project audit: 2026-06-30
   objects stay valid until exit and are then freed. Native ASan+UBSan tests cover
   safe allocation plus array read/write, string, and slice bounds failures.
 
-- [ ] Harden the HTTP and Socket.IO runtime before calling it production-ready.
+- [x] Harden the HTTP and Socket.IO runtime before calling it production-ready.
   Add request/body limits, partial read/write loops, timeouts, canonical-path
   checks, protocol validation, clean shutdown, and concurrent connection handling.
   Fuzz request and WebSocket parsers.
 
-- [ ] Harden Photon installs.
+- [x] Harden Photon installs.
   Reject dependency names that escape `.photon/packages`, install through a
   temporary directory, swap atomically only after validation, and keep the old
   install on failure.
