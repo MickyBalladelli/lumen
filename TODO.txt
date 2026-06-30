@@ -20,10 +20,11 @@ Project audit: 2026-06-30
   require stage-2 to build stage-3, compare compiler and program output byte for
   byte, and run the stage-3 compiler independently.
 
-- [ ] Add runtime bounds and lifetime safety.
-  Check every array/string index and slice before `getelementptr`, define ownership
-  for heap strings/JSON/lists/maps, and free owned values. Run native tests under
-  ASan and UBSan.
+- [x] Add runtime bounds and lifetime safety.
+  Dynamic array reads, writes, and loops now use checked indices; string indexing
+  and slicing reject invalid ranges. Runtime-owned strings, JSON, lists, maps, and
+  objects stay valid until exit and are then freed. Native ASan+UBSan tests cover
+  safe allocation plus array read/write, string, and slice bounds failures.
 
 - [ ] Harden the HTTP and Socket.IO runtime before calling it production-ready.
   Add request/body limits, partial read/write loops, timeouts, canonical-path
