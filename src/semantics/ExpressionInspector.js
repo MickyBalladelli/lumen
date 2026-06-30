@@ -100,6 +100,7 @@ export class ExpressionInspector {
     if (this.isCall(rawExpression, SystemFunctions.MapKeys)) return LumenTypes.String
     if (this.isCall(rawExpression, SystemFunctions.TokenizeSource)) return LumenTypes.String
     if (this.isCall(rawExpression, SystemFunctions.ParseSummary)) return LumenTypes.String
+    if (this.isCall(rawExpression, SystemFunctions.CompilerImage)) return LumenTypes.String
     if (this.isCall(rawExpression, FsFunctions.ReadFile)) return LumenTypes.String
     if (this.isCall(rawExpression, FsFunctions.WriteFile)) return LumenTypes.I32
     if (this.isCall(rawExpression, HttpFunctions.ServeFiles)) return LumenTypes.I32

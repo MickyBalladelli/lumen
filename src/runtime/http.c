@@ -194,6 +194,10 @@ int lumen_exec(const char *command) {
   return status == 0 ? 0 : 1;
 }
 
+__attribute__((weak)) const char *lumen_compiler_image(void) {
+  return "";
+}
+
 char *lumen_string_concat(const char *left, const char *right) {
   size_t left_length = strlen(left);
   size_t right_length = strlen(right);

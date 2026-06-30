@@ -638,10 +638,18 @@ if (bootstrapCompile.code !== 0) {
       console.log('ok stage-2 compiler has no C fallback symbols')
     }
 
-    const selfBasicCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
-      join(examplesDir, 'basic.lm'),
-      join(outputDir, 'basic-self2.ll')
-    ])
+    const stageOneCompilerPath = join(outputDir, 'lumen-compiler')
+    const hiddenStageOneCompilerPath = join(outputDir, 'lumen-compiler.stage-one-hidden')
+    await rename(stageOneCompilerPath, hiddenStageOneCompilerPath)
+    let selfBasicCompile
+    try {
+      selfBasicCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
+        join(examplesDir, 'basic.lm'),
+        join(outputDir, 'basic-self2.ll')
+      ])
+    } finally {
+      await rename(hiddenStageOneCompilerPath, stageOneCompilerPath)
+    }
     const renamedBasicPath = join(outputDir, 'renamed-bootstrap-source.lm')
     await writeFile(renamedBasicPath, await readFile(join(examplesDir, 'basic.lm'), 'utf8'))
     const selfRenamedBasicCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
@@ -689,11 +697,50 @@ if (bootstrapCompile.code !== 0) {
       join(outputDir, 'tiny-self2.ll')
     ])
 
-    if (selfCompilerCompile.code === 0 || selfCompilerCompile.stdout !== 'compile error: self-host compiler self-compile not supported yet\n') {
+    if (selfCompilerCompile.code !== 0) {
       failures += 1
-      console.error('failed second-stage compiler self-compile rejection')
+      console.error('failed stage-2 compiler building stage-3')
     } else {
-      console.log('ok second-stage compiler self-compile rejected')
+      const stageTwoCompilerOutput = await readFile(join(outputDir, 'lumen-compiler-self.ll'), 'utf8')
+      const stageThreeCompilerOutput = await readFile(join(outputDir, 'lumen-compiler-self2.ll'), 'utf8')
+
+      if (stageTwoCompilerOutput !== stageThreeCompilerOutput) {
+        failures += 1
+        console.error('failed bootstrap compiler stage-2/stage-3 equality')
+      } else if (hasCompilerDelegation(stageThreeCompilerOutput)) {
+        failures += 1
+        console.error('failed stage-3 compiler delegation check')
+      } else {
+        await compiler.buildExecutable(
+          join(outputDir, 'lumen-compiler-self2.ll'),
+          join(outputDir, 'lumen-compiler-self2')
+        )
+
+        if (await hasSelfFallbackSymbols(join(outputDir, 'lumen-compiler-self2'))) {
+          failures += 1
+          console.error('failed stage-3 compiler fallback symbol check')
+        } else {
+          const stageThreeTinyCompile = await runExecutable(join(outputDir, 'lumen-compiler-self2'), [
+            join('tests', 'bootstrap', 'tiny.lm'),
+            join(outputDir, 'tiny-self3.ll')
+          ])
+          const stageTwoTinyOutput = selfTinyCompile.code === 0
+            ? await readFile(join(outputDir, 'tiny-self2.ll'), 'utf8')
+            : ''
+          const stageThreeTinyOutput = stageThreeTinyCompile.code === 0
+            ? await readFile(join(outputDir, 'tiny-self3.ll'), 'utf8')
+            : ''
+
+          if (selfTinyCompile.code !== 0 ||
+            stageThreeTinyCompile.code !== 0 ||
+            stageTwoTinyOutput !== stageThreeTinyOutput) {
+            failures += 1
+            console.error('failed stage-3 compiler output')
+          } else {
+            console.log('ok bootstrap compiler stage-2/stage-3 equality')
+          }
+        }
+      }
     }
 
     if (selfBasicCompile.code !== 0 || selfRenamedBasicCompile.code !== 0 || selfControlCompile.code !== 0 || selfForLoopCompile.code !== 0 || selfNativeMainCompile.code !== 0 || selfPrintlnCompile.code !== 0 || selfStructCompile.code !== 0 || selfSimpleCompile.code !== 0 || selfIfBinaryCompile.code !== 0 || selfCallCompile.code !== 0 || selfTinyCompile.code !== 0) {
@@ -930,6 +977,12 @@ async function hasSelfFallbackSymbols(path) {
   return result.stdout.includes('lumen_self_compile_source') ||
     result.stdout.includes('lumen_self_validate_source') ||
     result.stdout.includes('lumen_self_diagnostic')
+}
+
+function hasCompilerDelegation(llvm) {
+  return llvm.includes('self-host compiler delegate') ||
+    llvm.includes('compiler.self.unsupported') ||
+    llvm.includes('call i32 @lumen_exec')
 }
 
 function runCommand(command, args = [], env = {}) {

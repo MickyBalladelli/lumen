@@ -74,7 +74,8 @@ export const SystemFunctions = Object.freeze({
   MapDelete: 'mapDelete',
   MapKeys: 'mapKeys',
   TokenizeSource: 'tokenizeSource',
-  ParseSummary: 'parseSummary'
+  ParseSummary: 'parseSummary',
+  CompilerImage: 'compilerImage'
 })
 
 export class SystemLibrary {

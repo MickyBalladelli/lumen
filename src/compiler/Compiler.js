@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Tokenizer } from '../lexer/Tokenizer.js'
@@ -115,13 +115,31 @@ export class Compiler {
     const flags = ['-Wno-override-module', '-g']
     if (optimize) flags.push('-O2')
 
+    const llvm = await readFile(llvmPath, 'utf8')
     const objectPath = `${outputPath}.o`
     await this.run(clang, [...flags, '-c', llvmPath, '-o', objectPath])
 
     const sources = [objectPath]
-    if (await this.needsRuntime(llvmPath)) sources.push(runtimePath)
+    const generated = []
 
-    await this.run(clang, [...flags, ...sources, '-pthread', '-o', outputPath])
+    try {
+      if (/@lumen_compiler_image\(\)/.test(llvm)) {
+        const imageSourcePath = `${outputPath}.compiler-image.c`
+        const imageObjectPath = `${outputPath}.compiler-image.o`
+        generated.push(imageSourcePath, imageObjectPath)
+        await writeFile(imageSourcePath, createCompilerImageSource(llvm))
+        await this.run(clang, [...flags, '-c', imageSourcePath, '-o', imageObjectPath])
+        sources.push(imageObjectPath)
+      }
+
+      if (/@lumen_/.test(llvm)) sources.push(runtimePath)
+      await this.run(clang, [...flags, ...sources, '-pthread', '-o', outputPath])
+    } finally {
+      await Promise.all(generated.map(path => unlink(path).catch(error => {
+        if (error.code !== 'ENOENT') throw error
+      })))
+    }
+
     return outputPath
   }
 
@@ -143,4 +161,25 @@ export class Compiler {
       })
     })
   }
+}
+
+function createCompilerImageSource(llvm) {
+  const bytes = Buffer.from(llvm, 'utf8')
+  const rows = []
+
+  for (let index = 0; index < bytes.length; index += 32) {
+    rows.push(`  ${[...bytes.subarray(index, index + 32)].join(', ')},`)
+  }
+
+  return [
+    'static const unsigned char lumen_compiler_image_bytes[] = {',
+    ...rows,
+    '  0',
+    '};',
+    '',
+    'const char *lumen_compiler_image(void) {',
+    '  return (const char *)lumen_compiler_image_bytes;',
+    '}',
+    ''
+  ].join('\n')
 }

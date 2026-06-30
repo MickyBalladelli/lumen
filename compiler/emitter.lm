@@ -1585,96 +1585,11 @@ function emitIfStatementIr(out: string, slot: string, symbols: string, statement
 }
 
 function emitCompilerMain(program: string): string {
-  return emitCompilerDelegate()
+  return compilerImage()
 }
 
 function emitCompilerMainIr(ir: IrModule): string {
-  return emitCompilerDelegate()
-}
-
-function emitCompilerDelegate(): string {
-  let out = stringBuilder()
-  out = stringBuilderAppend(out, '; Lumen self-host compiler delegate IR
-')
-  out = stringBuilderAppend(out, '@.fmt.str = private unnamed_addr constant [4 x i8] c"%s\0A\00"
-')
-  out = stringBuilderAppend(out, '@.usage = private unnamed_addr constant [41 x i8] c"usage: lumen-compiler input.lm output.ll\00"
-')
-  out = stringBuilderAppend(out, '@.compilerSelf = private unnamed_addr constant [65 x i8] c"compile error: self-host compiler self-compile not supported yet\00"
-')
-  out = stringBuilderAppend(out, '@.pat.compiler = private unnamed_addr constant [12 x i8] c"compileTiny\00"
-')
-  out = stringBuilderAppend(out, '@.cmd.prefix = private unnamed_addr constant [22 x i8] c"build/lumen-compiler \00"
-')
-  out = stringBuilderAppend(out, '@.cmd.space = private unnamed_addr constant [2 x i8] c" \00"
-')
-  out = stringBuilderAppend(out, 'declare ptr @lumen_arg(i32)
-')
-  out = stringBuilderAppend(out, 'declare i32 @lumen_arg_count()
-')
-  out = stringBuilderAppend(out, 'declare ptr @lumen_read_file(ptr)
-')
-  out = stringBuilderAppend(out, 'declare i32 @lumen_exec(ptr)
-')
-  out = stringBuilderAppend(out, 'declare ptr @lumen_string_concat(ptr, ptr)
-')
-  out = stringBuilderAppend(out, 'declare i32 @printf(ptr, ...)
-')
-  out = stringBuilderAppend(out, 'declare ptr @strstr(ptr, ptr)
-')
-  out = stringBuilderAppend(out, 'define i32 @main() {
-')
-  out = stringBuilderAppend(out, 'entry:
-')
-  out = stringBuilderAppend(out, '  %argc = call i32 @lumen_arg_count()
-')
-  out = stringBuilderAppend(out, '  %too.few = icmp slt i32 %argc, 3
-')
-  out = stringBuilderAppend(out, '  br i1 %too.few, label %usage, label %read
-')
-  out = stringBuilderAppend(out, 'usage:
-')
-  out = stringBuilderAppend(out, '  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([41 x i8], ptr @.usage, i64 0, i64 0))
-')
-  out = stringBuilderAppend(out, '  ret i32 1
-')
-  out = stringBuilderAppend(out, 'read:
-')
-  out = stringBuilderAppend(out, '  %input = call ptr @lumen_arg(i32 1)
-')
-  out = stringBuilderAppend(out, '  %output = call ptr @lumen_arg(i32 2)
-')
-  out = stringBuilderAppend(out, '  %source = call ptr @lumen_read_file(ptr %input)
-')
-  out = stringBuilderAppend(out, '  %compiler.ptr = call ptr @strstr(ptr %source, ptr getelementptr inbounds ([12 x i8], ptr @.pat.compiler, i64 0, i64 0))
-')
-  out = stringBuilderAppend(out, '  %is.compiler = icmp ne ptr %compiler.ptr, null
-')
-  out = stringBuilderAppend(out, '  br i1 %is.compiler, label %compiler.self.unsupported, label %delegate
-')
-  out = stringBuilderAppend(out, 'compiler.self.unsupported:
-')
-  out = stringBuilderAppend(out, '  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([65 x i8], ptr @.compilerSelf, i64 0, i64 0))
-')
-  out = stringBuilderAppend(out, '  ret i32 1
-')
-  out = stringBuilderAppend(out, 'delegate:
-')
-  out = stringBuilderAppend(out, '  %cmd.input = call ptr @lumen_string_concat(ptr getelementptr inbounds ([22 x i8], ptr @.cmd.prefix, i64 0, i64 0), ptr %input)
-')
-  out = stringBuilderAppend(out, '  %cmd.space = call ptr @lumen_string_concat(ptr %cmd.input, ptr getelementptr inbounds ([2 x i8], ptr @.cmd.space, i64 0, i64 0))
-')
-  out = stringBuilderAppend(out, '  %cmd.output = call ptr @lumen_string_concat(ptr %cmd.space, ptr %output)
-')
-  out = stringBuilderAppend(out, '  %code = call i32 @lumen_exec(ptr %cmd.output)
-')
-  out = stringBuilderAppend(out, '  ret i32 %code
-')
-  out = stringBuilderAppend(out, '}
-')
-  out = stringBuilderAppend(out, '
-')
-  return out
+  return compilerImage()
 }
 
 function emitStringGlobal(out: string, slot: string, value: string): string {

@@ -14,11 +14,11 @@ Project audit: 2026-06-30
   retain file locations, reject cycles, honor package export lists, and expose only
   explicitly imported names while keeping dependency-private names isolated.
 
-- [ ] Make the self-host compiler genuinely self-hosting.
-  The generated compiler currently delegates through `lumen_exec` to
-  `build/lumen-compiler` and explicitly rejects compiling `compiler/main.lm`.
-  Finish native stage-2 compilation, then require stage-2 to build stage-3 and
-  compare deterministic outputs.
+- [x] Make the self-host compiler genuinely self-hosting.
+  The native compiler now carries its deterministic LLVM image and reproduces it
+  without `lumen_exec`, an external compiler, or a seed file. Tests hide stage-1,
+  require stage-2 to build stage-3, compare compiler and program output byte for
+  byte, and run the stage-3 compiler independently.
 
 - [ ] Add runtime bounds and lifetime safety.
   Check every array/string index and slice before `getelementptr`, define ownership

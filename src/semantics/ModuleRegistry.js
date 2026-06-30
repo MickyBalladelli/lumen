@@ -80,7 +80,8 @@ export class ModuleRegistry {
         'mapDelete',
         'mapKeys',
         'tokenizeSource',
-        'parseSummary'
+        'parseSummary',
+        'compilerImage'
       ])],
       ['fs', new Set(['readFile', 'writeFile'])],
       ['http', new Set(['serveFiles', 'serveApi', 'serveHttp', 'serveSocketIoChat', 'socketIoEvent', 'socketIoEmit', 'httpRequest', 'httpResponse'])],

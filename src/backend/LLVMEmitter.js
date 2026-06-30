@@ -151,6 +151,7 @@ export class LLVMEmitter {
       this.usesStringRuntime ? 'declare ptr @lumen_map_keys(ptr)' : '',
       this.usesStringRuntime ? 'declare ptr @lumen_tokenize_source(ptr)' : '',
       this.usesStringRuntime ? 'declare ptr @lumen_parse_summary(ptr)' : '',
+      this.usesStringRuntime ? 'declare ptr @lumen_compiler_image()' : '',
       this.usesHttp ? 'declare i32 @lumen_http_serve_files(i32, ptr)' : '',
       this.usesHttp ? 'declare i32 @lumen_http_serve_api(i32, ptr, ptr, ptr, ptr)' : '',
       this.usesHttp ? 'declare i32 @lumen_http_serve_http(i32, ptr, ptr, ptr, ptr, ptr, i32)' : '',
@@ -1000,6 +1001,7 @@ export class LLVMEmitter {
     if (this.isCall(expression.tokens, SystemFunctions.MapKeys)) return this.emitRuntimeCall(expression.tokens, 'lumen_map_keys', LumenTypes.String, 1, 'mapKeys')
     if (this.isCall(expression.tokens, SystemFunctions.TokenizeSource)) return this.emitRuntimeCall(expression.tokens, 'lumen_tokenize_source', LumenTypes.String, 1, 'tokenizeSource')
     if (this.isCall(expression.tokens, SystemFunctions.ParseSummary)) return this.emitRuntimeCall(expression.tokens, 'lumen_parse_summary', LumenTypes.String, 1, 'parseSummary')
+    if (this.isCall(expression.tokens, SystemFunctions.CompilerImage)) return this.emitRuntimeCall(expression.tokens, 'lumen_compiler_image', LumenTypes.String, 0, 'compilerImage')
     if (this.isCall(expression.tokens, FsFunctions.ReadFile)) return this.emitReadFile(expression.tokens)
     if (this.isCall(expression.tokens, FsFunctions.WriteFile)) return this.emitWriteFile(expression.tokens)
     if (this.isCall(expression.tokens, HttpFunctions.ServeFiles)) return this.emitServeFiles(expression.tokens)
@@ -1769,7 +1771,7 @@ export class LLVMEmitter {
     if (runtimeName.startsWith('lumen_string') ||
       runtimeName.startsWith('lumen_list') ||
       runtimeName.startsWith('lumen_map_') ||
-      ['lumen_exec', 'lumen_source_snippet', 'lumen_tokenize_source', 'lumen_parse_summary'].includes(runtimeName)) {
+      ['lumen_exec', 'lumen_source_snippet', 'lumen_tokenize_source', 'lumen_parse_summary', 'lumen_compiler_image'].includes(runtimeName)) {
       this.usesStringRuntime = true
     }
 
