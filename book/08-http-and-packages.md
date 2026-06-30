@@ -72,6 +72,20 @@ Current chat transport is simple HTTP polling on `/socket.io/messages` and
 `/socket.io/emit`, with an experimental WebSocket endpoint at `/socket.io/ws`.
 It is Socket.IO-shaped, not the full Socket.IO wire protocol.
 
+## Runtime Limits
+
+The native server accepts at most 16 KiB of request headers, 1 MiB request
+bodies, and 128 concurrent connections. Client reads and writes time out after
+10 seconds. WebSocket messages are limited to 64 KiB.
+
+Static paths must be canonical. Dot segments, repeated separators, trailing
+separators, and symlinks are rejected. `SIGINT` and `SIGTERM` stop accepting
+connections, close active clients, and wait for workers to finish.
+
+Run native parser regression tests with `npm run test:http-runtime`. Run the
+HTTP and WebSocket parser fuzz targets with `npm run fuzz:http`. Set
+`LUMEN_FUZZ_RUNS` to change the default 10,000 iterations.
+
 ## Packages
 
 Packages live under `packages/` and use `photon.json`.

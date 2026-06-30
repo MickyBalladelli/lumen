@@ -740,6 +740,8 @@ There are a few npm commands:
 - `npm run http`: run the HTTP example
 - `npm run chat`: run the Socket.IO chat example
 - `npm run speedtest`: compare Lumen, Rust, Python, and Node on benchmark programs
+- `npm run test:http-runtime`: test the native HTTP and WebSocket parsers
+- `npm run fuzz:http`: fuzz the native HTTP and WebSocket parsers
 
 Build the compiler once:
 
