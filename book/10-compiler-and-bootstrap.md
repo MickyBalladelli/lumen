@@ -95,18 +95,15 @@ control flow into typed instructions before the backend consumes them.
 
 | File | Purpose |
 | --- | --- |
-| `LLVMEmitter.js` | Generates LLVM IR text from the compiler IR |
+| `LLVMEmitter.js` | Coordinates IR functions and composes lowering modules |
+| `ControlFlowLowering.js` | Branches, loops, switch, defer, and exceptions |
+| `ValueLowering.js` | Typed expressions, calls, operators, and conversions |
+| `AggregateLowering.js` | Structs, arrays, fields, indexes, and bounds checks |
+| `BuiltinLowering.js` | System, file, HTTP, thread, crypto, and JSON built-ins |
+| `DebugLowering.js` | LLVM debug metadata and source locations |
+| `RuntimeABI.js` | Conditional C runtime declarations |
 
-The emitter is the largest single file at ~3,480 lines. It handles:
-- Function declarations and definitions
-- Variable allocation (LLVM `alloca`)
-- Binary operations (LLVM `add`, `sub`, `mul`, `sdiv`, `srem`, `fadd`, etc.)
-- Comparison operations (LLVM `icmp`, `fcmp`)
-- Control flow (conditional branches, loops)
-- Struct and array lowering (LLVM aggregate types)
-- Built-in function lowering (calls into the C runtime)
-- String emission (global string constants)
-- Module initialization and cleanup
+Each lowering family has a small exact-output LLVM golden test.
 
 ### 7. Compiler Driver — `src/compiler/`
 
@@ -462,9 +459,6 @@ and UBSan (UndefinedBehaviorSanitizer) to verify memory safety.
   Represent calls, access, assignment, unary/binary operators, arrays, structs,
   match, and await as real AST nodes consumed by semantic analysis, type
   checking, and code generation.
-- **Split LLVM emitter** — the 3,480-line `LLVMEmitter.js` needs to be split
-  into focused lowering modules: control flow, values, aggregates, built-ins,
-  debug metadata, runtime ABI. Add golden LLVM tests per lowering family.
 - **ABI registry** — function names and signatures are duplicated across
   `ModuleRegistry.js`, `ExpressionInspector.js`, `TypeChecker.js`,
   `LLVMEmitter.js`, and the C runtime. Generate from one typed definition.

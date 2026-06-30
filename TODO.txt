@@ -53,7 +53,7 @@ Project audit: 2026-06-30
   flow into typed instructions/basic blocks, validate IR, and make the backend
   consume IR only.
 
-- [ ] Split the 3,480-line LLVM emitter into focused lowering modules.
+- [x] Split the 3,480-line LLVM emitter into focused lowering modules.
   Separate control flow, values, aggregates, built-ins, debug metadata, and runtime
   ABI declarations. Add small golden LLVM tests for each lowering family.
 

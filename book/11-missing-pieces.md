@@ -116,19 +116,6 @@ compiler.
 - Make semantic analysis, type checking, and code generation consume parsed
   expressions instead of inspecting token shapes directly
 
-### Split The LLVM Emitter
-
-The current `LLVMEmitter.js` is ~3,480 lines in a single file. It should be
-split into focused modules:
-
-- Control flow lowering (if, loops, match, switch, throw/catch)
-- Value lowering (constants, variables, loads, stores)
-- Aggregate lowering (structs, arrays, field/index access)
-- Built-in lowering (println, file, HTTP, thread, crypto, JSON, string helpers)
-- Debug metadata (source locations)
-- Runtime ABI declarations (C runtime function signatures)
-- Add small golden LLVM IR tests for each lowering family
-
 ### Strengthen The Type Checker
 
 - Require boolean expressions in `if` and loop conditions

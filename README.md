@@ -1040,7 +1040,9 @@ src/
   ir/
     IRBuilder.js         typed AST to compiler IR
   backend/
-    LLVMEmitter.js       IR to LLVM text
+    LLVMEmitter.js       IR-to-LLVM coordinator
+    *Lowering.js         focused control, value, aggregate, built-in, and debug lowering
+    RuntimeABI.js        conditional runtime declarations
   compiler/
     Compiler.js          end-to-end pipeline and clang driver
   runtime/
