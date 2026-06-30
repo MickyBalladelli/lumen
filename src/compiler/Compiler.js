@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
+import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Tokenizer } from '../lexer/Tokenizer.js'
 import { Parser } from '../parser/Parser.js'
@@ -23,7 +23,8 @@ export class Compiler {
     typeSystemFactory = () => new TypeSystem(),
     typeCheckerFactory = typeSystem => new TypeChecker({ typeSystem }),
     irBuilderFactory = () => new IRBuilder(),
-    backendFactory = typeSystem => new LLVMEmitter({ typeSystem })
+    backendFactory = typeSystem => new LLVMEmitter({ typeSystem }),
+    moduleLoaderFactory = options => new ModuleLoader(options)
   } = {}) {
     this.tokenizer = tokenizer
     this.parser = parser
@@ -32,33 +33,46 @@ export class Compiler {
     this.typeCheckerFactory = typeCheckerFactory
     this.irBuilderFactory = irBuilderFactory
     this.backendFactory = backendFactory
+    this.moduleLoaderFactory = moduleLoaderFactory
   }
 
   compileSource(source, { sourcePath = null, semanticAnalyzer = null } = {}) {
     try {
-      const typeSystem = this.typeSystemFactory()
-      const analyzer = semanticAnalyzer ?? this.semanticAnalyzerFactory()
-      const typeChecker = this.typeCheckerFactory(typeSystem)
-      const irBuilder = this.irBuilderFactory()
-      const backend = this.backendFactory(typeSystem)
-      const tokens = new this.tokenizer(source).tokenize()
+      const tokens = new this.tokenizer(source, { sourcePath }).tokenize()
       const ast = new this.parser(tokens).parseProgram()
-
-      analyzer.analyze(ast)
-      typeChecker.check(ast)
-
-      const ir = irBuilder.build(ast)
-      const llvm = backend.emit(ir, { sourcePath })
-
-      return {
+      return this.compileProgram(ast, {
         tokens,
-        ast,
-        ir,
-        llvm
-      }
+        sourcePath,
+        semanticAnalyzer
+      })
     } catch (error) {
       if (error instanceof Diagnostic) throw error.withSource(source)
       throw error
+    }
+  }
+
+  compileProgram(ast, {
+    tokens = [],
+    sourcePath = null,
+    semanticAnalyzer = null
+  } = {}) {
+    const typeSystem = this.typeSystemFactory()
+    const analyzer = semanticAnalyzer ?? this.semanticAnalyzerFactory()
+    const typeChecker = this.typeCheckerFactory(typeSystem)
+    const irBuilder = this.irBuilderFactory()
+    const backend = this.backendFactory(typeSystem)
+
+    analyzer.analyze(ast)
+    typeChecker.check(ast)
+
+    const ir = irBuilder.build(ast)
+    const llvm = backend.emit(ir, { sourcePath })
+
+    return {
+      tokens,
+      ast,
+      ir,
+      llvm
     }
   }
 
@@ -70,13 +84,27 @@ export class Compiler {
   }
 
   async writeLLVMFile(inputPath, outputPath) {
-    const source = await new ModuleLoader().load(inputPath)
+    const graph = await this.moduleLoaderFactory({
+      tokenizer: this.tokenizer,
+      parser: this.parser
+    }).load(inputPath)
     const moduleRegistry = await ModuleRegistry.fromPackageRoot()
     const semanticAnalyzer = new SemanticAnalyzer({ moduleRegistry })
-    const result = this.compileSource(source, {
-      sourcePath: resolve(inputPath),
-      semanticAnalyzer
-    })
+    let result
+
+    try {
+      result = this.compileProgram(graph.program, {
+        tokens: graph.entry.tokens,
+        sourcePath: graph.entry.path,
+        semanticAnalyzer
+      })
+    } catch (error) {
+      if (error instanceof Diagnostic) {
+        const source = graph.sources.get(error.location?.sourcePath) ?? graph.entry.source
+        throw error.withSource(source)
+      }
+      throw error
+    }
 
     await mkdir(dirname(outputPath), { recursive: true })
     await writeFile(outputPath, result.llvm)

@@ -1,48 +1,133 @@
-import { access, readFile } from 'node:fs/promises'
+import { access, readFile, realpath } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
-
-const IMPORT = /^\s*import\s+\{[^}]+\}\s+from\s+["']([^"']+)["']\s*$/gm
+import { Tokenizer } from '../lexer/Tokenizer.js'
+import { Parser } from '../parser/Parser.js'
+import { Diagnostic } from '../diagnostics/Diagnostic.js'
+import { ModuleGraph } from './ModuleGraph.js'
 
 export class ModuleLoader {
-  constructor({ seen = new Set(), packageRoot = '.photon/packages' } = {}) {
-    this.seen = seen
+  constructor({
+    packageRoot = '.photon/packages',
+    tokenizer = Tokenizer,
+    parser = Parser
+  } = {}) {
     this.packageRoot = resolve(packageRoot)
+    this.tokenizer = tokenizer
+    this.parser = parser
   }
 
   async load(entryPath) {
-    const absolute = resolve(entryPath)
-    return this.loadFile(absolute)
+    this.modules = new Map()
+    this.loading = new Set()
+
+    const entry = await this.loadFile(resolve(entryPath))
+    const graph = new ModuleGraph({
+      entry,
+      modules: [...this.modules.values()]
+    })
+
+    try {
+      return graph.link()
+    } catch (error) {
+      if (error instanceof Diagnostic) {
+        const source = graph.sources.get(error.location?.sourcePath)
+        if (source) throw error.withSource(source)
+      }
+      throw error
+    }
   }
 
-  async loadFile(filePath) {
-    const absolute = resolve(filePath)
-    if (this.seen.has(absolute)) return ''
-    this.seen.add(absolute)
+  async loadFile(filePath, importedBy = null) {
+    const canonicalPath = await this.canonicalPath(filePath, importedBy)
 
-    let source = await readFile(absolute, 'utf8')
-    const imports = [...source.matchAll(IMPORT)]
-    const prefix = []
-    const loaded = new Set()
-
-    for (const match of imports) {
-      const child = await this.resolveImport(dirname(absolute), match[1])
-      if (!child) continue
-
-      loaded.add(match[0])
-      prefix.push(await this.loadFile(child))
+    if (this.loading.has(canonicalPath)) {
+      const chain = [...this.loading, canonicalPath]
+        .map(path => path.split('/').at(-1))
+        .join(' -> ')
+      throw this.moduleDiagnostic(`Circular import: ${chain}`, importedBy)
     }
 
-    for (const statement of loaded) source = source.replace(statement, '')
+    const cached = this.modules.get(canonicalPath)
+    if (cached) return cached
 
-    return [
-      ...prefix,
-      source.trim()
-    ].filter(Boolean).join('\n\n')
+    const source = await readFile(canonicalPath, 'utf8')
+    let tokens
+    let ast
+
+    try {
+      tokens = new this.tokenizer(source, {
+        sourcePath: canonicalPath
+      }).tokenize()
+      ast = new this.parser(tokens).parseProgram()
+    } catch (error) {
+      if (error instanceof Diagnostic) throw error.withSource(source)
+      throw error
+    }
+    const module = {
+      path: canonicalPath,
+      source,
+      tokens,
+      ast,
+      imports: [],
+      index: this.modules.size
+    }
+
+    this.modules.set(canonicalPath, module)
+    this.loading.add(canonicalPath)
+
+    try {
+      const declarations = ast.body.filter(node => node.kind === 'ImportDeclaration')
+
+      for (const declaration of declarations) {
+        const resolution = await this.resolveImport(dirname(canonicalPath), declaration.source)
+        const edge = {
+          declaration,
+          target: null,
+          allowedExports: resolution?.exports ?? null
+        }
+
+        if (resolution?.path) {
+          edge.target = await this.loadFile(resolution.path, {
+            module,
+            declaration
+          })
+        }
+
+        module.imports.push(edge)
+      }
+    } finally {
+      this.loading.delete(canonicalPath)
+    }
+
+    return module
+  }
+
+  async canonicalPath(filePath, importedBy) {
+    try {
+      return await realpath(filePath)
+    } catch {
+      throw this.moduleDiagnostic(`Cannot resolve module "${filePath}"`, importedBy)
+    }
+  }
+
+  moduleDiagnostic(message, importedBy) {
+    const diagnostic = new Diagnostic(
+      message,
+      importedBy?.declaration.location ?? null,
+      'module'
+    )
+
+    return importedBy?.module.source
+      ? diagnostic.withSource(importedBy.module.source)
+      : diagnostic
   }
 
   async resolveImport(basePath, specifier) {
     if (specifier.startsWith('./') || specifier.startsWith('../')) {
-      return resolve(basePath, specifier)
+      return {
+        path: resolve(basePath, specifier),
+        exports: null
+      }
     }
 
     return this.resolvePackageImport(specifier)
@@ -53,16 +138,26 @@ export class ModuleLoader {
     const packagePath = join(this.packageRoot, name)
 
     if (!await exists(packagePath)) return null
-
-    if (parts.length > 0) return join(packagePath, parts.join('/'))
-
-    const manifestPath = join(packagePath, 'photon.json')
-    if (await exists(manifestPath)) {
-      const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
-      return join(packagePath, manifest.main ?? 'main.lm')
+    if (parts.length > 0) {
+      return {
+        path: join(packagePath, parts.join('/')),
+        exports: null
+      }
     }
 
-    return join(packagePath, 'main.lm')
+    const manifestPath = join(packagePath, 'photon.json')
+    if (!await exists(manifestPath)) {
+      return {
+        path: join(packagePath, 'main.lm'),
+        exports: null
+      }
+    }
+
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+    return {
+      path: join(packagePath, manifest.main ?? 'main.lm'),
+      exports: Array.isArray(manifest.exports) ? new Set(manifest.exports) : null
+    }
   }
 }
 

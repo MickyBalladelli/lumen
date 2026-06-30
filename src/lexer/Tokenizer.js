@@ -1,5 +1,6 @@
 import { Token } from './Token.js'
 import { TokenType } from './TokenType.js'
+import { Diagnostic } from '../diagnostics/Diagnostic.js'
 
 const KEYWORDS = new Set([
   'function',
@@ -62,9 +63,10 @@ const CONTINUATION_TOKENS = new Set([
 const ENDING_PUNCTUATION = new Set([')', ']', '}'])
 
 export class Tokenizer {
-  constructor(source, { keywords = KEYWORDS } = {}) {
+  constructor(source, { keywords = KEYWORDS, sourcePath = null } = {}) {
     this.source = source
     this.keywords = keywords
+    this.sourcePath = sourcePath
     this.tokens = []
     this.start = 0
     this.current = 0
@@ -322,11 +324,12 @@ export class Tokenizer {
     return {
       line: this.tokenLine,
       column: this.tokenColumn,
-      offset: this.start
+      offset: this.start,
+      sourcePath: this.sourcePath
     }
   }
 
   error(message) {
-    return new SyntaxError(`${message} at ${this.line}:${this.column}`)
+    return new Diagnostic(message, this.location(), 'lexer')
   }
 }

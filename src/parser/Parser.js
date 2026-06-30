@@ -1,6 +1,7 @@
 import { TokenType } from '../lexer/TokenType.js'
 import { AstNodeRegistry } from '../ast/AstNodeRegistry.js'
 import { ExpressionParser } from './ExpressionParser.js'
+import { Diagnostic } from '../diagnostics/Diagnostic.js'
 import {
   BlockStatementNode,
   BreakStatementNode,
@@ -599,6 +600,6 @@ export class Parser {
 
   error(token, message) {
     const location = token.location ?? { line: 0, column: 0 }
-    return new SyntaxError(`${message} at ${location.line}:${location.column}`)
+    return new Diagnostic(message, location, 'parser')
   }
 }

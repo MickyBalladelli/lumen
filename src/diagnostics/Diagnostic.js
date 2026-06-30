@@ -1,7 +1,11 @@
 export class Diagnostic extends Error {
   constructor(message, location = null, phase = 'compiler', source = null) {
-    super(location
-      ? `${phase}: ${message} at ${location.line}:${location.column}`
+    const position = location
+      ? [location.sourcePath, location.line, location.column].filter(value => value !== null && value !== undefined).join(':')
+      : null
+
+    super(position
+      ? `${phase}: ${message} at ${position}`
       : `${phase}: ${message}`)
     this.name = 'Diagnostic'
     this.rawMessage = message
@@ -15,7 +19,12 @@ export class Diagnostic extends Error {
 
     const line = source.split(/\r?\n/)[this.location.line - 1] ?? ''
     const marker = `${' '.repeat(Math.max(this.location.column - 1, 0))}^`
-    this.message = `${this.phase}: ${this.rawMessage} at ${this.location.line}:${this.location.column}\n${line}\n${marker}`
+    const position = [
+      this.location.sourcePath,
+      this.location.line,
+      this.location.column
+    ].filter(value => value !== null && value !== undefined).join(':')
+    this.message = `${this.phase}: ${this.rawMessage} at ${position}\n${line}\n${marker}`
     this.source = source
     return this
   }

@@ -9,10 +9,10 @@ Project audit: 2026-06-30
   factories for every call. Regression tests cover several valid and invalid
   compilations through one compiler/LSP instance.
 
-- [ ] Replace source concatenation with a real module graph.
-  Resolve local and Photon imports once, preserve each file's source locations,
-  detect cycles, and expose only explicitly imported symbols. Today an unimported
-  function from a loaded file is still callable because all source is merged.
+- [x] Replace source concatenation with a real module graph.
+  Local and Photon modules now parse separately, resolve once by canonical path,
+  retain file locations, reject cycles, honor package export lists, and expose only
+  explicitly imported names while keeping dependency-private names isolated.
 
 - [ ] Make the self-host compiler genuinely self-hosting.
   The generated compiler currently delegates through `lumen_exec` to
