@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { green } from './TerminalStyle.js'
 
 const outputDirectory = await mkdtemp(join(tmpdir(), 'lumen-http-runtime-'))
 const executable = join(outputDirectory, 'http-runtime')
@@ -19,7 +20,7 @@ try {
     executable
   ])
   await run(executable, [])
-  console.log('HTTP runtime tests passed')
+  console.log(green('HTTP runtime tests passed'))
 } finally {
   await rm(outputDirectory, { recursive: true, force: true })
 }

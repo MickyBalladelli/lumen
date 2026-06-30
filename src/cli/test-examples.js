@@ -3,6 +3,7 @@ import { basename, join } from 'node:path'
 import { spawn } from 'node:child_process'
 import { Compiler } from '../compiler/Compiler.js'
 import { formatSource } from '../formatter/Formatter.js'
+import { green } from './TerminalStyle.js'
 
 const examplesDir = 'examples'
 const negativeDir = 'tests/negative'
@@ -260,7 +261,7 @@ for (const [name, source, expected] of formatterCases) {
     console.error(`failed formatter ${name}`)
     console.error(`expected ${JSON.stringify(expected)}, got ${JSON.stringify(formatted)}`)
   } else {
-    console.log(`ok formatter ${name}`)
+    console.log(green(`ok formatter ${name}`))
   }
 }
 
@@ -279,7 +280,7 @@ for (const file of files) {
   }
 
   if (compileOnly.has(name)) {
-    console.log(`ok ${name} compile`)
+    console.log(green(`ok ${name} compile`))
     continue
   }
 
@@ -304,7 +305,7 @@ for (const file of files) {
     continue
   }
 
-  console.log(`ok ${name}`)
+  console.log(green(`ok ${name}`))
 }
 
 if (failures > 0) {
@@ -328,7 +329,7 @@ if (lmsh.stdout !== '1\n3\n' || lmsh.code !== 0) {
   failures += 1
   console.error('failed lmsh executable runner')
 } else {
-  console.log('ok lmsh executable runner')
+  console.log(green('ok lmsh executable runner'))
 }
 
 await compiler.writeLLVMFile('compiler/main.lm', join(outputDir, 'lumen-compiler.ll'))
@@ -337,7 +338,7 @@ if (await hasSelfFallbackSymbols(join(outputDir, 'lumen-compiler'))) {
   failures += 1
   console.error('failed stage-1 compiler fallback symbol check')
 } else {
-  console.log('ok stage-1 compiler has no C fallback symbols')
+  console.log(green('ok stage-1 compiler has no C fallback symbols'))
 }
 
 const bootstrapCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
@@ -356,7 +357,7 @@ if (bootstrapCompile.code !== 0) {
     failures += 1
     console.error(`failed bootstrap tiny executable, got ${tiny.code}`)
   } else {
-    console.log('ok bootstrap self-host tiny')
+    console.log(green('ok bootstrap self-host tiny'))
   }
 
   const basicCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
@@ -375,7 +376,7 @@ if (bootstrapCompile.code !== 0) {
       failures += 1
       console.error(`failed bootstrap basic executable, got code ${basic.code} stdout ${JSON.stringify(basic.stdout)}`)
     } else {
-      console.log('ok bootstrap self-host basic')
+      console.log(green('ok bootstrap self-host basic'))
     }
   }
 
@@ -395,7 +396,7 @@ if (bootstrapCompile.code !== 0) {
       failures += 1
       console.error(`failed bootstrap control executable, got code ${control.code} stdout ${JSON.stringify(control.stdout)}`)
     } else {
-      console.log('ok bootstrap self-host control-flow')
+      console.log(green('ok bootstrap self-host control-flow'))
     }
   }
 
@@ -506,7 +507,7 @@ if (bootstrapCompile.code !== 0) {
       failures += 1
       console.error('failed bootstrap loop executable behavior')
     } else {
-      console.log('ok bootstrap self-host simple/call/if/loop/println/struct examples')
+      console.log(green('ok bootstrap self-host simple/call/if/loop/println/struct examples'))
     }
   }
 
@@ -518,7 +519,7 @@ if (bootstrapCompile.code !== 0) {
     failures += 1
     console.error('failed bootstrap invalid source rejection')
   } else {
-    console.log('ok bootstrap invalid source rejection')
+    console.log(green('ok bootstrap invalid source rejection'))
   }
 
   const whileCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
@@ -537,7 +538,7 @@ if (bootstrapCompile.code !== 0) {
       failures += 1
       console.error('failed bootstrap while executable behavior')
     } else {
-      console.log('ok bootstrap self-host while')
+      console.log(green('ok bootstrap self-host while'))
     }
   }
 
@@ -549,7 +550,7 @@ if (bootstrapCompile.code !== 0) {
     failures += 1
     console.error('failed bootstrap unsupported while diagnostic')
   } else {
-    console.log('ok bootstrap unsupported while diagnostic')
+    console.log(green('ok bootstrap unsupported while diagnostic'))
   }
 
   const breakCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
@@ -560,7 +561,7 @@ if (bootstrapCompile.code !== 0) {
     failures += 1
     console.error('failed bootstrap break semantic diagnostic')
   } else {
-    console.log('ok bootstrap break semantic diagnostic')
+    console.log(green('ok bootstrap break semantic diagnostic'))
   }
 
   const typeMismatchCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
@@ -571,7 +572,7 @@ if (bootstrapCompile.code !== 0) {
     failures += 1
     console.error('failed bootstrap type diagnostic')
   } else {
-    console.log('ok bootstrap type diagnostic')
+    console.log(green('ok bootstrap type diagnostic'))
   }
 
   const noneToStringCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
@@ -587,7 +588,7 @@ if (bootstrapCompile.code !== 0) {
     failures += 1
     console.error('failed bootstrap function-call type diagnostics')
   } else {
-    console.log('ok bootstrap function-call type diagnostics')
+    console.log(green('ok bootstrap function-call type diagnostics'))
   }
 
   const extraDiagnostics = [
@@ -637,7 +638,7 @@ if (bootstrapCompile.code !== 0) {
       failures += 1
       console.error('failed stage-2 compiler fallback symbol check')
     } else {
-      console.log('ok stage-2 compiler has no C fallback symbols')
+      console.log(green('ok stage-2 compiler has no C fallback symbols'))
     }
 
     const stageOneCompilerPath = join(outputDir, 'lumen-compiler')
@@ -741,7 +742,7 @@ if (bootstrapCompile.code !== 0) {
             failures += 1
             console.error('failed stage-3 compiler output')
           } else {
-            console.log('ok bootstrap compiler stage-2/stage-3 equality')
+            console.log(green('ok bootstrap compiler stage-2/stage-3 equality'))
           }
         }
       }
@@ -778,7 +779,7 @@ if (bootstrapCompile.code !== 0) {
       if (equalityFailed) {
         failures += 1
       } else {
-        console.log('ok bootstrap stage output equality')
+        console.log(green('ok bootstrap stage output equality'))
       }
 
       await compiler.buildExecutable(join(outputDir, 'basic-self2.ll'), join(outputDir, 'basic-self2'))
@@ -819,7 +820,7 @@ if (bootstrapCompile.code !== 0) {
         failures += 1
         console.error('failed second-stage executable behavior')
       } else {
-        console.log('ok bootstrap second-stage compiler')
+        console.log(green('ok bootstrap second-stage compiler'))
       }
     }
     await unlink(renamedBasicPath)
@@ -832,7 +833,7 @@ if (bootstrapCompile.code !== 0) {
       failures += 1
       console.error('failed second-stage invalid source rejection')
     } else {
-      console.log('ok second-stage invalid source rejection')
+      console.log(green('ok second-stage invalid source rejection'))
     }
 
     const selfWhileCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
@@ -858,7 +859,7 @@ if (bootstrapCompile.code !== 0) {
         failures += 1
         console.error('failed second-stage while executable behavior')
       } else {
-        console.log('ok second-stage self-host while')
+        console.log(green('ok second-stage self-host while'))
       }
     }
 
@@ -870,7 +871,7 @@ if (bootstrapCompile.code !== 0) {
       failures += 1
       console.error('failed second-stage unsupported while diagnostic')
     } else {
-      console.log('ok second-stage unsupported while diagnostic')
+      console.log(green('ok second-stage unsupported while diagnostic'))
     }
 
     const selfBreakCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
@@ -881,7 +882,7 @@ if (bootstrapCompile.code !== 0) {
       failures += 1
       console.error('failed second-stage break semantic diagnostic')
     } else {
-      console.log('ok second-stage break semantic diagnostic')
+      console.log(green('ok second-stage break semantic diagnostic'))
     }
 
     const selfTypeMismatchCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
@@ -892,7 +893,7 @@ if (bootstrapCompile.code !== 0) {
       failures += 1
       console.error('failed second-stage type diagnostic')
     } else {
-      console.log('ok second-stage type diagnostic')
+      console.log(green('ok second-stage type diagnostic'))
     }
 
     const selfNoneToStringCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
@@ -908,7 +909,7 @@ if (bootstrapCompile.code !== 0) {
       failures += 1
       console.error('failed second-stage function-call type diagnostics')
     } else {
-      console.log('ok second-stage function-call type diagnostics')
+      console.log(green('ok second-stage function-call type diagnostics'))
     }
 
     const selfExtraDiagnostics = [
@@ -942,7 +943,7 @@ for (const file of negativeFiles.filter(file => file.endsWith('.lm')).sort()) {
     failures += 1
     console.error(`failed negative ${file}`)
   } catch {
-    console.log(`ok negative ${file}`)
+    console.log(green(`ok negative ${file}`))
   }
 }
 
@@ -1197,7 +1198,7 @@ class LspTestClient {
 }
 
 if (await runLspDiagnosticsTest()) {
-  console.log('ok lsp diagnostics')
+  console.log(green('ok lsp diagnostics'))
 } else {
   failures += 1
   console.error('failed lsp diagnostics')

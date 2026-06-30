@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFile, writeFile } from 'node:fs/promises'
 import { formatSource } from '../formatter/Formatter.js'
+import { green } from './TerminalStyle.js'
 
 const args = process.argv.slice(2)
 const check = args.includes('--check')
@@ -37,7 +38,7 @@ for (const file of files) {
       console.log(`formatted ${file}`)
     }
   } else if (!check && !stdout) {
-    console.log(`ok ${file}`)
+    console.log(green(`ok ${file}`))
   }
 }
 
