@@ -619,7 +619,9 @@ if (bootstrapCompile.code !== 0) {
     compilerSelfCompile = await runExecutable(join(outputDir, 'lumen-compiler'), [
       join('compiler', 'main.lm'),
       join(outputDir, 'lumen-compiler-self.ll')
-    ])
+    ], {}, {
+      progressLabel: 'building bootstrap stage-2 compiler'
+    })
   } finally {
     await rename(hiddenCompilerSeedPath, compilerSeedPath).catch(error => {
       if (error.code !== 'ENOENT') throw error
@@ -691,7 +693,9 @@ if (bootstrapCompile.code !== 0) {
     const selfCompilerCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
       join('compiler', 'main.lm'),
       join(outputDir, 'lumen-compiler-self2.ll')
-    ])
+    ], {}, {
+      progressLabel: 'building bootstrap stage-3 compiler'
+    })
     const selfTinyCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
       join('tests', 'bootstrap', 'tiny.lm'),
       join(outputDir, 'tiny-self2.ll')
@@ -942,8 +946,21 @@ for (const file of negativeFiles.filter(file => file.endsWith('.lm')).sort()) {
   }
 }
 
-function runExecutable(path, args = [], env = {}) {
+function runExecutable(path, args = [], env = {}, {
+  progressLabel = null,
+  progressIntervalMs = 15000
+} = {}) {
   return new Promise((resolve, reject) => {
+    const startedAt = Date.now()
+    let progressTimer = null
+    if (progressLabel) {
+      console.log(`${progressLabel}...`)
+      progressTimer = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startedAt) / 1000)
+        console.log(`${progressLabel}... ${elapsed}s`)
+      }, progressIntervalMs)
+      progressTimer.unref()
+    }
     const child = spawn(`./${path}`, args, {
       env: {
         ...process.env,
@@ -961,8 +978,16 @@ function runExecutable(path, args = [], env = {}) {
       stderr += chunk
     })
 
-    child.on('error', reject)
+    child.on('error', error => {
+      if (progressTimer) clearInterval(progressTimer)
+      reject(error)
+    })
     child.on('close', code => {
+      if (progressTimer) {
+        clearInterval(progressTimer)
+        const elapsed = Math.floor((Date.now() - startedAt) / 1000)
+        console.log(`${progressLabel} finished in ${elapsed}s`)
+      }
       if (stderr) process.stderr.write(stderr)
       resolve({
         stdout,

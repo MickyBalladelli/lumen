@@ -59,6 +59,22 @@ test('backend emits from IR after AST is discarded', () => {
   )
 })
 
+test('debug info covers calls emitted from return terminators', () => {
+  const { llvm } = new Compiler().compileSource([
+    'function helper(value: i32): i32 {',
+    '  return value',
+    '}',
+    'function main(): i32 {',
+    '  return helper(7)',
+    '}'
+  ].join('\n'), {
+    sourcePath: 'debug-return-call.lm'
+  })
+  const call = llvm.split('\n').find(line => line.includes('call i32 @helper'))
+
+  assert.match(call, /, !dbg !\d+$/)
+})
+
 test('builtin lowering reads typed IR arguments without token metadata', () => {
   const { ir, llvm } = new Compiler().compileSource([
     'function main(): i32 {',

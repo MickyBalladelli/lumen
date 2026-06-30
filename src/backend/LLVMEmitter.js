@@ -266,11 +266,20 @@ export class LLVMEmitter {
 
   emitIRTerminator(terminator) {
     if (!terminator || terminator.op === 'fallthrough') return
-    if (terminator.op === 'return') return this.emitReturn(terminator)
-    if (terminator.op === 'throw') return this.emitThrow(terminator)
-    if (terminator.op === 'break') return this.emitBreak(terminator)
-    if (terminator.op === 'continue') return this.emitContinue(terminator)
-    throw new Diagnostic(`LLVM backend does not support IR terminator ${terminator.op}`, terminator.location, 'backend')
+
+    const previousDebugLocation = this.activeDebugLocation
+    const debugLocation = this.createDebugLocation(terminator)
+    if (debugLocation) this.activeDebugLocation = debugLocation
+
+    try {
+      if (terminator.op === 'return') return this.emitReturn(terminator)
+      if (terminator.op === 'throw') return this.emitThrow(terminator)
+      if (terminator.op === 'break') return this.emitBreak(terminator)
+      if (terminator.op === 'continue') return this.emitContinue(terminator)
+      throw new Diagnostic(`LLVM backend does not support IR terminator ${terminator.op}`, terminator.location, 'backend')
+    } finally {
+      this.activeDebugLocation = previousDebugLocation
+    }
   }
 
   emitIRBlock(block, { scoped = true } = {}) {
