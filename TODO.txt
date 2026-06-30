@@ -36,7 +36,7 @@ Project audit: 2026-06-30
   temporary directory, swap atomically only after validation, and keep the old
   install on failure.
 
-- [ ] Make `photon.lock` reproducible.
+- [x] Make `photon.lock` reproducible.
   Read the lock during install, pin Git dependencies to exact commits, verify the
   checked-out commit, and define update/frozen-lock commands. The lock is currently
   rewritten but never used to resolve an install.

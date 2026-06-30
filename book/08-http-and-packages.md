@@ -172,6 +172,21 @@ Install packages:
 photon install
 ```
 
+Normal installs reuse exact Git commits from `photon.lock`. Refresh Git refs
+and lock them again with:
+
+```bash
+photon update
+```
+
+Require `photon.json` and `photon.lock` to match without rewriting the lock:
+
+```bash
+photon install --frozen-lock
+# Short alias:
+photon frozen-lock
+```
+
 Use a package:
 
 ```lumen

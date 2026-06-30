@@ -82,7 +82,17 @@ async function main() {
     await writeJson(manifestPath, manifest)
     await install(manifest)
   } else if (command === 'install') {
-    await install()
+    const unknownArgs = args.filter(arg => arg !== '--frozen-lock')
+    if (unknownArgs.length > 0) fail(`unknown install option: ${unknownArgs[0]}`)
+    await install(null, {
+      frozen: args.includes('--frozen-lock')
+    })
+  } else if (command === 'frozen-lock') {
+    if (args.length > 0) fail('usage: photon frozen-lock')
+    await install(null, { frozen: true })
+  } else if (command === 'update') {
+    if (args.length > 0) fail('usage: photon update')
+    await install(null, { update: true })
   } else if (command === 'search') {
     await search(args.join(' '))
   } else if (command === 'list') {
@@ -95,10 +105,17 @@ async function main() {
   }
 }
 
-async function install(providedManifest = null) {
+async function install(providedManifest = null, {
+  frozen = false,
+  update = false
+} = {}) {
   const manifest = providedManifest ?? await readManifest()
   const dependencies = dependenciesFromManifest(manifest)
+  const existingLock = await readLock()
+  if (frozen) validateFrozenLock(dependencies, existingLock)
+
   const lock = {
+    version: 1,
     packages: {}
   }
 
@@ -109,18 +126,21 @@ async function install(providedManifest = null) {
   try {
     for (const [name, source] of dependencies) {
       const target = join(stageRoot, name)
-      await installPackage(source, target)
+      const locked = !update && usableLockedPackage(existingLock?.packages?.[name], source)
+        ? existingLock.packages[name]
+        : null
+      const resolved = await installPackage(source, target, locked?.resolved)
       await validatePackage(name, target)
 
       lock.packages[name] = {
         source,
-        resolved: isLocalSource(source)
-          ? 'local'
-          : await resolvePackageVersion(target)
+        resolved
       }
     }
 
-    await commitInstall(stageRoot, lock)
+    await commitInstall(stageRoot, lock, {
+      writeLock: !frozen
+    })
     committed = true
   } finally {
     if (!committed) {
@@ -223,7 +243,9 @@ async function validatePackage(name, target) {
   }
 }
 
-async function commitInstall(stageRoot, lock) {
+async function commitInstall(stageRoot, lock, {
+  writeLock = true
+} = {}) {
   const transaction = `${process.pid}-${randomUUID()}`
   const backupRoot = join(dirname(packageRoot), `.packages-backup-${transaction}`)
   const stagedLock = join(dirname(resolve(lockPath)), `.photon-lock-stage-${transaction}`)
@@ -235,7 +257,7 @@ async function commitInstall(stageRoot, lock) {
   let oldLockMoved = false
   let newLockMoved = false
 
-  await writeJson(stagedLock, lock)
+  if (writeLock) await writeJson(stagedLock, lock)
 
   try {
     if (hadPackages) {
@@ -246,13 +268,15 @@ async function commitInstall(stageRoot, lock) {
     await rename(stageRoot, packageRoot)
     newPackagesMoved = true
 
-    if (hadLock) {
+    if (writeLock && hadLock) {
       await rename(lockPath, backupLock)
       oldLockMoved = true
     }
 
-    await rename(stagedLock, lockPath)
-    newLockMoved = true
+    if (writeLock) {
+      await rename(stagedLock, lockPath)
+      newLockMoved = true
+    }
   } catch (error) {
     if (newLockMoved) await rm(lockPath, { force: true }).catch(() => {})
     if (oldLockMoved) await rename(backupLock, lockPath).catch(() => {})
@@ -277,13 +301,69 @@ function dependenciesFromManifest(manifest) {
     throw new Error('photon.json dependencies must be an object')
   }
 
-  return Object.entries(dependencies).map(([name, source]) => {
+  return Object.entries(dependencies)
+    .map(([name, source]) => {
+      validateDependencyName(name)
+      if (typeof source !== 'string' || source.length === 0) {
+        throw new Error(`dependency ${name} has invalid source`)
+      }
+      return [name, source]
+    })
+    .sort(([left], [right]) => left.localeCompare(right))
+}
+
+async function readLock() {
+  if (!await exists(lockPath)) return null
+
+  let lock
+  try {
+    lock = JSON.parse(await readFile(lockPath, 'utf8'))
+  } catch {
+    throw new Error('photon.lock is not valid JSON')
+  }
+
+  if (!lock || typeof lock !== 'object' || Array.isArray(lock) ||
+    (lock.version !== undefined && lock.version !== 1) ||
+    !lock.packages || typeof lock.packages !== 'object' || Array.isArray(lock.packages)) {
+    throw new Error('photon.lock has invalid format')
+  }
+
+  for (const [name, entry] of Object.entries(lock.packages)) {
     validateDependencyName(name)
-    if (typeof source !== 'string' || source.length === 0) {
-      throw new Error(`dependency ${name} has invalid source`)
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry) ||
+      typeof entry.source !== 'string' || typeof entry.resolved !== 'string') {
+      throw new Error(`photon.lock has invalid package ${name}`)
     }
-    return [name, source]
-  })
+  }
+
+  return lock
+}
+
+function validateFrozenLock(dependencies, lock) {
+  if (!lock) throw new Error('frozen lock requires photon.lock')
+
+  const expectedNames = dependencies.map(([name]) => name)
+  const lockedNames = Object.keys(lock.packages).sort((left, right) => left.localeCompare(right))
+  if (expectedNames.length !== lockedNames.length ||
+    expectedNames.some((name, index) => name !== lockedNames[index])) {
+    throw new Error('frozen lock does not match photon.json dependencies')
+  }
+
+  for (const [name, source] of dependencies) {
+    if (!usableLockedPackage(lock.packages[name], source)) {
+      throw new Error(`frozen lock does not match dependency ${name}`)
+    }
+  }
+}
+
+function usableLockedPackage(entry, source) {
+  if (!entry || entry.source !== source) return false
+  if (isLocalSource(source)) return entry.resolved === 'local'
+  return isCommit(entry.resolved)
+}
+
+function isCommit(value) {
+  return typeof value === 'string' && /^[0-9a-f]{40}([0-9a-f]{24})?$/.test(value)
 }
 
 function validateDependencyName(name) {
@@ -306,7 +386,7 @@ function isInside(root, target) {
   return target === root || target.startsWith(`${root}${sep}`)
 }
 
-async function installPackage(source, target) {
+async function installPackage(source, target, lockedCommit = null) {
   if (isLocalSource(source)) {
     const localPath = source.startsWith('file:')
       ? source.slice('file:'.length)
@@ -315,23 +395,37 @@ async function installPackage(source, target) {
     await cp(resolve(localPath), target, {
       recursive: true
     })
-    return
-  }
-
-  const [url, ref] = source.split('#')
-  const args = ['clone', '--depth', '1']
-  if (ref) args.push('--branch', ref)
-  args.push(url, target)
-
-  await run('git', args)
-}
-
-async function resolvePackageVersion(target) {
-  try {
-    return await runCapture('git', ['-C', target, 'rev-parse', 'HEAD'])
-  } catch {
     return 'local'
   }
+
+  const { url, ref } = parseGitSource(source)
+  const cloneArgs = ['clone', '--no-checkout']
+  if (!lockedCommit && ref && !isCommit(ref)) cloneArgs.push('--branch', ref)
+  cloneArgs.push('--', url, target)
+  await run('git', cloneArgs)
+
+  const checkout = lockedCommit ?? (ref && isCommit(ref) ? ref : 'HEAD')
+  await run('git', ['-C', target, 'checkout', '--detach', checkout])
+  const resolved = (await runCapture('git', ['-C', target, 'rev-parse', 'HEAD'])).toLowerCase()
+
+  if (!isCommit(resolved)) {
+    throw new Error(`Git dependency ${source} did not resolve to a commit`)
+  }
+  if (lockedCommit && resolved !== lockedCommit) {
+    throw new Error(`Git dependency ${source} checked out ${resolved}, expected ${lockedCommit}`)
+  }
+
+  return resolved
+}
+
+function parseGitSource(source) {
+  const separator = source.lastIndexOf('#')
+  const rawUrl = separator === -1 ? source : source.slice(0, separator)
+  const ref = separator === -1 ? null : source.slice(separator + 1)
+  const url = rawUrl.startsWith('git+') ? rawUrl.slice('git+'.length) : rawUrl
+
+  if (!url || ref === '') throw new Error(`invalid Git dependency source ${source}`)
+  return { url, ref }
 }
 
 function isLocalSource(source) {
@@ -409,7 +503,9 @@ function usage() {
     '  init [name]',
     '  add name [source]',
     '  remove name',
-    '  install',
+    '  install [--frozen-lock]',
+    '  frozen-lock',
+    '  update',
     '  list',
     '  search [query]'
   ].join('\n'))

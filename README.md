@@ -905,6 +905,15 @@ Install packages:
 photon install
 ```
 
+`photon install` uses exact Git commits from `photon.lock`. Use
+`photon update` to resolve Git refs again and write new commits. CI can require
+an unchanged, complete lock with either command:
+
+```bash
+photon install --frozen-lock
+photon frozen-lock
+```
+
 Use a package:
 
 ```lumen

@@ -1,4 +1,5 @@
 {
+  "version": 1,
   "packages": {
     "auth": {
       "source": "./packages/auth",
