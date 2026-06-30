@@ -65,3 +65,51 @@ test('lsp diagnostic maps one-based compiler locations to zero-based ranges', ()
   assert.deepEqual(diagnostic.range.start, { line: 2, character: 4 })
   assert.deepEqual(diagnostic.range.end, { line: 2, character: 5 })
 })
+
+test('lsp keeps compiler types isolated between documents', () => {
+  const messages = []
+  const server = new LspServer({
+    write: message => messages.push(message)
+  })
+
+  openDocument(server, 'untitled://one.lm', [
+    'struct Ghost {',
+    '  value: i32',
+    '}',
+    'function main(): i32 {',
+    '  return 0',
+    '}'
+  ].join('\n'))
+  openDocument(server, 'untitled://two.lm', [
+    'function main(): i32 {',
+    '  let ghost: Ghost',
+    '  return 0',
+    '}'
+  ].join('\n'))
+  openDocument(server, 'untitled://three.lm', [
+    'function main(): i32 {',
+    '  return 0',
+    '}'
+  ].join('\n'))
+
+  const diagnostics = messages.filter(message => {
+    return message.method === 'textDocument/publishDiagnostics'
+  })
+
+  assert.equal(diagnostics[0].params.diagnostics.length, 0)
+  assert.match(diagnostics[1].params.diagnostics[0].message, /Unknown type "Ghost"/)
+  assert.equal(diagnostics[2].params.diagnostics.length, 0)
+})
+
+function openDocument(server, uri, text) {
+  server.handleMessage({
+    jsonrpc: '2.0',
+    method: 'textDocument/didOpen',
+    params: {
+      textDocument: {
+        uri,
+        text
+      }
+    }
+  })
+}

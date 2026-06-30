@@ -19,30 +19,36 @@ export class Compiler {
   constructor({
     tokenizer = Tokenizer,
     parser = Parser,
-    semanticAnalyzer = new SemanticAnalyzer(),
-    typeSystem = new TypeSystem(),
-    typeChecker = new TypeChecker({ typeSystem }),
-    irBuilder = new IRBuilder(),
-    backend = new LLVMEmitter({ typeSystem })
+    semanticAnalyzerFactory = () => new SemanticAnalyzer(),
+    typeSystemFactory = () => new TypeSystem(),
+    typeCheckerFactory = typeSystem => new TypeChecker({ typeSystem }),
+    irBuilderFactory = () => new IRBuilder(),
+    backendFactory = typeSystem => new LLVMEmitter({ typeSystem })
   } = {}) {
     this.tokenizer = tokenizer
     this.parser = parser
-    this.semanticAnalyzer = semanticAnalyzer
-    this.typeChecker = typeChecker
-    this.irBuilder = irBuilder
-    this.backend = backend
+    this.semanticAnalyzerFactory = semanticAnalyzerFactory
+    this.typeSystemFactory = typeSystemFactory
+    this.typeCheckerFactory = typeCheckerFactory
+    this.irBuilderFactory = irBuilderFactory
+    this.backendFactory = backendFactory
   }
 
-  compileSource(source, { sourcePath = null, semanticAnalyzer = this.semanticAnalyzer } = {}) {
+  compileSource(source, { sourcePath = null, semanticAnalyzer = null } = {}) {
     try {
+      const typeSystem = this.typeSystemFactory()
+      const analyzer = semanticAnalyzer ?? this.semanticAnalyzerFactory()
+      const typeChecker = this.typeCheckerFactory(typeSystem)
+      const irBuilder = this.irBuilderFactory()
+      const backend = this.backendFactory(typeSystem)
       const tokens = new this.tokenizer(source).tokenize()
       const ast = new this.parser(tokens).parseProgram()
 
-      semanticAnalyzer.analyze(ast)
-      this.typeChecker.check(ast)
+      analyzer.analyze(ast)
+      typeChecker.check(ast)
 
-      const ir = this.irBuilder.build(ast)
-      const llvm = this.backend.emit(ir, { sourcePath })
+      const ir = irBuilder.build(ast)
+      const llvm = backend.emit(ir, { sourcePath })
 
       return {
         tokens,

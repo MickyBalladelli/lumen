@@ -25,3 +25,62 @@ test('type checker rejects array literal assigned to scalar', () => {
 test('type system lets empty unknown array flow into typed array', () => {
   assert.equal(new TypeSystem().canAssign(`${LumenTypes.Unknown}[]`, 'string[]'), true)
 })
+
+test('compiler does not leak types between compilations', () => {
+  const compiler = new Compiler()
+
+  compiler.compileSource([
+    'struct Ghost {',
+    '  value: i32',
+    '}',
+    'function main(): i32 {',
+    '  return 0',
+    '}'
+  ].join('\n'))
+
+  assert.throws(
+    () => compiler.compileSource([
+      'function main(): i32 {',
+      '  let ghost: Ghost',
+      '  return 0',
+      '}'
+    ].join('\n')),
+    /Unknown type "Ghost"/
+  )
+
+  assert.doesNotThrow(() => compiler.compileSource([
+    'struct Person {',
+    '  age: i32',
+    '}',
+    'function main(): i32 {',
+    '  let person = Person { age: 4 }',
+    '  return person.age',
+    '}'
+  ].join('\n')))
+})
+
+test('failed compilation does not poison later compilations', () => {
+  const compiler = new Compiler()
+
+  assert.throws(
+    () => compiler.compileSource([
+      'struct FailedType {',
+      '  value: i32',
+      '}',
+      'function main(): i32 {',
+      '  return missing',
+      '}'
+    ].join('\n')),
+    /Unknown symbol "missing"/
+  )
+
+  assert.throws(
+    () => compiler.compileSource([
+      'function main(): i32 {',
+      '  let value: FailedType',
+      '  return 0',
+      '}'
+    ].join('\n')),
+    /Unknown type "FailedType"/
+  )
+})

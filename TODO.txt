@@ -1,44 +1,169 @@
-Still missing big things:
+# Lumen TODO
 
-DONE Real self-host parser for all syntax
-DONE Real self-host AST, not map/string records
-DONE Self-host semantic analyzer
-DONE Self-host type checker
-DONE Self-host IR builder
-DONE Self-host LLVM emitter for whole language
-DONE Real module/import loading in self-host path
-DONE Real struct support, not only Point smoke case
-DONE Arrays, enums, match, switch, try/catch, async in self-host path
-DONE Better source-location diagnostics
-DONE True bootstrap equality: stage 2 output same as stage 1
-DONE Formatter, LSP, install/init polish
-DONE Package CLI install path: make npm link / global install smooth for lmsh, photon, lumen-format, lumen-lsp
-DONE VS Code package check: make sure copy-compiler includes formatter/LSP and extension works from packaged .vsix
-DONE Add small formatter tests so it does not drift
-DONE Add LSP diagnostics tests
-DONE Update README with “install Lumen” path
-DONE Kill fake no-op compiler checkpoint
-DONE Replace source-shape dispatch with stage-1 self-host delegate
+Project audit: 2026-06-30
 
-DONE Kill checkpoint compiler
-DONE Replace source-shape dispatch in compiler/emitter.lm with stage-1 self-host delegate path.
+## P0 - Correctness and safety
 
-DONE Remove old C self-host fallback
+- [x] Make every compilation use fresh mutable state.
+  `Compiler` now creates fresh semantic, type, IR, and backend components through
+  factories for every call. Regression tests cover several valid and invalid
+  compilations through one compiler/LSP instance.
 
-DONE Make self-host IR real
+- [ ] Replace source concatenation with a real module graph.
+  Resolve local and Photon imports once, preserve each file's source locations,
+  detect cycles, and expose only explicitly imported symbols. Today an unimported
+  function from a loaded file is still callable because all source is merged.
 
-DONE Make self-host emitter emit from IR
+- [ ] Make the self-host compiler genuinely self-hosting.
+  The generated compiler currently delegates through `lumen_exec` to
+  `build/lumen-compiler` and explicitly rejects compiling `compiler/main.lm`.
+  Finish native stage-2 compilation, then require stage-2 to build stage-3 and
+  compare deterministic outputs.
 
-DONE Expand self-host semantic/type checks
+- [ ] Add runtime bounds and lifetime safety.
+  Check every array/string index and slice before `getelementptr`, define ownership
+  for heap strings/JSON/lists/maps, and free owned values. Run native tests under
+  ASan and UBSan.
 
-DONE Fix empty array literals
+- [ ] Harden the HTTP and Socket.IO runtime before calling it production-ready.
+  Add request/body limits, partial read/write loops, timeouts, canonical-path
+  checks, protocol validation, clean shutdown, and concurrent connection handling.
+  Fuzz request and WebSocket parsers.
 
-DONE Add focused unit tests
+- [ ] Harden Photon installs.
+  Reject dependency names that escape `.photon/packages`, install through a
+  temporary directory, swap atomically only after validation, and keep the old
+  install on failure.
 
-DONE Clean docs roadmap
+- [ ] Make `photon.lock` reproducible.
+  Read the lock during install, pin Git dependencies to exact commits, verify the
+  checked-out commit, and define update/frozen-lock commands. The lock is currently
+  rewritten but never used to resolve an install.
 
-DONE Make packaged install story official
-Add exact npm install -g, npm link, VSIX install docs. One clear “Install Lumen” page.
+## P1 - Compiler architecture
 
-DONE Improve Photon package UX
-Add photon search/local registry or photon add result shortcut for bundled packages.
+- [ ] Finish the expression AST and stop using token-shape heuristics.
+  `RawExpression.parsed` is created but ignored by semantic analysis, type checking,
+  and code generation. Represent calls, access, assignment, unary/binary operators,
+  arrays, structs, match, and await as real nodes.
+
+- [ ] Build a real typed IR.
+  Current `IRFunction.body` contains AST statements. Lower expressions and control
+  flow into typed instructions/basic blocks, validate IR, and make the backend
+  consume IR only.
+
+- [ ] Split the 3,480-line LLVM emitter into focused lowering modules.
+  Separate control flow, values, aggregates, built-ins, debug metadata, and runtime
+  ABI declarations. Add small golden LLVM tests for each lowering family.
+
+- [ ] Strengthen the type checker.
+  Require boolean conditions, prove non-void functions return on every path, reject
+  use before initialization, fully validate match arms, and define generic,
+  nullable, Result, and collection variance rules.
+
+- [ ] Define one built-in/runtime ABI registry.
+  Function names and signatures are duplicated across module registry, expression
+  inspection, type checking, emitter code, and C. Generate or consume these tables
+  from one typed definition and fail when implementations drift.
+
+- [ ] Make diagnostics module-aware and recoverable.
+  Preserve file/range data through parsing, module loading, IR, and LLVM emission.
+  Report multiple diagnostics per run with snippets, notes, and imported-file paths.
+
+- [ ] Create a JS/self-host parity matrix.
+  Differentially compile every supported feature with both compilers and compare
+  diagnostics, LLVM behavior, and executable output. Do not mark a feature complete
+  until both paths pass.
+
+## P1 - Runtime and portability
+
+- [ ] Support Linux instead of returning silent fallbacks.
+  `arg`/`argCount`, crypto, and WebSocket handshake helpers currently return empty
+  or zero outside macOS. Implement portable providers or return explicit errors.
+
+- [ ] Split `src/runtime/http.c` into real runtime units.
+  The six split files are comments while all 2,272 lines live in `http.c`. Create
+  headers, separate system/fs/string/collections/thread/crypto/http code, and link
+  only the units a program uses.
+
+- [ ] Replace empty-string and integer error sentinels with typed errors.
+  Cover file, environment, crypto, JSON, process, thread, and HTTP failures so a
+  valid empty value cannot be mistaken for failure.
+
+- [ ] Remove shell-command execution from compiler internals.
+  Pass argument arrays to child processes. Never build compiler commands by string
+  concatenation; paths with spaces and shell characters must work safely.
+
+- [ ] Decide and implement the async model.
+  `async` and `await` currently lower synchronously. Specify tasks, scheduling,
+  cancellation, errors, and thread interaction before expanding the syntax.
+
+## P1 - CLI, editor, and distribution
+
+- [ ] Ship a normal compiler command.
+  Add a supported `lumen` binary for build/emit/run workflows. The npm package only
+  exposes `lmsh`, `photon`, formatter, and LSP, while `compile.js` has no packaged
+  command.
+
+- [ ] Add an installed-package smoke test.
+  Pack to a clean temporary directory, install the tarball, compile and run a
+  program, install a bundled Photon package, start an LSP handshake, and verify all
+  documented commands. Include `book/install-lumen.md` or remove the broken package
+  link to a file excluded by npm.
+
+- [ ] Make LSP compilation use the same module graph as CLI compilation.
+  Local imports currently produce `Unknown module` in the editor. Also implement
+  `didClose`, debounce/cancel stale diagnostics, report all errors, and isolate
+  compiler state per document/build.
+
+- [ ] Add useful language intelligence after correctness.
+  Provide go-to-definition, references, hover types, completion, rename, symbols,
+  semantic tokens, and code actions from compiler data instead of re-parsing in the
+  extension.
+
+- [ ] Make formatting syntax-aware and idempotent.
+  Format from tokens/AST rather than line regexes. Add comments, nested literals,
+  multiline calls, match/switch, strings containing braces, malformed input, CRLF,
+  and format-twice tests.
+
+- [ ] Complete package metadata and release automation.
+  Add license, repository, bugs/homepage, Node engine, publish checks, changelog,
+  version synchronization with VS Code/LSP, checksums, and reproducible VSIX/tarball
+  release artifacts.
+
+## P2 - Tests, docs, and maintenance
+
+- [ ] Add CI on macOS and Linux.
+  Run unit, example, negative, bootstrap, package, VS Code packaging, sanitizer, and
+  clean-install tests. Cache tools without caching generated compiler outputs.
+
+- [ ] Split the 1,131-line example test runner.
+  Create focused suites and helpers so one failure does not hide unrelated results.
+  Add direct unit coverage for tokenizer, module loader, semantic analyzer, emitter,
+  runtime ABI, CLI errors, and repeated compiler use.
+
+- [ ] Add parser/compiler fuzzing and property tests.
+  Assert the tokenizer/parser never hang or crash, formatting is idempotent, invalid
+  programs never reach LLVM, and generated LLVM always passes `clang` verification.
+
+- [ ] Make temporary outputs collision-safe and cacheable.
+  `lmsh` and compile flows use basenames in shared build directories. Key artifacts
+  by canonical input path, target, compiler version, and flags; write atomically.
+
+- [ ] Either wire `CompilerOptions` into behavior or remove it.
+  Garbage collector, ownership, target, and safety settings are public placeholders
+  that currently change nothing.
+
+- [ ] Reconcile documentation with actual behavior.
+  README and book disagree about full self-hosting, typed IR, supported bootstrap
+  features, and portability. Keep one generated feature/support matrix and label
+  auth, JWT, outbound HTTPS, and URL packages experimental until implemented.
+
+- [ ] Reduce the README to a reliable entry page.
+  Move language reference, package catalog, benchmarks, compiler internals, and
+  roadmap into maintained book pages. Test code snippets and internal links.
+
+- [ ] Add contributor and security documents.
+  Document toolchain setup, architecture, test layers, release process, supported
+  platforms, vulnerability reporting, and the security status of network/crypto
+  APIs.
