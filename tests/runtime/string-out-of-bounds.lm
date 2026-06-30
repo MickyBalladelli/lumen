@@ -1,0 +1,5 @@
+function main(): i32 {
+  let value = "abc"
+  println(value[3])
+  return 0
+}

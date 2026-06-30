@@ -28,6 +28,76 @@ typedef int CCOperation;
 #define kCCDecrypt 1
 #endif
 
+typedef struct LumenAllocation {
+  void *pointer;
+  struct LumenAllocation *next;
+} LumenAllocation;
+
+static LumenAllocation *lumen_allocations = NULL;
+static pthread_mutex_t lumen_allocations_mutex = PTHREAD_MUTEX_INITIALIZER;
+static int lumen_cleanup_registered = 0;
+
+void lumen_runtime_cleanup(void) {
+  pthread_mutex_lock(&lumen_allocations_mutex);
+  LumenAllocation *allocation = lumen_allocations;
+  lumen_allocations = NULL;
+  pthread_mutex_unlock(&lumen_allocations_mutex);
+
+  while (allocation) {
+    LumenAllocation *next = allocation->next;
+    free(allocation->pointer);
+    free(allocation);
+    allocation = next;
+  }
+}
+
+void *lumen_alloc(size_t size) {
+  if (size == 0) size = 1;
+
+  void *pointer = malloc(size);
+  if (!pointer) return NULL;
+
+  LumenAllocation *allocation = malloc(sizeof(LumenAllocation));
+  if (!allocation) {
+    free(pointer);
+    return NULL;
+  }
+
+  allocation->pointer = pointer;
+
+  pthread_mutex_lock(&lumen_allocations_mutex);
+  if (!lumen_cleanup_registered) {
+    atexit(lumen_runtime_cleanup);
+    lumen_cleanup_registered = 1;
+  }
+  allocation->next = lumen_allocations;
+  lumen_allocations = allocation;
+  pthread_mutex_unlock(&lumen_allocations_mutex);
+
+  return pointer;
+}
+
+void lumen_free(void *pointer) {
+  if (!pointer) return;
+
+  pthread_mutex_lock(&lumen_allocations_mutex);
+  LumenAllocation **link = &lumen_allocations;
+
+  while (*link && (*link)->pointer != pointer) {
+    link = &(*link)->next;
+  }
+
+  LumenAllocation *allocation = *link;
+  if (allocation) *link = allocation->next;
+  pthread_mutex_unlock(&lumen_allocations_mutex);
+
+  free(pointer);
+  free(allocation);
+}
+
+#define malloc(size) lumen_alloc(size)
+#define free(pointer) lumen_free(pointer)
+
 static char *lumen_strdup(const char *value);
 char *lumen_list(void);
 char *lumen_list_push(const char *list, const char *value);
@@ -561,11 +631,40 @@ void lumen_assert(int condition, const char *message) {
   exit(1);
 }
 
+int lumen_bounds_check(int index, int length) {
+  if (index >= 0 && index < length) return index;
+
+  fprintf(
+    stderr,
+    "runtime error: index %d out of bounds for length %d\n",
+    index,
+    length
+  );
+  exit(1);
+}
+
+char *lumen_string_at(const char *value, int index) {
+  int checked = lumen_bounds_check(index, (int)strlen(value));
+  char *out = malloc(2);
+  if (!out) return "";
+
+  out[0] = value[checked];
+  out[1] = '\0';
+  return out;
+}
+
 char *lumen_string_slice(const char *value, int start, int end) {
   int length = (int)strlen(value);
-  if (start < 0) start = 0;
-  if (end < start) end = start;
-  if (end > length) end = length;
+  if (start < 0 || start > length || end < start || end > length) {
+    fprintf(
+      stderr,
+      "runtime error: slice %d..%d out of bounds for length %d\n",
+      start,
+      end,
+      length
+    );
+    exit(1);
+  }
 
   int slice_length = end - start;
   char *out = malloc((size_t)slice_length + 1);

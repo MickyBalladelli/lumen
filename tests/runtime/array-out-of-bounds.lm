@@ -1,0 +1,5 @@
+function main(): i32 {
+  let values: i32[] = [1, 2, 3]
+  println(values[3])
+  return 0
+}

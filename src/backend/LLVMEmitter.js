@@ -36,6 +36,7 @@ export class LLVMEmitter {
     this.usesFileIO = false
     this.usesAssert = false
     this.usesSlice = false
+    this.usesBounds = false
     this.usesChannel = false
     this.usesHttp = false
     this.usesUuid = false
@@ -81,11 +82,13 @@ export class LLVMEmitter {
       this.usesFileIO ? 'declare i64 @ftell(ptr)' : '',
       this.usesFileIO ? 'declare i64 @fread(ptr, i64, i64, ptr)' : '',
       this.usesFileIO ? 'declare i64 @fwrite(ptr, i64, i64, ptr)' : '',
-      this.usesFileIO ? 'declare ptr @malloc(i64)' : '',
+      this.usesFileIO ? 'declare ptr @lumen_alloc(i64)' : '',
       this.usesFileIO ? 'declare i32 @fclose(ptr)' : '',
       this.usesFileIO ? 'declare i32 @lumen_write_file(ptr, ptr)' : '',
       this.usesAssert ? 'declare void @lumen_assert(i1, ptr)' : '',
       this.usesSlice ? 'declare ptr @lumen_string_slice(ptr, i32, i32)' : '',
+      this.usesBounds ? 'declare i32 @lumen_bounds_check(i32, i32)' : '',
+      this.usesBounds ? 'declare ptr @lumen_string_at(ptr, i32)' : '',
       this.usesChannel ? 'declare ptr @lumen_channel()' : '',
       this.usesChannel ? 'declare void @lumen_send(ptr, ptr)' : '',
       this.usesChannel ? 'declare ptr @lumen_receive(ptr)' : '',
@@ -831,9 +834,10 @@ export class LLVMEmitter {
     this.lines.push(`  br i1 ${condition}, label %${bodyLabel}, label %${endLabel}`)
     this.lines.push(`${bodyLabel}:`)
 
+    const checkedIndex = this.emitBoundsCheck(currentIndex, iterable.length)
     const elementPointer = this.nextTemp()
     const elementValue = this.nextTemp()
-    this.lines.push(`  ${elementPointer} = getelementptr inbounds ${this.typeSystem.llvmArray(iterable.type, iterable.length)}, ptr ${iterable.pointer}, i32 0, i32 ${currentIndex}`)
+    this.lines.push(`  ${elementPointer} = getelementptr inbounds ${this.typeSystem.llvmArray(iterable.type, iterable.length)}, ptr ${iterable.pointer}, i32 0, i32 ${checkedIndex}`)
     this.lines.push(`  ${elementValue} = load ${this.llvmType(elementType)}, ptr ${elementPointer}`)
     this.lines.push(`  store ${this.llvmType(elementType)} ${elementValue}, ptr ${itemPointer}`)
 
@@ -888,9 +892,10 @@ export class LLVMEmitter {
     this.lines.push(`  br i1 ${condition}, label %${predicateLabel}, label %${endLabel}`)
     this.lines.push(`${predicateLabel}:`)
 
+    const checkedIndex = this.emitBoundsCheck(currentIndex, iterable.length)
     const elementPointer = this.nextTemp()
     const elementValue = this.nextTemp()
-    this.lines.push(`  ${elementPointer} = getelementptr inbounds ${this.typeSystem.llvmArray(iterable.type, iterable.length)}, ptr ${iterable.pointer}, i32 0, i32 ${currentIndex}`)
+    this.lines.push(`  ${elementPointer} = getelementptr inbounds ${this.typeSystem.llvmArray(iterable.type, iterable.length)}, ptr ${iterable.pointer}, i32 0, i32 ${checkedIndex}`)
     this.lines.push(`  ${elementValue} = load ${this.llvmType(elementType)}, ptr ${elementPointer}`)
     this.lines.push(`  store ${this.llvmType(elementType)} ${elementValue}, ptr ${itemPointer}`)
 
@@ -1076,13 +1081,23 @@ export class LLVMEmitter {
 
     if (this.isArrayAccess(tokens)) {
       const base = this.resolve(tokens[0].lexeme)
+      if (base.type === LumenTypes.String) {
+        throw new Diagnostic('Strings cannot be changed through an index', tokens[0].location, 'backend')
+      }
+      if (!this.typeSystem.isArray(base.type) || base.length === null) {
+        throw new Diagnostic('Array assignment needs fixed array', tokens[0].location, 'backend')
+      }
       const closeIndex = this.findMatching(tokens, 1, '[', ']')
       const index = this.emitExpression({
         tokens: tokens.slice(2, closeIndex),
         location: tokens[0].location
       })
+      const checkedIndex = this.emitBoundsCheck(
+        this.cast(index, LumenTypes.I32),
+        base.length
+      )
       const pointer = this.nextTemp()
-      this.lines.push(`  ${pointer} = getelementptr inbounds ${this.typeSystem.llvmArray(base.type, base.length)}, ptr ${base.pointer}, i32 0, i32 ${this.cast(index, LumenTypes.I32)}`)
+      this.lines.push(`  ${pointer} = getelementptr inbounds ${this.typeSystem.llvmArray(base.type, base.length)}, ptr ${base.pointer}, i32 0, i32 ${checkedIndex}`)
       return {
         pointer,
         type: this.typeSystem.elementType(base.type)
@@ -2140,7 +2155,7 @@ export class LLVMEmitter {
     const bytesRead = this.nextTemp()
     const terminator = this.nextTemp()
     this.lines.push(`  ${bufferSize} = add i64 ${size}, 1`)
-    this.lines.push(`  ${buffer} = call ptr @malloc(i64 ${bufferSize})`)
+    this.lines.push(`  ${buffer} = call ptr @lumen_alloc(i64 ${bufferSize})`)
     this.lines.push(`  ${bytesRead} = call i64 @fread(ptr ${buffer}, i64 1, i64 ${size}, ptr ${file})`)
     this.lines.push(`  ${terminator} = getelementptr inbounds i8, ptr ${buffer}, i64 ${bytesRead}`)
     this.lines.push(`  store i8 0, ptr ${terminator}`)
@@ -2563,8 +2578,8 @@ export class LLVMEmitter {
     })
     const symbol = this.resolve(name)
 
-    if (!this.typeSystem.isArray(symbol.type) || symbol.length === null) {
-      throw new Diagnostic('serveHttp expects array variables', location, 'backend')
+    if (!this.typeSystem.isArray(symbol.type) || symbol.length === null || symbol.length === 0) {
+      throw new Diagnostic('serveHttp expects non-empty array variables', location, 'backend')
     }
 
     const pointer = this.nextTemp()
@@ -2634,9 +2649,10 @@ export class LLVMEmitter {
     this.lines.push(`  br i1 ${inBounds}, label %${bodyLabel}, label %${endLabel}`)
     this.lines.push(`${bodyLabel}:`)
 
+    const checkedIndex = this.emitBoundsCheck(currentIndex, array.length)
     const elementPointer = this.nextTemp()
     const elementValue = this.nextTemp()
-    this.lines.push(`  ${elementPointer} = getelementptr inbounds ${this.typeSystem.llvmArray(array.type, array.length)}, ptr ${array.pointer}, i32 0, i32 ${currentIndex}`)
+    this.lines.push(`  ${elementPointer} = getelementptr inbounds ${this.typeSystem.llvmArray(array.type, array.length)}, ptr ${array.pointer}, i32 0, i32 ${checkedIndex}`)
     this.lines.push(`  ${elementValue} = load ${this.llvmType(elementType)}, ptr ${elementPointer}`)
 
     const comparison = this.emitEqualityComparison({
@@ -3018,6 +3034,13 @@ export class LLVMEmitter {
     }
   }
 
+  emitBoundsCheck(index, length) {
+    this.usesBounds = true
+    const checked = this.nextTemp()
+    this.lines.push(`  ${checked} = call i32 @lumen_bounds_check(i32 ${index}, i32 ${length})`)
+    return checked
+  }
+
   emitArrayLoad(tokens) {
     const base = this.resolve(tokens[0].lexeme)
     const closeIndex = this.findMatching(tokens, 1, '[', ']')
@@ -3045,10 +3068,29 @@ export class LLVMEmitter {
     }
 
     const index = this.emitRpn(this.toRpn(indexTokens), tokens[0].location)
+    const indexValue = this.cast(index, LumenTypes.I32)
+
+    if (base.type === LumenTypes.String) {
+      this.usesBounds = true
+      const source = this.nextTemp()
+      const result = this.nextTemp()
+      this.lines.push(`  ${source} = load ptr, ptr ${base.pointer}`)
+      this.lines.push(`  ${result} = call ptr @lumen_string_at(ptr ${source}, i32 ${indexValue})`)
+      return {
+        type: LumenTypes.String,
+        value: result
+      }
+    }
+
+    if (!this.typeSystem.isArray(base.type) || base.length === null) {
+      throw new Diagnostic('Array access needs fixed array', tokens[0].location, 'backend')
+    }
+
+    const checkedIndex = this.emitBoundsCheck(indexValue, base.length)
     const elementType = this.typeSystem.elementType(base.type)
     const elementPointer = this.nextTemp()
 
-    this.lines.push(`  ${elementPointer} = getelementptr inbounds ${this.typeSystem.llvmArray(base.type, base.length)}, ptr ${base.pointer}, i32 0, i32 ${this.cast(index, LumenTypes.I32)}`)
+    this.lines.push(`  ${elementPointer} = getelementptr inbounds ${this.typeSystem.llvmArray(base.type, base.length)}, ptr ${base.pointer}, i32 0, i32 ${checkedIndex}`)
 
     if (tokens[closeIndex + 1]?.lexeme === '.') {
       const fieldName = tokens[closeIndex + 2].lexeme

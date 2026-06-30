@@ -1047,6 +1047,12 @@ organized internally by system, fs, http, thread, crypto, string, map, result,
 option, and CLI helper sections. Platform-specific bits use macOS guards and
 Linux-safe fallbacks where a native provider is not wired yet.
 
+Heap strings, JSON values, lists, maps, and runtime objects are runtime-owned.
+Returned allocations stay valid for the process lifetime, internal temporary
+allocations are released when no longer needed, and all remaining owned values
+are released by the runtime at process exit. Borrowed argument, environment,
+literal, and static pointers are not registered as owned values.
+
 Ownership settings are exposed through `CompilerOptions` with `ownership` values
 such as `manual`, `arc`, `borrow`, `gc`, and `hybrid` reserved for future runtime
 strategies.

@@ -1,0 +1,16 @@
+function main(): i32 {
+  let message = "hello " + "lumen"
+  let document = json('{"name":"lumen"}')
+  document = jsonSet(document, "mode", "safe")
+
+  let values = list()
+  values = listPush(values, message)
+
+  let entries = map("initial", "value")
+  entries = mapSet(entries, "message", message)
+
+  println(jsonGet(document, "mode"))
+  println(listGet(values, 0))
+  println(mapGet(entries, "message"))
+  return 0
+}

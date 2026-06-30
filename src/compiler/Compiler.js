@@ -111,9 +111,16 @@ export class Compiler {
     return result
   }
 
-  async buildExecutable(llvmPath, outputPath, { clang = 'clang', optimize = false } = {}) {
+  async buildExecutable(llvmPath, outputPath, {
+    clang = 'clang',
+    optimize = false,
+    sanitizers = []
+  } = {}) {
     const flags = ['-Wno-override-module', '-g']
     if (optimize) flags.push('-O2')
+    if (sanitizers.length > 0) {
+      flags.push(`-fsanitize=${sanitizers.join(',')}`, '-fno-omit-frame-pointer')
+    }
 
     const llvm = await readFile(llvmPath, 'utf8')
     const objectPath = `${outputPath}.o`
