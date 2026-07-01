@@ -3,95 +3,10 @@ import { Diagnostic } from '../diagnostics/Diagnostic.js'
 import { LumenTypes } from './TypeSystem.js'
 import { Scope } from './Scope.js'
 import { SystemFunctions, SystemLibrary } from '../system/SystemLibrary.js'
-import { FsFunctions, FsLibrary } from '../fs/FsLibrary.js'
-import { HttpFunctions, HttpLibrary } from '../http/HttpLibrary.js'
-import { ThreadFunctions, ThreadLibrary } from '../thread/ThreadLibrary.js'
-
-const FIXED_CALL_TYPES = new Map([
-  [SystemFunctions.Println, LumenTypes.Void],
-  [SystemFunctions.Len, LumenTypes.I32],
-  [SystemFunctions.Uuid, LumenTypes.String],
-  [SystemFunctions.Date, LumenTypes.String],
-  [SystemFunctions.Env, LumenTypes.String],
-  [SystemFunctions.Encrypt, LumenTypes.String],
-  [SystemFunctions.Decrypt, LumenTypes.String],
-  [SystemFunctions.Arg, LumenTypes.String],
-  [SystemFunctions.ArgCount, LumenTypes.I32],
-  [SystemFunctions.Map, LumenTypes.String],
-  [SystemFunctions.MapGet, LumenTypes.String],
-  [SystemFunctions.MapHas, LumenTypes.Bool],
-  [SystemFunctions.Err, 'Result<unknown>'],
-  [SystemFunctions.IsOk, LumenTypes.Bool],
-  [SystemFunctions.ErrorMessage, LumenTypes.String],
-  [SystemFunctions.None, LumenTypes.Unknown],
-  [SystemFunctions.HasValue, LumenTypes.Bool],
-  [SystemFunctions.Assert, LumenTypes.Void],
-  [SystemFunctions.Channel, LumenTypes.String],
-  [SystemFunctions.Send, LumenTypes.Void],
-  [SystemFunctions.Receive, LumenTypes.String],
-  [SystemFunctions.Json, LumenTypes.Json],
-  [SystemFunctions.JsonGet, LumenTypes.String],
-  [SystemFunctions.JsonGetRaw, LumenTypes.String],
-  [SystemFunctions.JsonSet, LumenTypes.Json],
-  [SystemFunctions.JsonSetPath, LumenTypes.Json],
-  [SystemFunctions.JsonQuote, LumenTypes.String],
-  [SystemFunctions.JsonStringify, LumenTypes.String],
-  [SystemFunctions.JsonValid, LumenTypes.Bool],
-  [SystemFunctions.NewError, LumenTypes.Error],
-  [SystemFunctions.ErrorCode, LumenTypes.I32],
-  [SystemFunctions.ErrorText, LumenTypes.String],
-  [SystemFunctions.ArraySum, LumenTypes.I32],
-  [SystemFunctions.ArrayJoin, LumenTypes.String],
-  [SystemFunctions.Exec, LumenTypes.I32],
-  [SystemFunctions.SourceSnippet, LumenTypes.String],
-  [SystemFunctions.StringBuilder, LumenTypes.String],
-  [SystemFunctions.StringBuilderAppend, LumenTypes.String],
-  [SystemFunctions.StringLen, LumenTypes.I32],
-  [SystemFunctions.StringEquals, LumenTypes.Bool],
-  [SystemFunctions.Trim, LumenTypes.String],
-  [SystemFunctions.Lower, LumenTypes.String],
-  [SystemFunctions.Upper, LumenTypes.String],
-  [SystemFunctions.StartsWith, LumenTypes.Bool],
-  [SystemFunctions.EndsWith, LumenTypes.Bool],
-  [SystemFunctions.Replace, LumenTypes.String],
-  [SystemFunctions.Split, LumenTypes.String],
-  [SystemFunctions.IndexOf, LumenTypes.I32],
-  [SystemFunctions.LastIndexOf, LumenTypes.I32],
-  [SystemFunctions.Contains, LumenTypes.Bool],
-  [SystemFunctions.Repeat, LumenTypes.String],
-  [SystemFunctions.PadStart, LumenTypes.String],
-  [SystemFunctions.PadEnd, LumenTypes.String],
-  [SystemFunctions.IntToString, LumenTypes.String],
-  [SystemFunctions.StringToInt, LumenTypes.I32],
-  [SystemFunctions.ParseI32, LumenTypes.I32],
-  [SystemFunctions.ParseF32, LumenTypes.F32],
-  [SystemFunctions.List, LumenTypes.String],
-  [SystemFunctions.ListPush, LumenTypes.String],
-  [SystemFunctions.ListGet, LumenTypes.String],
-  [SystemFunctions.ListLen, LumenTypes.I32],
-  [SystemFunctions.MapSet, LumenTypes.String],
-  [SystemFunctions.MapDelete, LumenTypes.String],
-  [SystemFunctions.MapKeys, LumenTypes.String],
-  [SystemFunctions.TokenizeSource, LumenTypes.String],
-  [SystemFunctions.ParseSummary, LumenTypes.String],
-  [SystemFunctions.CompilerImage, LumenTypes.String],
-  [FsFunctions.ReadFile, LumenTypes.String],
-  [FsFunctions.WriteFile, LumenTypes.I32],
-  [HttpFunctions.ServeFiles, LumenTypes.I32],
-  [HttpFunctions.ServeApi, LumenTypes.I32],
-  [HttpFunctions.ServeHttp, LumenTypes.I32],
-  [HttpFunctions.ServeSocketIoChat, LumenTypes.I32],
-  [HttpFunctions.SocketIoEvent, LumenTypes.String],
-  [HttpFunctions.SocketIoEmit, LumenTypes.String],
-  [HttpFunctions.HttpRequest, LumenTypes.String],
-  [HttpFunctions.HttpResponse, LumenTypes.String],
-  [ThreadFunctions.CreateSemaphore, LumenTypes.Semaphore],
-  [ThreadFunctions.SemaphoreWait, LumenTypes.I32],
-  [ThreadFunctions.SemaphoreSignal, LumenTypes.I32],
-  [ThreadFunctions.StartThread, LumenTypes.Thread],
-  [ThreadFunctions.JoinThread, LumenTypes.I32],
-  [ThreadFunctions.AppendFile, LumenTypes.I32]
-])
+import { FsLibrary } from '../fs/FsLibrary.js'
+import { HttpLibrary } from '../http/HttpLibrary.js'
+import { ThreadLibrary } from '../thread/ThreadLibrary.js'
+import { builtinSignature } from '../runtime/BuiltinRegistry.js'
 
 export class ExpressionInspector {
   constructor(
@@ -415,7 +330,8 @@ export class ExpressionInspector {
       }
       return this.typeSystem.elementType(collection)
     }
-    if (FIXED_CALL_TYPES.has(name)) return FIXED_CALL_TYPES.get(name)
+    const builtin = builtinSignature(name)
+    if (builtin) return builtin.returnType
 
     const symbol = this.scope.resolve(name)
     if (symbol?.kind !== 'function') return LumenTypes.Unknown

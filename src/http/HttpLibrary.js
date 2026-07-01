@@ -1,17 +1,10 @@
-export const HttpFunctions = Object.freeze({
-  ServeFiles: 'serveFiles',
-  ServeApi: 'serveApi',
-  ServeHttp: 'serveHttp',
-  ServeSocketIoChat: 'serveSocketIoChat',
-  SocketIoEvent: 'socketIoEvent',
-  SocketIoEmit: 'socketIoEmit',
-  HttpRequest: 'httpRequest',
-  HttpResponse: 'httpResponse'
-})
+import { functionConstants, functionNames } from '../runtime/BuiltinRegistry.js'
+
+export const HttpFunctions = functionConstants('http')
 
 export class HttpLibrary {
   constructor() {
-    this.functions = new Set(Object.values(HttpFunctions))
+    this.functions = new Set(functionNames('http'))
   }
 
   has(name) {

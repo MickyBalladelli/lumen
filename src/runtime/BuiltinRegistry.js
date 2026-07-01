@@ -1,0 +1,273 @@
+/**
+ * @typedef {object} RuntimeSignature
+ * @property {string} flag
+ * @property {string} symbol
+ * @property {string} returnType
+ * @property {string[]} parameters
+ * @property {boolean} [variadic]
+ *
+ * @typedef {object} BuiltinSignature
+ * @property {string} key
+ * @property {string} module
+ * @property {string} name
+ * @property {string[]} parameters
+ * @property {string} returnType
+ * @property {boolean} [variadic]
+ * @property {string} [runtime]
+ * @property {'runtime'|'custom'} lowering
+ */
+
+const runtime = (flag, symbol, returnType, parameters = [], variadic = false) => Object.freeze({
+  flag,
+  symbol,
+  returnType,
+  parameters: Object.freeze(parameters),
+  variadic
+})
+
+export const RuntimeSignatures = Object.freeze([
+  runtime('usesPrintf', 'printf', 'i32', ['ptr'], true),
+  runtime('usesStrstr', 'strstr', 'ptr', ['ptr', 'ptr']),
+  runtime('usesStrcmp', 'strcmp', 'i32', ['ptr', 'ptr']),
+  runtime('usesFileIO', 'fopen', 'ptr', ['ptr', 'ptr']),
+  runtime('usesFileIO', 'fseek', 'i32', ['ptr', 'i64', 'i32']),
+  runtime('usesFileIO', 'ftell', 'i64', ['ptr']),
+  runtime('usesFileIO', 'fread', 'i64', ['ptr', 'i64', 'i64', 'ptr']),
+  runtime('usesFileIO', 'fwrite', 'i64', ['ptr', 'i64', 'i64', 'ptr']),
+  runtime('usesFileIO', 'lumen_alloc', 'ptr', ['i64']),
+  runtime('usesFileIO', 'fclose', 'i32', ['ptr']),
+  runtime('usesFileIO', 'lumen_write_file', 'i32', ['ptr', 'ptr']),
+  runtime('usesAssert', 'lumen_assert', 'void', ['i1', 'ptr']),
+  runtime('usesSlice', 'lumen_string_slice', 'ptr', ['ptr', 'i32', 'i32']),
+  runtime('usesBounds', 'lumen_bounds_check', 'i32', ['i32', 'i32']),
+  runtime('usesBounds', 'lumen_string_at', 'ptr', ['ptr', 'i32']),
+  runtime('usesChannel', 'lumen_channel', 'ptr'),
+  runtime('usesChannel', 'lumen_send', 'void', ['ptr', 'ptr']),
+  runtime('usesChannel', 'lumen_receive', 'ptr', ['ptr']),
+  runtime('usesUuid', 'lumen_uuid', 'ptr'),
+  runtime('usesDate', 'lumen_date', 'ptr'),
+  runtime('usesEnv', 'lumen_env', 'ptr', ['ptr']),
+  runtime('usesCrypto', 'lumen_encrypt', 'ptr', ['ptr', 'ptr', 'ptr']),
+  runtime('usesCrypto', 'lumen_decrypt', 'ptr', ['ptr', 'ptr', 'ptr']),
+  runtime('usesArgs', 'lumen_arg', 'ptr', ['i32']),
+  runtime('usesArgs', 'lumen_arg_count', 'i32'),
+  runtime('usesMaps', 'lumen_map', 'ptr', ['i32'], true),
+  runtime('usesMaps', 'lumen_map_get', 'ptr', ['ptr', 'ptr']),
+  runtime('usesMaps', 'lumen_map_has', 'i1', ['ptr', 'ptr']),
+  runtime('usesResults', 'lumen_ok', 'ptr', ['ptr']),
+  runtime('usesResults', 'lumen_err', 'ptr', ['ptr']),
+  runtime('usesResults', 'lumen_is_ok', 'i1', ['ptr']),
+  runtime('usesResults', 'lumen_result_value', 'ptr', ['ptr']),
+  runtime('usesResults', 'lumen_error_message', 'ptr', ['ptr']),
+  runtime('usesOptions', 'lumen_some', 'ptr', ['ptr']),
+  runtime('usesOptions', 'lumen_none', 'ptr'),
+  runtime('usesOptions', 'lumen_has_value', 'i1', ['ptr']),
+  runtime('usesOptions', 'lumen_value_or', 'ptr', ['ptr', 'ptr']),
+  runtime('usesStringRuntime', 'lumen_string_concat', 'ptr', ['ptr', 'ptr']),
+  runtime('usesJsonRuntime', 'lumen_json', 'ptr', ['ptr']),
+  runtime('usesJsonRuntime', 'lumen_json_get', 'ptr', ['ptr', 'ptr']),
+  runtime('usesJsonRuntime', 'lumen_json_get_raw', 'ptr', ['ptr', 'ptr']),
+  runtime('usesJsonRuntime', 'lumen_json_set', 'ptr', ['ptr', 'ptr', 'ptr']),
+  runtime('usesJsonRuntime', 'lumen_json_set_path', 'ptr', ['ptr', 'ptr', 'ptr']),
+  runtime('usesJsonRuntime', 'lumen_json_stringify', 'ptr', ['ptr']),
+  runtime('usesJsonRuntime', 'lumen_json_valid', 'i1', ['ptr']),
+  runtime('usesErrorRuntime', 'lumen_error_new', 'ptr', ['i32', 'ptr']),
+  runtime('usesErrorRuntime', 'lumen_error_code', 'i32', ['ptr']),
+  runtime('usesErrorRuntime', 'lumen_error_text', 'ptr', ['ptr']),
+  runtime('usesArrayRuntime', 'lumen_array_join', 'ptr', ['i32', 'ptr', 'ptr']),
+  runtime('usesStringRuntime', 'lumen_exec', 'i32', ['ptr']),
+  runtime('usesStringRuntime', 'lumen_source_snippet', 'ptr', ['ptr', 'i32', 'i32']),
+  runtime('usesStringRuntime', 'lumen_string_builder', 'ptr'),
+  runtime('usesStringRuntime', 'lumen_string_builder_append', 'ptr', ['ptr', 'ptr']),
+  runtime('usesStringRuntime', 'lumen_string_len', 'i32', ['ptr']),
+  runtime('usesStringRuntime', 'lumen_string_equals', 'i1', ['ptr', 'ptr']),
+  runtime('usesStringRuntime', 'lumen_string_trim', 'ptr', ['ptr']),
+  runtime('usesStringRuntime', 'lumen_string_lower', 'ptr', ['ptr']),
+  runtime('usesStringRuntime', 'lumen_string_upper', 'ptr', ['ptr']),
+  runtime('usesStringRuntime', 'lumen_string_starts_with', 'i1', ['ptr', 'ptr']),
+  runtime('usesStringRuntime', 'lumen_string_ends_with', 'i1', ['ptr', 'ptr']),
+  runtime('usesStringRuntime', 'lumen_string_replace', 'ptr', ['ptr', 'ptr', 'ptr']),
+  runtime('usesStringRuntime', 'lumen_string_split', 'ptr', ['ptr', 'ptr']),
+  runtime('usesStringRuntime', 'lumen_string_index_of', 'i32', ['ptr', 'ptr']),
+  runtime('usesStringRuntime', 'lumen_string_last_index_of', 'i32', ['ptr', 'ptr']),
+  runtime('usesStringRuntime', 'lumen_string_contains', 'i1', ['ptr', 'ptr']),
+  runtime('usesStringRuntime', 'lumen_string_repeat', 'ptr', ['ptr', 'i32']),
+  runtime('usesStringRuntime', 'lumen_string_pad_start', 'ptr', ['ptr', 'i32', 'ptr']),
+  runtime('usesStringRuntime', 'lumen_string_pad_end', 'ptr', ['ptr', 'i32', 'ptr']),
+  runtime('usesStringRuntime', 'lumen_int_to_string', 'ptr', ['i32']),
+  runtime('usesStringRuntime', 'lumen_string_to_int', 'i32', ['ptr']),
+  runtime('usesStringRuntime', 'lumen_parse_f32', 'float', ['ptr']),
+  runtime('usesStringRuntime', 'lumen_list', 'ptr'),
+  runtime('usesStringRuntime', 'lumen_list_push', 'ptr', ['ptr', 'ptr']),
+  runtime('usesStringRuntime', 'lumen_list_get', 'ptr', ['ptr', 'i32']),
+  runtime('usesStringRuntime', 'lumen_list_len', 'i32', ['ptr']),
+  runtime('usesStringRuntime', 'lumen_map_set', 'ptr', ['ptr', 'ptr', 'ptr']),
+  runtime('usesStringRuntime', 'lumen_map_delete', 'ptr', ['ptr', 'ptr']),
+  runtime('usesStringRuntime', 'lumen_map_keys', 'ptr', ['ptr']),
+  runtime('usesStringRuntime', 'lumen_tokenize_source', 'ptr', ['ptr']),
+  runtime('usesStringRuntime', 'lumen_parse_summary', 'ptr', ['ptr']),
+  runtime('usesStringRuntime', 'lumen_compiler_image', 'ptr'),
+  runtime('usesHttp', 'lumen_http_serve_files', 'i32', ['i32', 'ptr']),
+  runtime('usesHttp', 'lumen_http_serve_api', 'i32', ['i32', 'ptr', 'ptr', 'ptr', 'ptr']),
+  runtime('usesHttp', 'lumen_http_serve_http', 'i32', ['i32', 'ptr', 'ptr', 'ptr', 'ptr', 'ptr', 'i32']),
+  runtime('usesHttp', 'lumen_socketio_serve_chat', 'i32', ['i32', 'ptr']),
+  runtime('usesHttp', 'lumen_socketio_event', 'ptr', ['ptr', 'ptr']),
+  runtime('usesHttp', 'lumen_socketio_emit', 'ptr', ['ptr', 'ptr', 'ptr']),
+  runtime('usesHttp', 'lumen_http_request', 'ptr', ['ptr', 'ptr', 'ptr']),
+  runtime('usesHttp', 'lumen_http_response', 'ptr', ['i32', 'ptr', 'ptr']),
+  runtime('usesThread', 'lumen_semaphore_create', 'ptr', ['i32']),
+  runtime('usesThread', 'lumen_semaphore_wait', 'void', ['ptr']),
+  runtime('usesThread', 'lumen_semaphore_signal', 'void', ['ptr']),
+  runtime('usesThread', 'lumen_thread_start', 'ptr', ['ptr', 'ptr', 'ptr', 'ptr']),
+  runtime('usesThread', 'lumen_thread_join', 'i32', ['ptr']),
+  runtime('usesThread', 'lumen_append_file', 'i32', ['ptr', 'ptr'])
+])
+
+const runtimeBySymbol = new Map(RuntimeSignatures.map(signature => [signature.symbol, signature]))
+
+const builtin = (key, module, name, parameters, returnType, options = {}) => Object.freeze({
+  key,
+  module,
+  name,
+  parameters: Object.freeze(parameters),
+  returnType,
+  variadic: options.variadic ?? false,
+  runtime: options.runtime,
+  lowering: options.lowering ?? 'custom'
+})
+
+const direct = (key, module, name, parameters, returnType, symbol) => {
+  if (!runtimeBySymbol.has(symbol)) throw new Error(`Unknown runtime symbol ${symbol}`)
+  return builtin(key, module, name, parameters, returnType, {
+    runtime: symbol,
+    lowering: 'runtime'
+  })
+}
+
+export const BuiltinSignatures = Object.freeze([
+  builtin('Println', 'system', 'println', ['any'], 'void', { variadic: true }),
+  builtin('Len', 'system', 'len', ['collection'], 'i32'),
+  builtin('Min', 'system', 'min', ['number', 'number'], 'number'),
+  builtin('Max', 'system', 'max', ['number', 'number'], 'number'),
+  builtin('Filter', 'system', 'filter', ['T[]', '(T) -> bool'], 'T[]'),
+  builtin('Includes', 'system', 'includes', ['collection', 'T'], 'bool'),
+  builtin('Uuid', 'system', 'uuid', [], 'string', { runtime: 'lumen_uuid' }),
+  builtin('Date', 'system', 'date', [], 'string', { runtime: 'lumen_date' }),
+  builtin('Env', 'system', 'env', ['string'], 'string', { runtime: 'lumen_env' }),
+  builtin('Encrypt', 'system', 'encrypt', ['string', 'string', 'string'], 'string', { runtime: 'lumen_encrypt' }),
+  builtin('Decrypt', 'system', 'decrypt', ['string', 'string', 'string'], 'string', { runtime: 'lumen_decrypt' }),
+  builtin('Arg', 'system', 'arg', ['i32'], 'string', { runtime: 'lumen_arg' }),
+  builtin('ArgCount', 'system', 'argCount', [], 'i32', { runtime: 'lumen_arg_count' }),
+  builtin('Map', 'system', 'map', ['string'], 'string', { variadic: true, runtime: 'lumen_map' }),
+  direct('MapGet', 'system', 'mapGet', ['string', 'string'], 'string', 'lumen_map_get'),
+  direct('MapHas', 'system', 'mapHas', ['string', 'string'], 'bool', 'lumen_map_has'),
+  builtin('Ok', 'system', 'ok', ['T'], 'Result<T>', { runtime: 'lumen_ok' }),
+  builtin('Err', 'system', 'err', ['string'], 'Result<unknown>', { runtime: 'lumen_err' }),
+  direct('IsOk', 'system', 'isOk', ['Result<T>'], 'bool', 'lumen_is_ok'),
+  builtin('ResultValue', 'system', 'resultValue', ['Result<T>'], 'T', { runtime: 'lumen_result_value' }),
+  direct('ErrorMessage', 'system', 'errorMessage', ['Result<T>'], 'string', 'lumen_error_message'),
+  builtin('Some', 'system', 'some', ['T'], 'T?', { runtime: 'lumen_some' }),
+  builtin('None', 'system', 'none', [], 'unknown', { runtime: 'lumen_none' }),
+  direct('HasValue', 'system', 'hasValue', ['T?'], 'bool', 'lumen_has_value'),
+  builtin('ValueOr', 'system', 'valueOr', ['T?', 'T'], 'T', { runtime: 'lumen_value_or' }),
+  builtin('Assert', 'system', 'assert', ['bool', 'string'], 'void', { runtime: 'lumen_assert' }),
+  builtin('Channel', 'system', 'channel', [], 'string', { runtime: 'lumen_channel' }),
+  builtin('Send', 'system', 'send', ['string', 'string'], 'void', { runtime: 'lumen_send' }),
+  builtin('Receive', 'system', 'receive', ['string'], 'string', { runtime: 'lumen_receive' }),
+  direct('Json', 'system', 'json', ['string'], 'json', 'lumen_json'),
+  direct('JsonGet', 'system', 'jsonGet', ['json', 'string'], 'string', 'lumen_json_get'),
+  direct('JsonGetRaw', 'system', 'jsonGetRaw', ['json', 'string'], 'string', 'lumen_json_get_raw'),
+  direct('JsonSet', 'system', 'jsonSet', ['json', 'string', 'string'], 'json', 'lumen_json_set'),
+  direct('JsonSetPath', 'system', 'jsonSetPath', ['json', 'string', 'string'], 'json', 'lumen_json_set_path'),
+  direct('JsonQuote', 'system', 'jsonQuote', ['string'], 'string', 'lumen_json_stringify'),
+  direct('JsonStringify', 'system', 'jsonStringify', ['json'], 'string', 'lumen_json_stringify'),
+  direct('JsonValid', 'system', 'jsonValid', ['string'], 'bool', 'lumen_json_valid'),
+  builtin('NewError', 'system', 'newError', ['i32', 'string'], 'error', { runtime: 'lumen_error_new' }),
+  direct('ErrorCode', 'system', 'errorCode', ['error'], 'i32', 'lumen_error_code'),
+  direct('ErrorText', 'system', 'errorText', ['error'], 'string', 'lumen_error_text'),
+  builtin('ArraySum', 'system', 'arraySum', ['number[]'], 'i32'),
+  builtin('ArrayFirst', 'system', 'arrayFirst', ['T[]'], 'T'),
+  builtin('ArrayLast', 'system', 'arrayLast', ['T[]'], 'T'),
+  builtin('ArrayJoin', 'system', 'arrayJoin', ['string[]', 'string'], 'string', { runtime: 'lumen_array_join' }),
+  direct('Exec', 'system', 'exec', ['string'], 'i32', 'lumen_exec'),
+  builtin('SourceSnippet', 'system', 'sourceSnippet', ['string', 'i32', 'i32'], 'string', { runtime: 'lumen_source_snippet' }),
+  direct('StringBuilder', 'system', 'stringBuilder', [], 'string', 'lumen_string_builder'),
+  direct('StringBuilderAppend', 'system', 'stringBuilderAppend', ['string', 'string'], 'string', 'lumen_string_builder_append'),
+  direct('StringLen', 'system', 'stringLen', ['string'], 'i32', 'lumen_string_len'),
+  direct('StringEquals', 'system', 'stringEquals', ['string', 'string'], 'bool', 'lumen_string_equals'),
+  direct('Trim', 'system', 'trim', ['string'], 'string', 'lumen_string_trim'),
+  direct('Lower', 'system', 'lower', ['string'], 'string', 'lumen_string_lower'),
+  direct('Upper', 'system', 'upper', ['string'], 'string', 'lumen_string_upper'),
+  direct('StartsWith', 'system', 'startsWith', ['string', 'string'], 'bool', 'lumen_string_starts_with'),
+  direct('EndsWith', 'system', 'endsWith', ['string', 'string'], 'bool', 'lumen_string_ends_with'),
+  direct('Replace', 'system', 'replace', ['string', 'string', 'string'], 'string', 'lumen_string_replace'),
+  direct('Split', 'system', 'split', ['string', 'string'], 'string', 'lumen_string_split'),
+  direct('IndexOf', 'system', 'indexOf', ['string', 'string'], 'i32', 'lumen_string_index_of'),
+  direct('LastIndexOf', 'system', 'lastIndexOf', ['string', 'string'], 'i32', 'lumen_string_last_index_of'),
+  direct('Contains', 'system', 'contains', ['string', 'string'], 'bool', 'lumen_string_contains'),
+  builtin('Repeat', 'system', 'repeat', ['string', 'i32'], 'string', { runtime: 'lumen_string_repeat' }),
+  builtin('PadStart', 'system', 'padStart', ['string', 'i32', 'string'], 'string', { runtime: 'lumen_string_pad_start' }),
+  builtin('PadEnd', 'system', 'padEnd', ['string', 'i32', 'string'], 'string', { runtime: 'lumen_string_pad_end' }),
+  builtin('IntToString', 'system', 'intToString', ['i32'], 'string', { runtime: 'lumen_int_to_string' }),
+  direct('StringToInt', 'system', 'stringToInt', ['string'], 'i32', 'lumen_string_to_int'),
+  direct('ParseI32', 'system', 'parseI32', ['string'], 'i32', 'lumen_string_to_int'),
+  direct('ParseF32', 'system', 'parseF32', ['string'], 'f32', 'lumen_parse_f32'),
+  direct('List', 'system', 'list', [], 'string', 'lumen_list'),
+  direct('ListPush', 'system', 'listPush', ['string', 'string'], 'string', 'lumen_list_push'),
+  builtin('ListGet', 'system', 'listGet', ['string', 'i32'], 'string', { runtime: 'lumen_list_get' }),
+  direct('ListLen', 'system', 'listLen', ['string'], 'i32', 'lumen_list_len'),
+  direct('MapSet', 'system', 'mapSet', ['string', 'string', 'string'], 'string', 'lumen_map_set'),
+  direct('MapDelete', 'system', 'mapDelete', ['string', 'string'], 'string', 'lumen_map_delete'),
+  direct('MapKeys', 'system', 'mapKeys', ['string'], 'string', 'lumen_map_keys'),
+  direct('TokenizeSource', 'system', 'tokenizeSource', ['string'], 'string', 'lumen_tokenize_source'),
+  direct('ParseSummary', 'system', 'parseSummary', ['string'], 'string', 'lumen_parse_summary'),
+  direct('CompilerImage', 'system', 'compilerImage', [], 'string', 'lumen_compiler_image'),
+  builtin('ReadFile', 'fs', 'readFile', ['string'], 'string'),
+  builtin('WriteFile', 'fs', 'writeFile', ['string', 'string'], 'i32', { runtime: 'lumen_write_file' }),
+  builtin('ServeFiles', 'http', 'serveFiles', ['i32', 'string'], 'i32', { runtime: 'lumen_http_serve_files' }),
+  builtin('ServeApi', 'http', 'serveApi', ['i32', 'string', 'string', 'string', 'string'], 'i32', { runtime: 'lumen_http_serve_api' }),
+  builtin('ServeHttp', 'http', 'serveHttp', ['i32', 'string', 'string[]', 'string[]', 'string[]', 'string[]'], 'i32', { runtime: 'lumen_http_serve_http' }),
+  builtin('ServeSocketIoChat', 'http', 'serveSocketIoChat', ['i32', 'string'], 'i32', { runtime: 'lumen_socketio_serve_chat' }),
+  builtin('SocketIoEvent', 'http', 'socketIoEvent', ['string', 'string'], 'string', { runtime: 'lumen_socketio_event' }),
+  builtin('SocketIoEmit', 'http', 'socketIoEmit', ['string', 'string', 'string'], 'string', { runtime: 'lumen_socketio_emit' }),
+  builtin('HttpRequest', 'http', 'httpRequest', ['string', 'string', 'string'], 'string', { runtime: 'lumen_http_request' }),
+  builtin('HttpResponse', 'http', 'httpResponse', ['i32', 'string', 'string'], 'string', { runtime: 'lumen_http_response' }),
+  builtin('CreateSemaphore', 'thread', 'createSemaphore', ['i32'], 'semaphore', { runtime: 'lumen_semaphore_create' }),
+  builtin('SemaphoreWait', 'thread', 'semaphoreWait', ['semaphore'], 'i32', { runtime: 'lumen_semaphore_wait' }),
+  builtin('SemaphoreSignal', 'thread', 'semaphoreSignal', ['semaphore'], 'i32', { runtime: 'lumen_semaphore_signal' }),
+  builtin('StartThread', 'thread', 'startThread', ['function', 'string', 'string', 'semaphore'], 'thread', { runtime: 'lumen_thread_start' }),
+  builtin('JoinThread', 'thread', 'joinThread', ['thread'], 'i32', { runtime: 'lumen_thread_join' }),
+  builtin('AppendFile', 'thread', 'appendFile', ['string', 'string'], 'i32', { runtime: 'lumen_append_file' })
+])
+
+const builtinsByName = new Map(BuiltinSignatures.map(signature => [signature.name, signature]))
+
+export function builtinSignature(name) {
+  return builtinsByName.get(name) ?? null
+}
+
+export function builtinsForModule(moduleName) {
+  return BuiltinSignatures.filter(signature => signature.module === moduleName)
+}
+
+export function functionNames(moduleName) {
+  return builtinsForModule(moduleName).map(signature => signature.name)
+}
+
+export function functionConstants(moduleName) {
+  return Object.freeze(Object.fromEntries(
+    builtinsForModule(moduleName).map(signature => [signature.key, signature.name])
+  ))
+}
+
+export function runtimeSignature(symbol) {
+  return runtimeBySymbol.get(symbol) ?? null
+}
+
+export function llvmDeclaration(signature) {
+  const parameters = [
+    ...signature.parameters,
+    ...(signature.variadic ? ['...'] : [])
+  ].join(', ')
+  return `declare ${signature.returnType} @${signature.symbol}(${parameters})`
+}

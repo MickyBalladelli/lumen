@@ -1,15 +1,10 @@
-export const ThreadFunctions = Object.freeze({
-  CreateSemaphore: 'createSemaphore',
-  SemaphoreWait: 'semaphoreWait',
-  SemaphoreSignal: 'semaphoreSignal',
-  StartThread: 'startThread',
-  JoinThread: 'joinThread',
-  AppendFile: 'appendFile'
-})
+import { functionConstants, functionNames } from '../runtime/BuiltinRegistry.js'
+
+export const ThreadFunctions = functionConstants('thread')
 
 export class ThreadLibrary {
   constructor() {
-    this.functions = new Set(Object.values(ThreadFunctions))
+    this.functions = new Set(functionNames('thread'))
   }
 
   has(name) {

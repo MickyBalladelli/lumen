@@ -1,11 +1,10 @@
-export const FsFunctions = Object.freeze({
-  ReadFile: 'readFile',
-  WriteFile: 'writeFile'
-})
+import { functionConstants, functionNames } from '../runtime/BuiltinRegistry.js'
+
+export const FsFunctions = functionConstants('fs')
 
 export class FsLibrary {
   constructor() {
-    this.functions = new Set(Object.values(FsFunctions))
+    this.functions = new Set(functionNames('fs'))
   }
 
   has(name) {
