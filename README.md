@@ -585,7 +585,7 @@ Manual use stays small:
 ```bash
 npm run bootstrap
 npm run compile -- examples/basic.lm build/basic-self.ll
-clang -Wno-override-module build/basic-self.ll src/runtime/http.c -pthread -o build/basic-self
+clang -Wno-override-module build/basic-self.ll -o build/basic-self
 ./build/basic-self
 ```
 
@@ -764,7 +764,7 @@ npm run compile -- examples/native-main.lm build/native-main.ll
 Link and run manually:
 
 ```bash
-clang -Wno-override-module build/native-main.ll src/runtime/http.c -pthread -o build/native-main
+clang -Wno-override-module build/native-main.ll -o build/native-main
 ./build/native-main
 ```
 
@@ -1053,19 +1053,21 @@ src/
     Compiler.js          end-to-end pipeline and clang driver
   runtime/
     CompilerOptions.js   runtime/compiler toggles including ownership mode
-    system.c             system runtime split point
-    fs.c                 fs runtime split point
-    http_runtime.c       http runtime split point
-    thread.c             thread runtime split point
-    crypto.c             crypto runtime split point
-    string.c             string runtime split point
+    RuntimeUnits.js      symbol-to-runtime-unit linker selection
+    system.c             allocation and system helpers
+    fs.c                 file-system helpers
+    collections.c        list, map, JSON, and array helpers
+    string.c             string helpers
+    thread.c             thread and semaphore helpers
+    crypto.c             encryption helpers
+    http.c               HTTP, WebSocket, and Socket.IO helpers
+    lumen_*.h            public unit headers
 ```
 
-The C runtime is still built as one translation unit for easy linking, but it is
-organized internally by system, fs, http, thread, crypto, string, map, result,
-option, and CLI helper sections. Linux reads process arguments from
-`/proc/self/cmdline` and uses dependency-free PBKDF2-HMAC-SHA256,
-AES-256-CTR, secure random, and portable WebSocket SHA-1 support.
+The compiler scans referenced runtime symbols and links only their owning units
+plus required dependencies. Linux reads process arguments from
+`/proc/self/cmdline` and uses dependency-free PBKDF2-HMAC-SHA256, AES-256-CTR,
+secure random, and portable WebSocket SHA-1 support.
 
 Heap strings, JSON values, lists, maps, and runtime objects are runtime-owned.
 Returned allocations stay valid for the process lifetime, internal temporary

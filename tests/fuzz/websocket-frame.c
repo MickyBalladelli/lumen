@@ -1,3 +1,4 @@
+#include "../../src/runtime/system.c"
 #include "../../src/runtime/http.c"
 
 int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size) {

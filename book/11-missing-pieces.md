@@ -175,14 +175,9 @@ empty sentinels.
 
 ### Split The Runtime C Code
 
-`src/runtime/http.c` is ~2,272 lines and contains all HTTP code. Despite
-having separate files (`http_runtime.c`, `system.c`, `fs.c`, `thread.c`,
-`crypto.c`, `string.c`) in the directory, the code is not truly modular.
-
-- Create proper C headers for each runtime unit
-- Separate system, fs, string, collections (map/list), thread, crypto, and
-  HTTP code
-- Link only the units a program actually uses
+Completed. System, fs, string, collections, thread, crypto, and HTTP now have
+separate implementations and headers. Runtime symbol references select the
+units linked into each generated program.
 
 ### Replace Error Sentinels With Typed Errors
 

@@ -1,7 +1,6 @@
 import { spawn } from 'node:child_process'
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { Tokenizer } from '../lexer/Tokenizer.js'
 import { Parser } from '../parser/Parser.js'
 import { SemanticAnalyzer } from '../semantics/SemanticAnalyzer.js'
@@ -17,8 +16,7 @@ import {
 } from '../diagnostics/Diagnostic.js'
 import { ModuleLoader } from '../modules/ModuleLoader.js'
 import { ModuleRegistry } from '../semantics/ModuleRegistry.js'
-
-const runtimePath = fileURLToPath(new URL('../runtime/http.c', import.meta.url))
+import { runtimeSourcesForLLVM } from '../runtime/RuntimeUnits.js'
 
 export class Compiler {
   constructor({
@@ -166,7 +164,7 @@ export class Compiler {
         sources.push(imageObjectPath)
       }
 
-      if (/@lumen_/.test(llvm)) sources.push(runtimePath)
+      sources.push(...runtimeSourcesForLLVM(llvm))
       await this.run(clang, [...flags, ...sources, '-pthread', '-o', outputPath])
     } finally {
       await Promise.all(generated.map(path => unlink(path).catch(error => {

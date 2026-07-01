@@ -1,1822 +1,1552 @@
-#ifndef _POSIX_C_SOURCE
-#define _POSIX_C_SOURCE 200809L
-#endif
-#ifndef _XOPEN_SOURCE
-#define _XOPEN_SOURCE 700
-#endif
-
+#include "runtime_internal.h"
+#include "lumen_http.h"
 #include <arpa/inet.h>
-#ifdef __APPLE__
-#include <crt_externs.h>
-#endif
-#if defined(__APPLE__) && !defined(LUMEN_FORCE_PORTABLE_CRYPTO)
-#define LUMEN_USE_COMMON_CRYPTO 1
-#include <CommonCrypto/CommonCryptor.h>
-#include <CommonCrypto/CommonDigest.h>
-#include <CommonCrypto/CommonHMAC.h>
-#include <CommonCrypto/CommonKeyDerivation.h>
-#include <CommonCrypto/CommonRandom.h>
-#endif
-#include <errno.h>
-#include <ctype.h>
-#include <fcntl.h>
-#include <limits.h>
 #include <netinet/in.h>
-#include <pthread.h>
-#include <signal.h>
-#include <stdint.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <sys/socket.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-#include <sys/wait.h>
-#include <time.h>
-#include <unistd.h>
 
-#ifndef LUMEN_USE_COMMON_CRYPTO
-#include "portable_crypto.h"
-#endif
-
-#ifndef PATH_MAX
-#define PATH_MAX 4096
-#endif
-
-#ifndef LUMEN_USE_COMMON_CRYPTO
-#define CC_SHA1_DIGEST_LENGTH 20
-#define CC_SHA256_DIGEST_LENGTH 32
-typedef int CCOperation;
-#define kCCEncrypt 0
-#define kCCDecrypt 1
-#endif
-
-typedef struct LumenAllocation {
-  void *pointer;
-  struct LumenAllocation *next;
-} LumenAllocation;
-
-static LumenAllocation *lumen_allocations = NULL;
-static pthread_mutex_t lumen_allocations_mutex = PTHREAD_MUTEX_INITIALIZER;
-static int lumen_cleanup_registered = 0;
-
-void lumen_runtime_cleanup(void) {
-  pthread_mutex_lock(&lumen_allocations_mutex);
-  LumenAllocation *allocation = lumen_allocations;
-  lumen_allocations = NULL;
-  pthread_mutex_unlock(&lumen_allocations_mutex);
-
-  while (allocation) {
-    LumenAllocation *next = allocation->next;
-    free(allocation->pointer);
-    free(allocation);
-    allocation = next;
-  }
-}
-
-void *lumen_alloc(size_t size) {
-  if (size == 0) size = 1;
-
-  void *pointer = malloc(size);
-  if (!pointer) return NULL;
-
-  LumenAllocation *allocation = malloc(sizeof(LumenAllocation));
-  if (!allocation) {
-    free(pointer);
-    return NULL;
-  }
-
-  allocation->pointer = pointer;
-
-  pthread_mutex_lock(&lumen_allocations_mutex);
-  if (!lumen_cleanup_registered) {
-    atexit(lumen_runtime_cleanup);
-    lumen_cleanup_registered = 1;
-  }
-  allocation->next = lumen_allocations;
-  lumen_allocations = allocation;
-  pthread_mutex_unlock(&lumen_allocations_mutex);
-
-  return pointer;
-}
-
-void lumen_free(void *pointer) {
-  if (!pointer) return;
-
-  pthread_mutex_lock(&lumen_allocations_mutex);
-  LumenAllocation **link = &lumen_allocations;
-
-  while (*link && (*link)->pointer != pointer) {
-    link = &(*link)->next;
-  }
-
-  LumenAllocation *allocation = *link;
-  if (allocation) *link = allocation->next;
-  pthread_mutex_unlock(&lumen_allocations_mutex);
-
-  free(pointer);
-  free(allocation);
-}
-
-#define malloc(size) lumen_alloc(size)
-#define free(pointer) lumen_free(pointer)
-
-static char *lumen_strdup(const char *value);
-char *lumen_list(void);
-char *lumen_list_push(const char *list, const char *value);
-
-char *lumen_uuid(void) {
-  static int seeded = 0;
-  if (!seeded) {
-    srand((unsigned int)(time(NULL) ^ getpid()));
-    seeded = 1;
-  }
-
-  unsigned int a = (unsigned int)rand();
-  unsigned int b = (unsigned int)rand();
-  unsigned int c = (unsigned int)rand();
-  unsigned int d = (unsigned int)rand();
-  unsigned int e = (unsigned int)rand();
-
-  char *out = malloc(37);
-  if (!out) return "";
-
-  snprintf(
-    out,
-    37,
-    "%08x-%04x-%04x-%04x-%012x",
-    a,
-    b & 0xffff,
-    ((c & 0x0fff) | 0x4000),
-    ((d & 0x3fff) | 0x8000),
-    e
-  );
-
-  return out;
-}
-
-char *lumen_date(void) {
-  time_t now = time(NULL);
-  struct tm value;
-  localtime_r(&now, &value);
-
-  char *out = malloc(20);
-  if (!out) return "";
-
-  strftime(out, 20, "%Y-%m-%d %H:%M:%S", &value);
-  return out;
-}
-
-char *lumen_env(const char *name) {
-  char *value = getenv(name);
-  if (value) return value;
-
-  const char *path = getenv("LUMEN_DOTENV_PATH");
-  if (!path) path = ".env";
-
-  FILE *file = fopen(path, "r");
-  if (!file) return "";
-
-  char line[4096];
-  size_t name_length = strlen(name);
-
-  while (fgets(line, sizeof(line), file)) {
-    char *cursor = line;
-
-    while (*cursor == ' ' || *cursor == '\t') cursor += 1;
-    if (*cursor == '\0' || *cursor == '\n' || *cursor == '#') continue;
-
-    if (strncmp(cursor, "export", 6) == 0 && (cursor[6] == ' ' || cursor[6] == '\t')) {
-      cursor += 6;
-      while (*cursor == ' ' || *cursor == '\t') cursor += 1;
-    }
-
-    char *equals = strchr(cursor, '=');
-    if (!equals) continue;
-
-    char *key_end = equals;
-    while (key_end > cursor && (key_end[-1] == ' ' || key_end[-1] == '\t')) key_end -= 1;
-
-    if ((size_t)(key_end - cursor) != name_length || strncmp(cursor, name, name_length) != 0) continue;
-
-    char *value_start = equals + 1;
-    while (*value_start == ' ' || *value_start == '\t') value_start += 1;
-
-    char *value_end = value_start + strlen(value_start);
-    while (value_end > value_start && (value_end[-1] == '\n' || value_end[-1] == '\r')) value_end -= 1;
-    while (value_end > value_start && (value_end[-1] == ' ' || value_end[-1] == '\t')) value_end -= 1;
-
-    if ((*value_start == '"' && value_end > value_start && value_end[-1] == '"') ||
-      (*value_start == '\'' && value_end > value_start && value_end[-1] == '\'')) {
-      value_start += 1;
-      value_end -= 1;
-    }
-
-    size_t value_length = value_end > value_start ? (size_t)(value_end - value_start) : 0;
-    char *out = malloc(value_length + 1);
-    if (!out) {
-      fclose(file);
-      return "";
-    }
-
-    memcpy(out, value_start, value_length);
-    out[value_length] = '\0';
-    fclose(file);
-    return out;
-  }
-
-  fclose(file);
-  return "";
-}
+#define LUMEN_HTTP_MAX_HEADERS (16 * 1024)
+#define LUMEN_HTTP_MAX_BODY (1024 * 1024)
+#define LUMEN_HTTP_MAX_TARGET 2048
+#define LUMEN_HTTP_MAX_HEADER_COUNT 100
+#define LUMEN_HTTP_MAX_CONNECTIONS 128
+#define LUMEN_HTTP_IO_TIMEOUT_SECONDS 10
+#define LUMEN_WEBSOCKET_MAX_PAYLOAD (64 * 1024)
 
 typedef struct {
-  char *data;
-  char **values;
-  int count;
-  int available;
-} LumenProcessArguments;
-
-static LumenProcessArguments lumen_process_arguments = {0};
-static pthread_once_t lumen_process_arguments_once = PTHREAD_ONCE_INIT;
-
-#if defined(__linux__) || defined(LUMEN_FORCE_LINUX_ARGS)
-static void lumen_load_process_arguments(void) {
-  long configured_limit = sysconf(_SC_ARG_MAX);
-  size_t capacity = configured_limit > 0
-    ? (size_t)configured_limit
-    : 2 * 1024 * 1024;
-  if (capacity > 16 * 1024 * 1024) capacity = 16 * 1024 * 1024;
-
-  const char *path = getenv("LUMEN_PROC_SELF_CMDLINE");
-  if (!path || path[0] == '\0') path = "/proc/self/cmdline";
-  FILE *file = fopen(path, "rb");
-  if (!file) return;
-
-  char *data = lumen_alloc(capacity + 1);
-  if (!data) {
-    fclose(file);
-    return;
-  }
-  size_t length = fread(data, 1, capacity, file);
-  int failed = ferror(file);
-  fclose(file);
-  if (failed || length == 0 || length == capacity) return;
-  data[length] = '\0';
-
-  int count = 0;
-  for (size_t index = 0; index < length; index += 1) {
-    if (data[index] == '\0') count += 1;
-  }
-  if (count == 0) return;
-
-  char **values = lumen_alloc(sizeof(char *) * (size_t)count);
-  if (!values) return;
-  int argument = 0;
-  values[argument++] = data;
-  for (size_t index = 0; index + 1 < length && argument < count; index += 1) {
-    if (data[index] == '\0') values[argument++] = data + index + 1;
-  }
-
-  lumen_process_arguments.data = data;
-  lumen_process_arguments.values = values;
-  lumen_process_arguments.count = argument;
-  lumen_process_arguments.available = 1;
-}
-#endif
-
-char *lumen_arg(int index) {
-#if defined(__APPLE__) && !defined(LUMEN_FORCE_LINUX_ARGS)
-  int argc = *_NSGetArgc();
-  char **argv = *_NSGetArgv();
-
-  if (index < 0 || index >= argc) return "";
-  return argv[index];
-#elif defined(__linux__) || defined(LUMEN_FORCE_LINUX_ARGS)
-  pthread_once(&lumen_process_arguments_once, lumen_load_process_arguments);
-  if (!lumen_process_arguments.available) {
-    return "error: cannot read process arguments from /proc/self/cmdline";
-  }
-  if (index < 0 || index >= lumen_process_arguments.count) return "";
-  return lumen_process_arguments.values[index];
-#else
-  (void)index;
-  return "error: process arguments are unsupported on this platform";
-#endif
-}
-
-int lumen_arg_count(void) {
-#if defined(__APPLE__) && !defined(LUMEN_FORCE_LINUX_ARGS)
-  return *_NSGetArgc();
-#elif defined(__linux__) || defined(LUMEN_FORCE_LINUX_ARGS)
-  pthread_once(&lumen_process_arguments_once, lumen_load_process_arguments);
-  return lumen_process_arguments.available ? lumen_process_arguments.count : -1;
-#else
-  return -1;
-#endif
-}
-
-int lumen_write_file(const char *path, const char *content) {
-  FILE *file = fopen(path, "wb");
-  if (!file) return 1;
-
-  size_t length = strlen(content);
-  size_t written = fwrite(content, 1, length, file);
-  fclose(file);
-  return written == length ? 0 : 1;
-}
-
-char *lumen_read_file(const char *path) {
-  FILE *file = fopen(path, "rb");
-  if (!file) return lumen_strdup("");
-
-  fseek(file, 0, SEEK_END);
-  long size = ftell(file);
-  fseek(file, 0, SEEK_SET);
-
-  char *source = malloc((size_t)size + 1);
-  if (!source) {
-    fclose(file);
-    return lumen_strdup("");
-  }
-
-  size_t bytes_read = fread(source, 1, (size_t)size, file);
-  source[bytes_read] = '\0';
-  fclose(file);
-  return source;
-}
-
-int lumen_exec(const char *command) {
-  int status = system(command);
-  if (status == -1) return 1;
-  if (WIFEXITED(status)) return WEXITSTATUS(status);
-  return status == 0 ? 0 : 1;
-}
-
-__attribute__((weak)) const char *lumen_compiler_image(void) {
-  return "";
-}
-
-char *lumen_string_concat(const char *left, const char *right) {
-  size_t left_length = strlen(left);
-  size_t right_length = strlen(right);
-  char *out = malloc(left_length + right_length + 1);
-  if (!out) return "";
-
-  memcpy(out, left, left_length);
-  memcpy(out + left_length, right, right_length + 1);
-  return out;
-}
-
-char *lumen_string_builder(void) {
-  return lumen_strdup("");
-}
-
-char *lumen_string_builder_append(const char *builder, const char *value) {
-  return lumen_string_concat(builder, value);
-}
-
-int lumen_string_len(const char *value) {
-  return (int)strlen(value);
-}
-
-_Bool lumen_string_equals(const char *left, const char *right) {
-  return strcmp(left, right) == 0;
-}
-
-char *lumen_string_trim(const char *value) {
-  const char *start = value;
-  while (*start && isspace((unsigned char)*start)) start += 1;
-
-  const char *end = value + strlen(value);
-  while (end > start && isspace((unsigned char)*(end - 1))) end -= 1;
-
-  size_t length = (size_t)(end - start);
-  char *out = malloc(length + 1);
-  if (!out) return "";
-  memcpy(out, start, length);
-  out[length] = '\0';
-  return out;
-}
-
-char *lumen_string_lower(const char *value) {
-  size_t length = strlen(value);
-  char *out = malloc(length + 1);
-  if (!out) return "";
-
-  for (size_t index = 0; index < length; index += 1) {
-    out[index] = (char)tolower((unsigned char)value[index]);
-  }
-
-  out[length] = '\0';
-  return out;
-}
-
-char *lumen_string_upper(const char *value) {
-  size_t length = strlen(value);
-  char *out = malloc(length + 1);
-  if (!out) return "";
-
-  for (size_t index = 0; index < length; index += 1) {
-    out[index] = (char)toupper((unsigned char)value[index]);
-  }
-
-  out[length] = '\0';
-  return out;
-}
-
-_Bool lumen_string_starts_with(const char *value, const char *prefix) {
-  size_t prefix_length = strlen(prefix);
-  return strncmp(value, prefix, prefix_length) == 0;
-}
-
-_Bool lumen_string_ends_with(const char *value, const char *suffix) {
-  size_t value_length = strlen(value);
-  size_t suffix_length = strlen(suffix);
-  if (suffix_length > value_length) return 0;
-  return strcmp(value + value_length - suffix_length, suffix) == 0;
-}
-
-char *lumen_string_replace(const char *value, const char *needle, const char *replacement) {
-  size_t needle_length = strlen(needle);
-  if (needle_length == 0) return lumen_strdup(value);
-
-  const char *match = strstr(value, needle);
-  if (!match) return lumen_strdup(value);
-
-  size_t prefix_length = (size_t)(match - value);
-  size_t replacement_length = strlen(replacement);
-  size_t suffix_length = strlen(match + needle_length);
-  char *out = malloc(prefix_length + replacement_length + suffix_length + 1);
-  if (!out) return "";
-
-  memcpy(out, value, prefix_length);
-  memcpy(out + prefix_length, replacement, replacement_length);
-  memcpy(out + prefix_length + replacement_length, match + needle_length, suffix_length + 1);
-  return out;
-}
-
-char *lumen_string_split(const char *value, const char *separator) {
-  size_t separator_length = strlen(separator);
-  char *items = lumen_list();
-  if (separator_length == 0) return lumen_list_push(items, value);
-
-  const char *cursor = value;
-  const char *match = NULL;
-
-  while ((match = strstr(cursor, separator))) {
-    size_t length = (size_t)(match - cursor);
-    char *item = malloc(length + 1);
-    if (!item) return items;
-    memcpy(item, cursor, length);
-    item[length] = '\0';
-    items = lumen_list_push(items, item);
-    cursor = match + separator_length;
-  }
-
-  return lumen_list_push(items, cursor);
-}
-
-int lumen_string_index_of(const char *value, const char *needle) {
-  const char *match = strstr(value, needle);
-  if (!match) return -1;
-  return (int)(match - value);
-}
-
-int lumen_string_last_index_of(const char *value, const char *needle) {
-  size_t needle_length = strlen(needle);
-  if (needle_length == 0) return (int)strlen(value);
-
-  int found = -1;
-  const char *cursor = value;
-  const char *match = NULL;
-
-  while ((match = strstr(cursor, needle))) {
-    found = (int)(match - value);
-    cursor = match + 1;
-  }
-
-  return found;
-}
-
-_Bool lumen_string_contains(const char *value, const char *needle) {
-  return strstr(value, needle) != NULL;
-}
-
-char *lumen_string_repeat(const char *value, int count) {
-  if (count <= 0) return lumen_strdup("");
-
-  size_t value_length = strlen(value);
-  size_t total = value_length * (size_t)count;
-  char *out = malloc(total + 1);
-  if (!out) return "";
-
-  char *cursor = out;
-  for (int index = 0; index < count; index += 1) {
-    memcpy(cursor, value, value_length);
-    cursor += value_length;
-  }
-
-  out[total] = '\0';
-  return out;
-}
-
-static char *lumen_string_pad(const char *value, int target, const char *fill, int start) {
-  int value_length = (int)strlen(value);
-  if (target <= value_length) return lumen_strdup(value);
-
-  size_t fill_length = strlen(fill);
-  if (fill_length == 0) fill = " ";
-  fill_length = strlen(fill);
-
-  int pad_length = target - value_length;
-  char *out = malloc((size_t)target + 1);
-  if (!out) return "";
-
-  int out_index = 0;
-  if (!start) {
-    memcpy(out, value, (size_t)value_length);
-    out_index = value_length;
-  }
-
-  for (int index = 0; index < pad_length; index += 1) {
-    out[out_index++] = fill[index % (int)fill_length];
-  }
-
-  if (start) {
-    memcpy(out + out_index, value, (size_t)value_length);
-    out_index += value_length;
-  }
-
-  out[out_index] = '\0';
-  return out;
-}
-
-char *lumen_string_pad_start(const char *value, int target, const char *fill) {
-  return lumen_string_pad(value, target, fill, 1);
-}
-
-char *lumen_string_pad_end(const char *value, int target, const char *fill) {
-  return lumen_string_pad(value, target, fill, 0);
-}
-
-char *lumen_int_to_string(int value) {
-  char *out = malloc(32);
-  if (!out) return "";
-  snprintf(out, 32, "%d", value);
-  return out;
-}
-
-int lumen_string_to_int(const char *value) {
-  return atoi(value);
-}
-
-float lumen_parse_f32(const char *value) {
-  return strtof(value, NULL);
-}
-
-char *lumen_list(void) {
-  return lumen_strdup("\n");
-}
-
-char *lumen_list_push(const char *list, const char *value) {
-  size_t list_length = strlen(list);
-  size_t value_length = strlen(value);
-  char *out = malloc(list_length + value_length + 2);
-  if (!out) return "";
-
-  memcpy(out, list, list_length);
-  memcpy(out + list_length, value, value_length);
-  out[list_length + value_length] = '\n';
-  out[list_length + value_length + 1] = '\0';
-  return out;
-}
-
-char *lumen_list_get(const char *list, int index) {
-  int current = 0;
-  const char *cursor = list;
-
-  while ((cursor = strchr(cursor, '\n'))) {
-    cursor += 1;
-    if (*cursor == '\0') break;
-
-    const char *end = strchr(cursor, '\n');
-    if (!end) end = cursor + strlen(cursor);
-
-    if (current == index) {
-      size_t length = (size_t)(end - cursor);
-      char *out = malloc(length + 1);
-      if (!out) return "";
-      memcpy(out, cursor, length);
-      out[length] = '\0';
-      return out;
-    }
-
-    current += 1;
-    cursor = end;
-  }
-
-  return "";
-}
-
-int lumen_list_len(const char *list) {
-  int count = 0;
-  const char *cursor = list;
-
-  while ((cursor = strchr(cursor, '\n'))) {
-    cursor += 1;
-    if (*cursor == '\0') break;
-    count += 1;
-  }
-
-  return count;
-}
-
-char *lumen_source_snippet(const char *source, int line, int column) {
-  int current_line = 1;
-  const char *start = source;
-
-  while (*start && current_line < line) {
-    if (*start == '\n') current_line += 1;
-    start += 1;
-  }
-
-  const char *end = start;
-  while (*end && *end != '\n') end += 1;
-
-  size_t line_length = (size_t)(end - start);
-  size_t marker = column > 0 ? (size_t)(column - 1) : 0;
-  char *out = malloc(line_length + marker + 4);
-  if (!out) return "";
-
-  memcpy(out, start, line_length);
-  out[line_length] = '\n';
-  memset(out + line_length + 1, ' ', marker);
-  out[line_length + 1 + marker] = '^';
-  out[line_length + 2 + marker] = '\0';
-  return out;
-}
-
-char *lumen_tokenize_source(const char *source) {
-  char *tokens = lumen_list();
-  const char *cursor = source;
-
-  while (*cursor) {
-    while (*cursor == ' ' || *cursor == '\t' || *cursor == '\n' || *cursor == '\r') cursor += 1;
-    if (!*cursor) break;
-
-    const char *start = cursor;
-    if ((*cursor >= 'A' && *cursor <= 'Z') || (*cursor >= 'a' && *cursor <= 'z') || *cursor == '_') {
-      cursor += 1;
-      while ((*cursor >= 'A' && *cursor <= 'Z') ||
-        (*cursor >= 'a' && *cursor <= 'z') ||
-        (*cursor >= '0' && *cursor <= '9') ||
-        *cursor == '_') {
-        cursor += 1;
-      }
-    } else if (*cursor >= '0' && *cursor <= '9') {
-      cursor += 1;
-      while (*cursor >= '0' && *cursor <= '9') cursor += 1;
-    } else {
-      cursor += 1;
-    }
-
-    size_t length = (size_t)(cursor - start);
-    char *token = malloc(length + 1);
-    if (!token) return tokens;
-    memcpy(token, start, length);
-    token[length] = '\0';
-    tokens = lumen_list_push(tokens, token);
-  }
-
-  return tokens;
-}
-
-char *lumen_parse_summary(const char *source) {
-  int functions = 0;
-  int lets = 0;
-  const char *cursor = source;
-
-  while ((cursor = strstr(cursor, "function"))) {
-    functions += 1;
-    cursor += 8;
-  }
-
-  cursor = source;
-  while ((cursor = strstr(cursor, "let"))) {
-    lets += 1;
-    cursor += 3;
-  }
-
-  char *out = malloc(64);
-  if (!out) return "";
-  snprintf(out, 64, "functions=%d lets=%d", functions, lets);
-  return out;
-}
-
-void lumen_assert(_Bool condition, const char *message) {
-  if (condition) return;
-  fprintf(stderr, "assert failed: %s\n", message);
-  exit(1);
-}
-
-int lumen_bounds_check(int index, int length) {
-  if (index >= 0 && index < length) return index;
-
-  fprintf(
-    stderr,
-    "runtime error: index %d out of bounds for length %d\n",
-    index,
-    length
-  );
-  exit(1);
-}
-
-char *lumen_string_at(const char *value, int index) {
-  int checked = lumen_bounds_check(index, (int)strlen(value));
-  char *out = malloc(2);
-  if (!out) return "";
-
-  out[0] = value[checked];
-  out[1] = '\0';
-  return out;
-}
-
-char *lumen_string_slice(const char *value, int start, int end) {
-  int length = (int)strlen(value);
-  if (start < 0 || start > length || end < start || end > length) {
-    fprintf(
-      stderr,
-      "runtime error: slice %d..%d out of bounds for length %d\n",
-      start,
-      end,
-      length
-    );
-    exit(1);
-  }
-
-  int slice_length = end - start;
-  char *out = malloc((size_t)slice_length + 1);
-  if (!out) return "";
-
-  memcpy(out, value + start, (size_t)slice_length);
-  out[slice_length] = '\0';
-  return out;
-}
+  char headers[LUMEN_HTTP_MAX_HEADERS + 1];
+  size_t headers_length;
+  char method[17];
+  char target[LUMEN_HTTP_MAX_TARGET + 1];
+  char path[LUMEN_HTTP_MAX_TARGET + 1];
+  char version[9];
+  char *body;
+  size_t body_length;
+} LumenHttpRequest;
 
 typedef struct {
-  char *message;
-} LumenChannel;
-
-void *lumen_channel(void) {
-  LumenChannel *channel = malloc(sizeof(LumenChannel));
-  if (!channel) return NULL;
-  channel->message = "";
-  return channel;
-}
-
-void lumen_send(void *raw_channel, const char *message) {
-  LumenChannel *channel = raw_channel;
-  if (!channel) return;
-  channel->message = lumen_strdup(message);
-}
-
-char *lumen_receive(void *raw_channel) {
-  LumenChannel *channel = raw_channel;
-  if (!channel) return "";
-  return channel->message;
-}
-
-char *lumen_json(const char *value) {
-  return lumen_strdup(value);
-}
-
-static char *json_string_value(const char *start) {
-  const char *cursor = start;
-  if (*cursor == '"') cursor += 1;
-  char *out = malloc(strlen(cursor) + 1);
-  if (!out) return "";
-
-  size_t length = 0;
-  while (*cursor && *cursor != '"') {
-    if (*cursor == '\\' && cursor[1]) cursor += 1;
-    out[length++] = *cursor++;
-  }
-
-  out[length] = '\0';
-  return out;
-}
-
-static const char *json_skip_ws(const char *cursor) {
-  while (*cursor == ' ' || *cursor == '\t' || *cursor == '\n' || *cursor == '\r') cursor += 1;
-  return cursor;
-}
-
-static const char *json_value_end(const char *start) {
-  const char *cursor = start;
-  int depth = 0;
-  int in_string = 0;
-  int escaped = 0;
-
-  while (*cursor) {
-    if (in_string) {
-      if (escaped) escaped = 0;
-      else if (*cursor == '\\') escaped = 1;
-      else if (*cursor == '"') in_string = 0;
-      cursor += 1;
-      continue;
-    }
-
-    if (*cursor == '"') in_string = 1;
-    else if (*cursor == '{' || *cursor == '[') depth += 1;
-    else if (*cursor == '}' || *cursor == ']') {
-      if (depth == 0) break;
-      depth -= 1;
-    } else if (depth == 0 && (*cursor == ',' || *cursor == '}' || *cursor == ']')) {
-      break;
-    }
-
-    cursor += 1;
-  }
-
-  while (cursor > start && isspace((unsigned char)*(cursor - 1))) cursor -= 1;
-  return cursor;
-}
-
-static char *json_copy_value(const char *start) {
-  start = json_skip_ws(start);
-
-  if (*start == '"') return json_string_value(start);
-
-  const char *end = json_value_end(start);
-  size_t length = (size_t)(end - start);
-  char *out = malloc(length + 1);
-  if (!out) return "";
-  memcpy(out, start, length);
-  out[length] = '\0';
-  return out;
-}
-
-static char *json_copy_raw_value(const char *start) {
-  start = json_skip_ws(start);
-  const char *end = json_value_end(start);
-  size_t length = (size_t)(end - start);
-  char *out = malloc(length + 1);
-  if (!out) return "";
-  memcpy(out, start, length);
-  out[length] = '\0';
-  return out;
-}
-
-static char *json_get_one(const char *json, const char *key) {
-  size_t key_length = strlen(key);
-  size_t pattern_length = key_length + 4;
-  char *pattern = malloc(pattern_length);
-  if (!pattern) return "";
-
-  snprintf(pattern, pattern_length, "\"%s\"", key);
-  char *found = strstr(json, pattern);
-  free(pattern);
-  if (!found) return "";
-
-  char *colon = strchr(found, ':');
-  if (!colon) return "";
-  colon += 1;
-  return json_copy_value(colon);
-}
-
-static char *json_get_one_raw(const char *json, const char *key) {
-  size_t key_length = strlen(key);
-  size_t pattern_length = key_length + 4;
-  char *pattern = malloc(pattern_length);
-  if (!pattern) return "";
-
-  snprintf(pattern, pattern_length, "\"%s\"", key);
-  char *found = strstr(json, pattern);
-  free(pattern);
-  if (!found) return "";
-
-  char *colon = strchr(found, ':');
-  if (!colon) return "";
-  colon += 1;
-  return json_copy_raw_value(colon);
-}
-
-static char *json_array_get(const char *json, int index) {
-  const char *cursor = json_skip_ws(json);
-  if (*cursor != '[') return "";
-  cursor += 1;
-
-  int current = 0;
-  while (*cursor) {
-    cursor = json_skip_ws(cursor);
-    if (*cursor == ']') return "";
-
-    if (current == index) return json_copy_value(cursor);
-
-    cursor = json_value_end(cursor);
-    cursor = json_skip_ws(cursor);
-    if (*cursor == ',') cursor += 1;
-    current += 1;
-  }
-
-  return "";
-}
-
-static char *json_array_get_raw(const char *json, int index) {
-  const char *cursor = json_skip_ws(json);
-  if (*cursor != '[') return "";
-  cursor += 1;
-
-  int current = 0;
-  while (*cursor) {
-    cursor = json_skip_ws(cursor);
-    if (*cursor == ']') return "";
-
-    if (current == index) return json_copy_raw_value(cursor);
-
-    cursor = json_value_end(cursor);
-    cursor = json_skip_ws(cursor);
-    if (*cursor == ',') cursor += 1;
-    current += 1;
-  }
-
-  return "";
-}
-
-static char *json_path_get(const char *json, const char *key, int raw) {
-  char *current = lumen_strdup(json);
-  const char *cursor = key;
-
-  while (*cursor) {
-    char segment[128];
-    int length = 0;
-
-    while (*cursor && *cursor != '.' && *cursor != '[' && length < 127) {
-      segment[length++] = *cursor++;
-    }
-    segment[length] = '\0';
-
-    if (length > 0) current = raw ? json_get_one_raw(current, segment) : json_get_one(current, segment);
-
-    while (*cursor == '[') {
-      cursor += 1;
-      int index = atoi(cursor);
-      while (*cursor && *cursor != ']') cursor += 1;
-      if (*cursor == ']') cursor += 1;
-      current = raw ? json_array_get_raw(current, index) : json_array_get(current, index);
-    }
-
-    if (*cursor == '.') cursor += 1;
-  }
-
-  return current;
-}
-
-char *lumen_json_get(const char *json, const char *key) {
-  return json_path_get(json, key, 0);
-}
-
-char *lumen_json_get_raw(const char *json, const char *key) {
-  return json_path_get(json, key, 1);
-}
-
-char *lumen_json_set(const char *json, const char *key, const char *value) {
-  size_t json_length = strlen(json);
-  int object = json_length >= 2 && json[0] == '{' && json[json_length - 1] == '}';
-
-  if (object) {
-    size_t key_length = strlen(key);
-    size_t pattern_length = key_length + 4;
-    char *pattern = malloc(pattern_length);
-    if (!pattern) return "";
-
-    snprintf(pattern, pattern_length, "\"%s\"", key);
-    char *found = strstr(json, pattern);
-    free(pattern);
-
-    if (found) {
-      char *colon = strchr(found, ':');
-      if (colon) {
-        const char *value_start = json_skip_ws(colon + 1);
-        const char *value_finish = json_value_end(value_start);
-        size_t prefix_length = (size_t)(value_start - json);
-        size_t value_length = strlen(value);
-        size_t suffix_length = strlen(value_finish);
-        char *out = malloc(prefix_length + value_length + suffix_length + 1);
-        if (!out) return "";
-
-        memcpy(out, json, prefix_length);
-        memcpy(out + prefix_length, value, value_length);
-        memcpy(out + prefix_length + value_length, value_finish, suffix_length + 1);
-        return out;
-      }
-    }
-  }
-
-  size_t length = json_length + strlen(key) + strlen(value) + 8;
-  char *out = malloc(length);
-  if (!out) return "";
-
-  if (!object || json_length == 2) {
-    snprintf(out, length, "{\"%s\":%s}", key, value);
-    return out;
-  }
-
-  snprintf(out, length, "%.*s,\"%s\":%s}", (int)(json_length - 1), json, key, value);
-  return out;
-}
-
-char *lumen_json_set_path(const char *json, const char *key, const char *value) {
-  const char *dot = strchr(key, '.');
-  if (!dot) return lumen_json_set(json, key, value);
-
-  size_t root_length = (size_t)(dot - key);
-  char *root = malloc(root_length + 1);
-  if (!root) return "";
-  memcpy(root, key, root_length);
-  root[root_length] = '\0';
-
-  const char *child = dot + 1;
-  char *current = lumen_json_get_raw(json, root);
-  if (strlen(current) == 0) current = lumen_strdup("{}");
-
-  char *next = lumen_json_set_path(current, child, value);
-  char *out = lumen_json_set(json, root, next);
-  return out;
-}
-
-char *lumen_json_stringify(const char *value) {
-  size_t length = 3;
-  for (const char *cursor = value; *cursor; cursor += 1) {
-    length += (*cursor == '"' || *cursor == '\\' || *cursor == '\n') ? 2 : 1;
-  }
-
-  char *out = malloc(length);
-  if (!out) return "";
-
-  char *target = out;
-  *target++ = '"';
-  for (const char *cursor = value; *cursor; cursor += 1) {
-    if (*cursor == '"') {
-      *target++ = '\\';
-      *target++ = '"';
-    } else if (*cursor == '\\') {
-      *target++ = '\\';
-      *target++ = '\\';
-    } else if (*cursor == '\n') {
-      *target++ = '\\';
-      *target++ = 'n';
-    } else {
-      *target++ = *cursor;
-    }
-  }
-
-  *target++ = '"';
-  *target = '\0';
-  return out;
-}
-
-_Bool lumen_json_valid(const char *value) {
-  const char *cursor = json_skip_ws(value);
-  char open = *cursor;
-  if (open != '{' && open != '[' && open != '"') return 0;
-
-  int depth = 0;
-  int in_string = 0;
-  int escaped = 0;
-  char stack[128];
-  int stack_length = 0;
-
-  while (*cursor) {
-    if (in_string) {
-      if (escaped) escaped = 0;
-      else if (*cursor == '\\') escaped = 1;
-      else if (*cursor == '"') in_string = 0;
-      cursor += 1;
-      continue;
-    }
-
-    if (*cursor == '"') in_string = 1;
-    else if (*cursor == '{' || *cursor == '[') {
-      if (stack_length >= 128) return 0;
-      stack[stack_length++] = *cursor;
-      depth += 1;
-    } else if (*cursor == '}' || *cursor == ']') {
-      if (stack_length == 0) return 0;
-      char expected = *cursor == '}' ? '{' : '[';
-      if (stack[--stack_length] != expected) return 0;
-      depth -= 1;
-    }
-
-    cursor += 1;
-  }
-
-  return depth == 0 && !in_string;
-}
-
-char *lumen_error_new(int code, const char *message) {
-  size_t length = strlen(message) + 32;
-  char *out = malloc(length);
-  if (!out) return "";
-  snprintf(out, length, "error:%d:%s", code, message);
-  return out;
-}
-
-int lumen_error_code(const char *error) {
-  if (strncmp(error, "error:", 6) != 0) return 0;
-  return atoi(error + 6);
-}
-
-char *lumen_error_text(const char *error) {
-  if (strncmp(error, "error:", 6) != 0) return (char *)error;
-  const char *message = strchr(error + 6, ':');
-  if (!message) return "";
-  return (char *)message + 1;
-}
-
-char *lumen_array_join(int count, const char **values, const char *separator) {
-  size_t total = 1;
-  size_t separator_length = strlen(separator);
-
-  for (int index = 0; index < count; index += 1) {
-    total += strlen(values[index]);
-    if (index + 1 < count) total += separator_length;
-  }
-
-  char *out = malloc(total);
-  if (!out) return "";
-
-  size_t offset = 0;
-  for (int index = 0; index < count; index += 1) {
-    size_t value_length = strlen(values[index]);
-    memcpy(out + offset, values[index], value_length);
-    offset += value_length;
-
-    if (index + 1 < count) {
-      memcpy(out + offset, separator, separator_length);
-      offset += separator_length;
-    }
-  }
-
-  out[offset] = '\0';
-  return out;
-}
-
-static char *lumen_prefixed(const char *prefix, const char *value) {
-  size_t prefix_length = strlen(prefix);
-  size_t value_length = strlen(value);
-  char *out = malloc(prefix_length + value_length + 1);
-  if (!out) return "";
-
-  memcpy(out, prefix, prefix_length);
-  memcpy(out + prefix_length, value, value_length + 1);
-  return out;
-}
-
-char *lumen_ok(const char *value) {
-  return lumen_prefixed("ok:", value);
-}
-
-char *lumen_err(const char *message) {
-  return lumen_prefixed("err:", message);
-}
-
-_Bool lumen_is_ok(const char *result) {
-  return strncmp(result, "ok:", 3) == 0;
-}
-
-char *lumen_result_value(const char *result) {
-  if (strncmp(result, "ok:", 3) != 0) return "";
-  return (char *)result + 3;
-}
-
-char *lumen_error_message(const char *result) {
-  if (strncmp(result, "err:", 4) != 0) return "";
-  return (char *)result + 4;
-}
-
-char *lumen_some(const char *value) {
-  return lumen_strdup(value);
-}
-
-char *lumen_none(void) {
-  return "";
-}
-
-_Bool lumen_has_value(const char *option) {
-  return strlen(option) > 0;
-}
-
-char *lumen_value_or(const char *option, const char *fallback) {
-  if (strlen(option) > 0) return (char *)option;
-  return (char *)fallback;
-}
-
-char *lumen_map(int count, ...) {
-  va_list args;
-  size_t total = 1;
-
-  va_start(args, count);
-  for (int index = 0; index < count; index += 1) {
-    const char *key = va_arg(args, const char *);
-    const char *value = va_arg(args, const char *);
-    total += strlen(key) + strlen(value) + 3;
-  }
-  va_end(args);
-
-  char *out = malloc(total + 1);
-  if (!out) return "";
-
-  size_t offset = 0;
-  out[offset++] = '\n';
-  va_start(args, count);
-  for (int index = 0; index < count; index += 1) {
-    const char *key = va_arg(args, const char *);
-    const char *value = va_arg(args, const char *);
-    size_t key_length = strlen(key);
-    size_t value_length = strlen(value);
-
-    memcpy(out + offset, key, key_length);
-    offset += key_length;
-    out[offset++] = '=';
-    memcpy(out + offset, value, value_length);
-    offset += value_length;
-    out[offset++] = '\n';
-  }
-  va_end(args);
-
-  out[offset] = '\0';
-  return out;
-}
-
-char *lumen_map_set(const char *map, const char *key, const char *value) {
-  char *without = NULL;
-  size_t total = strlen(map) + strlen(key) + strlen(value) + 4;
-  without = malloc(total);
-  if (!without) return "";
-
-  size_t offset = 0;
-  without[offset++] = '\n';
-  size_t key_length = strlen(key);
-  const char *cursor = map;
-
-  while ((cursor = strchr(cursor, '\n'))) {
-    cursor += 1;
-    if (*cursor == '\0') break;
-
-    const char *end = strchr(cursor, '\n');
-    if (!end) end = cursor + strlen(cursor);
-
-    if (!(strncmp(cursor, key, key_length) == 0 && cursor[key_length] == '=')) {
-      size_t line_length = (size_t)(end - cursor);
-      memcpy(without + offset, cursor, line_length);
-      offset += line_length;
-      without[offset++] = '\n';
-    }
-
-    cursor = end;
-  }
-
-  memcpy(without + offset, key, key_length);
-  offset += key_length;
-  without[offset++] = '=';
-  size_t value_length = strlen(value);
-  memcpy(without + offset, value, value_length);
-  offset += value_length;
-  without[offset++] = '\n';
-  without[offset] = '\0';
-  return without;
-}
-
-char *lumen_map_delete(const char *map, const char *key) {
-  size_t total = strlen(map) + 1;
-  char *out = malloc(total);
-  if (!out) return "";
-
-  size_t offset = 0;
-  out[offset++] = '\n';
-  size_t key_length = strlen(key);
-  const char *cursor = map;
-
-  while ((cursor = strchr(cursor, '\n'))) {
-    cursor += 1;
-    if (*cursor == '\0') break;
-
-    const char *end = strchr(cursor, '\n');
-    if (!end) end = cursor + strlen(cursor);
-
-    if (!(strncmp(cursor, key, key_length) == 0 && cursor[key_length] == '=')) {
-      size_t line_length = (size_t)(end - cursor);
-      memcpy(out + offset, cursor, line_length);
-      offset += line_length;
-      out[offset++] = '\n';
-    }
-
-    cursor = end;
-  }
-
-  out[offset] = '\0';
-  return out;
-}
-
-char *lumen_map_keys(const char *map) {
-  size_t total = strlen(map) + 1;
-  char *out = malloc(total);
-  if (!out) return "";
-
-  size_t offset = 0;
-  out[offset++] = '\n';
-  const char *cursor = map;
-
-  while ((cursor = strchr(cursor, '\n'))) {
-    cursor += 1;
-    if (*cursor == '\0') break;
-
-    const char *equals = strchr(cursor, '=');
-    const char *end = strchr(cursor, '\n');
-    if (!end) end = cursor + strlen(cursor);
-
-    if (equals && equals < end) {
-      size_t key_length = (size_t)(equals - cursor);
-      memcpy(out + offset, cursor, key_length);
-      offset += key_length;
-      out[offset++] = '\n';
-    }
-
-    cursor = end;
-  }
-
-  out[offset] = '\0';
-  return out;
-}
-
-char *lumen_map_get(const char *map, const char *key) {
-  size_t key_length = strlen(key);
-  const char *cursor = map;
-
-  while ((cursor = strchr(cursor, '\n'))) {
-    cursor += 1;
-    if (strncmp(cursor, key, key_length) == 0 && cursor[key_length] == '=') {
-      const char *value_start = cursor + key_length + 1;
-      const char *value_end = strchr(value_start, '\n');
-      if (!value_end) value_end = value_start + strlen(value_start);
-
-      size_t value_length = (size_t)(value_end - value_start);
-      char *out = malloc(value_length + 1);
-      if (!out) return "";
-
-      memcpy(out, value_start, value_length);
-      out[value_length] = '\0';
-      return out;
-    }
-  }
-
-  return "";
-}
-
-_Bool lumen_map_has(const char *map, const char *key) {
-  return strlen(lumen_map_get(map, key)) > 0;
-}
-
-static const char lumen_base64_table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-static char *lumen_strdup(const char *value) {
-  size_t length = strlen(value);
-  char *copy = malloc(length + 1);
-  if (!copy) return NULL;
-  memcpy(copy, value, length + 1);
-  return copy;
-}
-
-static char *lumen_base64_encode(const unsigned char *data, size_t length) {
-  size_t output_length = 4 * ((length + 2) / 3);
-  char *out = malloc(output_length + 1);
-  if (!out) return NULL;
-
-  size_t input_index = 0;
-  size_t output_index = 0;
-
-  while (input_index < length) {
-    unsigned int octet_a = input_index < length ? data[input_index++] : 0;
-    unsigned int octet_b = input_index < length ? data[input_index++] : 0;
-    unsigned int octet_c = input_index < length ? data[input_index++] : 0;
-    unsigned int triple = (octet_a << 16) | (octet_b << 8) | octet_c;
-
-    out[output_index++] = lumen_base64_table[(triple >> 18) & 0x3F];
-    out[output_index++] = lumen_base64_table[(triple >> 12) & 0x3F];
-    out[output_index++] = lumen_base64_table[(triple >> 6) & 0x3F];
-    out[output_index++] = lumen_base64_table[triple & 0x3F];
-  }
-
-  if (length % 3 == 1) {
-    out[output_length - 2] = '=';
-    out[output_length - 1] = '=';
-  } else if (length % 3 == 2) {
-    out[output_length - 1] = '=';
-  }
-
-  out[output_length] = '\0';
-  return out;
-}
-
-static int lumen_base64_value(char value) {
-  if (value >= 'A' && value <= 'Z') return value - 'A';
-  if (value >= 'a' && value <= 'z') return value - 'a' + 26;
-  if (value >= '0' && value <= '9') return value - '0' + 52;
-  if (value == '+') return 62;
-  if (value == '/') return 63;
-  return -1;
-}
-
-static unsigned char *lumen_base64_decode(const char *input, size_t *output_length) {
-  size_t length = strlen(input);
-  if (length % 4 != 0) return NULL;
-
-  size_t padding = 0;
-  if (length > 0 && input[length - 1] == '=') padding += 1;
-  if (length > 1 && input[length - 2] == '=') padding += 1;
-
-  *output_length = (length / 4) * 3 - padding;
-  unsigned char *out = malloc(*output_length + 1);
-  if (!out) return NULL;
-
-  size_t input_index = 0;
-  size_t output_index = 0;
-
-  while (input_index < length) {
-    int sextet_a = input[input_index] == '=' ? 0 : lumen_base64_value(input[input_index]);
-    input_index += 1;
-    int sextet_b = input[input_index] == '=' ? 0 : lumen_base64_value(input[input_index]);
-    input_index += 1;
-    int sextet_c = input[input_index] == '=' ? 0 : lumen_base64_value(input[input_index]);
-    input_index += 1;
-    int sextet_d = input[input_index] == '=' ? 0 : lumen_base64_value(input[input_index]);
-    input_index += 1;
-
-    if (sextet_a < 0 || sextet_b < 0 || sextet_c < 0 || sextet_d < 0) {
-      free(out);
-      return NULL;
-    }
-
-    unsigned int triple = ((unsigned int)sextet_a << 18) |
-      ((unsigned int)sextet_b << 12) |
-      ((unsigned int)sextet_c << 6) |
-      (unsigned int)sextet_d;
-
-    if (output_index < *output_length) out[output_index++] = (triple >> 16) & 0xFF;
-    if (output_index < *output_length) out[output_index++] = (triple >> 8) & 0xFF;
-    if (output_index < *output_length) out[output_index++] = triple & 0xFF;
-  }
-
-  out[*output_length] = '\0';
-  return out;
-}
-
-static int lumen_protocol_is_aes256(const char *protocol) {
-  return strcmp(protocol, "AES-256") == 0 ||
-    strcmp(protocol, "AES-256-CTR-HMAC-SHA256") == 0;
-}
-
-static int lumen_derive_crypto_keys(const char *password, const unsigned char *salt, unsigned char *keys) {
-#ifdef LUMEN_USE_COMMON_CRYPTO
-  return CCKeyDerivationPBKDF(
-    kCCPBKDF2,
-    password,
-    strlen(password),
-    salt,
-    16,
-    kCCPRFHmacAlgSHA256,
-    100000,
-    keys,
-    64
-  ) == kCCSuccess;
-#else
-  return lumen_pbkdf2_sha256(password, salt, 16, 100000, keys, 64);
-#endif
-}
-
-static int lumen_aes_ctr_crypt(const unsigned char *input, size_t length, const unsigned char *key, const unsigned char *iv, unsigned char *output, CCOperation operation) {
-#ifdef LUMEN_USE_COMMON_CRYPTO
-  CCCryptorRef cryptor = NULL;
-  CCCryptorStatus status = CCCryptorCreateWithMode(
-    operation,
-    kCCModeCTR,
-    kCCAlgorithmAES,
-    ccNoPadding,
-    iv,
-    key,
-    32,
-    NULL,
-    0,
-    0,
-    0,
-    &cryptor
-  );
-
-  if (status != kCCSuccess) return 0;
-
-  size_t moved = 0;
-  status = CCCryptorUpdate(cryptor, input, length, output, length, &moved);
-  CCCryptorRelease(cryptor);
-
-  return status == kCCSuccess && moved == length;
-#else
-  (void)operation;
-  return lumen_aes256_ctr(input, length, key, iv, output);
-#endif
-}
-
-static void lumen_crypto_tag(const unsigned char *key, const unsigned char *salt, const unsigned char *iv, const unsigned char *cipher, size_t cipher_length, unsigned char *tag) {
-#ifdef LUMEN_USE_COMMON_CRYPTO
-  CCHmacContext context;
-  CCHmacInit(&context, kCCHmacAlgSHA256, key, 32);
-  CCHmacUpdate(&context, salt, 16);
-  CCHmacUpdate(&context, iv, 16);
-  CCHmacUpdate(&context, cipher, cipher_length);
-  CCHmacFinal(&context, tag);
-#else
-  const unsigned char *parts[] = {salt, iv, cipher};
-  const size_t lengths[] = {16, 16, cipher_length};
-  lumen_hmac_sha256_parts(key, 32, parts, lengths, 3, tag);
-#endif
-}
-
-char *lumen_encrypt(const char *value, const char *password, const char *protocol) {
-  if (!lumen_protocol_is_aes256(protocol)) return "";
-
-  unsigned char salt[16];
-  unsigned char iv[16];
-  unsigned char keys[64];
-
-#ifdef LUMEN_USE_COMMON_CRYPTO
-  if (CCRandomGenerateBytes(salt, sizeof(salt)) != kCCSuccess) return "";
-  if (CCRandomGenerateBytes(iv, sizeof(iv)) != kCCSuccess) return "";
-#else
-  if (!lumen_secure_random(salt, sizeof(salt))) {
-    return "error: secure random provider unavailable";
-  }
-  if (!lumen_secure_random(iv, sizeof(iv))) {
-    return "error: secure random provider unavailable";
-  }
-#endif
-  if (!lumen_derive_crypto_keys(password, salt, keys)) return "";
-
-  size_t value_length = strlen(value);
-  unsigned char *cipher = malloc(value_length + 1);
-  if (!cipher) return "";
-
-  if (!lumen_aes_ctr_crypt((const unsigned char *)value, value_length, keys, iv, cipher, kCCEncrypt)) {
-    free(cipher);
-    return "";
-  }
-
-  unsigned char tag[CC_SHA256_DIGEST_LENGTH];
-  lumen_crypto_tag(keys + 32, salt, iv, cipher, value_length, tag);
-
-  char *salt_text = lumen_base64_encode(salt, sizeof(salt));
-  char *iv_text = lumen_base64_encode(iv, sizeof(iv));
-  char *cipher_text = lumen_base64_encode(cipher, value_length);
-  char *tag_text = lumen_base64_encode(tag, sizeof(tag));
-
-  if (!salt_text || !iv_text || !cipher_text || !tag_text) {
-    free(cipher);
-    free(salt_text);
-    free(iv_text);
-    free(cipher_text);
-    free(tag_text);
-    return "";
-  }
-
-  size_t output_length = strlen("lumen:v1:AES-256-CTR-HMAC-SHA256::::") +
-    strlen(salt_text) +
-    strlen(iv_text) +
-    strlen(cipher_text) +
-    strlen(tag_text);
-
-  char *out = malloc(output_length + 1);
-  if (!out) {
-    free(cipher);
-    return "";
-  }
-
-  snprintf(
-    out,
-    output_length + 1,
-    "lumen:v1:AES-256-CTR-HMAC-SHA256:%s:%s:%s:%s",
-    salt_text,
-    iv_text,
-    cipher_text,
-    tag_text
-  );
-
-  free(cipher);
-  free(salt_text);
-  free(iv_text);
-  free(cipher_text);
-  free(tag_text);
-  return out;
-}
-
-char *lumen_decrypt(const char *value, const char *password, const char *protocol) {
-  if (!lumen_protocol_is_aes256(protocol)) return "";
-
-  char *copy = lumen_strdup(value);
-  if (!copy) return "";
-
-  char *parts[7];
-  int count = 0;
-  char *cursor = copy;
-
-  while (count < 7) {
-    parts[count++] = cursor;
-    char *next = strchr(cursor, ':');
-    if (!next) break;
-    *next = '\0';
-    cursor = next + 1;
-  }
-
-  if (count != 7 ||
-    strcmp(parts[0], "lumen") != 0 ||
-    strcmp(parts[1], "v1") != 0 ||
-    strcmp(parts[2], "AES-256-CTR-HMAC-SHA256") != 0) {
-    free(copy);
-    return "";
-  }
-
-  size_t salt_length = 0;
-  size_t iv_length = 0;
-  size_t cipher_length = 0;
-  size_t tag_length = 0;
-  unsigned char *salt = lumen_base64_decode(parts[3], &salt_length);
-  unsigned char *iv = lumen_base64_decode(parts[4], &iv_length);
-  unsigned char *cipher = lumen_base64_decode(parts[5], &cipher_length);
-  unsigned char *tag = lumen_base64_decode(parts[6], &tag_length);
-
-  if (!salt || !iv || !cipher || !tag || salt_length != 16 || iv_length != 16 || tag_length != CC_SHA256_DIGEST_LENGTH) {
-    free(copy);
-    free(salt);
-    free(iv);
-    free(cipher);
-    free(tag);
-    return "";
-  }
-
-  unsigned char keys[64];
-  unsigned char expected_tag[CC_SHA256_DIGEST_LENGTH];
-  if (!lumen_derive_crypto_keys(password, salt, keys)) {
-    free(copy);
-    free(salt);
-    free(iv);
-    free(cipher);
-    free(tag);
-    return "";
-  }
-
-  lumen_crypto_tag(keys + 32, salt, iv, cipher, cipher_length, expected_tag);
-#ifdef LUMEN_USE_COMMON_CRYPTO
-  int valid_tag = memcmp(tag, expected_tag, CC_SHA256_DIGEST_LENGTH) == 0;
-#else
-  int valid_tag = lumen_constant_time_equal(tag, expected_tag, CC_SHA256_DIGEST_LENGTH);
-#endif
-  if (!valid_tag) {
-    free(copy);
-    free(salt);
-    free(iv);
-    free(cipher);
-    free(tag);
-    return "";
-  }
-
-  unsigned char *plain = malloc(cipher_length + 1);
-  if (!plain) {
-    free(copy);
-    free(salt);
-    free(iv);
-    free(cipher);
-    free(tag);
-    return "";
-  }
-
-  if (!lumen_aes_ctr_crypt(cipher, cipher_length, keys, iv, plain, kCCDecrypt)) {
-    free(copy);
-    free(salt);
-    free(iv);
-    free(cipher);
-    free(tag);
-    free(plain);
-    return "";
-  }
-
-  plain[cipher_length] = '\0';
-  free(copy);
-  free(salt);
-  free(iv);
-  free(cipher);
-  free(tag);
-  return (char *)plain;
-}
+  int fin;
+  unsigned char opcode;
+  size_t payload_length;
+  size_t header_length;
+  unsigned char mask[4];
+} LumenWebSocketFrame;
+
+typedef enum {
+  LUMEN_SERVER_FILES,
+  LUMEN_SERVER_API,
+  LUMEN_SERVER_HTTP,
+  LUMEN_SERVER_SOCKETIO
+} LumenServerMode;
 
 typedef struct {
+  int listener;
+  int root_fd;
+  LumenServerMode mode;
+  const char *api_method;
+  const char *api_route;
+  const char *api_headers;
+  const char *api_body;
+  const char **methods;
+  const char **routes;
+  const char **headers;
+  const char **bodies;
+  int route_count;
   pthread_mutex_t mutex;
-  pthread_cond_t changed;
-  int count;
-} LumenSemaphore;
-
-typedef void (*LumenThreadFunction)(const char *, const char *, void *);
-
-typedef struct {
-  LumenThreadFunction function;
-  const char *path;
-  const char *message;
-  void *semaphore;
-} LumenThreadJob;
+  pthread_cond_t idle;
+  int clients[LUMEN_HTTP_MAX_CONNECTIONS];
+  int client_count;
+} LumenHttpServer;
 
 typedef struct {
-  pthread_t thread;
-  LumenThreadJob *job;
-} LumenThreadHandle;
+  LumenHttpServer *server;
+  int client;
+} LumenHttpJob;
 
-void *lumen_semaphore_create(int count) {
-  LumenSemaphore *semaphore = malloc(sizeof(LumenSemaphore));
-  if (!semaphore) return NULL;
+static volatile sig_atomic_t lumen_http_stop_requested = 0;
+static volatile sig_atomic_t lumen_http_listener = -1;
 
-  pthread_mutex_init(&semaphore->mutex, NULL);
-  pthread_cond_init(&semaphore->changed, NULL);
-  semaphore->count = count;
+static char socketio_messages[65536] = "";
+static size_t socketio_messages_length = 0;
+static pthread_mutex_t socketio_messages_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-  return semaphore;
-}
+static const unsigned char *find_bytes(
+  const unsigned char *input,
+  size_t length,
+  const unsigned char *needle,
+  size_t needle_length
+) {
+  if (needle_length == 0 || length < needle_length) return NULL;
 
-static void lumen_semaphore_wait_internal(LumenSemaphore *semaphore) {
-  pthread_mutex_lock(&semaphore->mutex);
-  while (semaphore->count <= 0) {
-    pthread_cond_wait(&semaphore->changed, &semaphore->mutex);
+  for (size_t index = 0; index <= length - needle_length; index += 1) {
+    if (memcmp(input + index, needle, needle_length) == 0) return input + index;
   }
-  semaphore->count -= 1;
-  pthread_mutex_unlock(&semaphore->mutex);
-}
 
-static void lumen_semaphore_signal_internal(LumenSemaphore *semaphore) {
-  pthread_mutex_lock(&semaphore->mutex);
-  semaphore->count += 1;
-  pthread_cond_signal(&semaphore->changed);
-  pthread_mutex_unlock(&semaphore->mutex);
-}
-
-void lumen_semaphore_wait(void *semaphore) {
-  lumen_semaphore_wait_internal((LumenSemaphore *)semaphore);
-}
-
-void lumen_semaphore_signal(void *semaphore) {
-  lumen_semaphore_signal_internal((LumenSemaphore *)semaphore);
-}
-
-int lumen_append_file(const char *path, const char *message) {
-  FILE *file = fopen(path, "a");
-  if (!file) return 1;
-
-  fputs(message, file);
-  fputc('\n', file);
-  fclose(file);
-  return 0;
-}
-
-static void *lumen_thread_entry(void *data) {
-  LumenThreadJob *job = data;
-  job->function(job->path, job->message, job->semaphore);
   return NULL;
 }
 
-void *lumen_thread_start(void *function, const char *path, const char *message, void *semaphore) {
-  LumenThreadHandle *handle = malloc(sizeof(LumenThreadHandle));
-  LumenThreadJob *job = malloc(sizeof(LumenThreadJob));
+static int ascii_equal(const char *left, size_t left_length, const char *right) {
+  size_t right_length = strlen(right);
+  if (left_length != right_length) return 0;
 
-  if (!handle || !job) return NULL;
-
-  job->function = (LumenThreadFunction)function;
-  job->path = path;
-  job->message = message;
-  job->semaphore = semaphore;
-  handle->job = job;
-
-  if (pthread_create(&handle->thread, NULL, lumen_thread_entry, job) != 0) {
-    free(job);
-    free(handle);
-    return NULL;
+  for (size_t index = 0; index < left_length; index += 1) {
+    if (tolower((unsigned char)left[index]) != tolower((unsigned char)right[index])) return 0;
   }
 
-  return handle;
+  return 1;
 }
 
-int lumen_thread_join(void *raw_handle) {
-  LumenThreadHandle *handle = raw_handle;
-  if (!handle) return 1;
+static int is_http_token_character(unsigned char value) {
+  if (isalnum(value)) return 1;
+  return strchr("!#$%&'*+-.^_`|~", value) != NULL;
+}
 
-  pthread_join(handle->thread, NULL);
-  free(handle->job);
-  free(handle);
+static int parse_decimal_size(const char *value, size_t length, size_t *out) {
+  if (length == 0) return 0;
+
+  size_t result = 0;
+  for (size_t index = 0; index < length; index += 1) {
+    unsigned char character = (unsigned char)value[index];
+    if (!isdigit(character)) return 0;
+    size_t digit = (size_t)(character - '0');
+    if (result > (SIZE_MAX - digit) / 10) return 0;
+    result = result * 10 + digit;
+  }
+
+  *out = result;
+  return 1;
+}
+
+static int decode_request_path(
+  const char *target,
+  size_t target_length,
+  char *out,
+  size_t out_size
+) {
+  size_t path_length = 0;
+  while (path_length < target_length && target[path_length] != '?') path_length += 1;
+  if (path_length == 0 || target[0] != '/' || path_length >= out_size) return 414;
+
+  size_t offset = 0;
+  for (size_t index = 0; index < path_length; index += 1) {
+    unsigned char value = (unsigned char)target[index];
+
+    if (value == '%') {
+      if (index + 2 >= path_length) return 400;
+      int high = isdigit((unsigned char)target[index + 1])
+        ? target[index + 1] - '0'
+        : tolower((unsigned char)target[index + 1]) - 'a' + 10;
+      int low = isdigit((unsigned char)target[index + 2])
+        ? target[index + 2] - '0'
+        : tolower((unsigned char)target[index + 2]) - 'a' + 10;
+      if (high < 0 || high > 15 || low < 0 || low > 15) return 400;
+      value = (unsigned char)((high << 4) | low);
+      index += 2;
+    }
+
+    if (value == '\0' || value == '\\' || value < 0x20 || value == 0x7f) return 400;
+    out[offset++] = (char)value;
+  }
+
+  out[offset] = '\0';
   return 0;
 }
 
-#include "http_runtime.c"
+static int validate_canonical_path(const char *path) {
+  if (!path || path[0] != '/') return 0;
+  if (path[1] == '/' || (path[1] != '\0' && path[strlen(path) - 1] == '/')) return 0;
+
+  const char *segment = path + 1;
+  while (*segment) {
+    const char *end = strchr(segment, '/');
+    size_t length = end ? (size_t)(end - segment) : strlen(segment);
+    if (length == 0 || (length == 1 && segment[0] == '.') ||
+      (length == 2 && segment[0] == '.' && segment[1] == '.')) {
+      return 0;
+    }
+    segment = end ? end + 1 : segment + length;
+  }
+
+  return 1;
+}
+
+static int parse_http_request_head(
+  const unsigned char *input,
+  size_t length,
+  LumenHttpRequest *request,
+  size_t *content_length
+) {
+  if (!input || !request || length < 4 || length > LUMEN_HTTP_MAX_HEADERS) return 400;
+  if (memcmp(input + length - 4, "\r\n\r\n", 4) != 0) return 400;
+  if (memchr(input, '\0', length)) return 400;
+
+  memcpy(request->headers, input, length);
+  request->headers[length] = '\0';
+  request->headers_length = length;
+
+  const unsigned char *line_end = find_bytes(input, length, (const unsigned char *)"\r\n", 2);
+  if (!line_end) return 400;
+
+  size_t request_line_length = (size_t)(line_end - input);
+  const unsigned char *first_space = memchr(input, ' ', request_line_length);
+  if (!first_space) return 400;
+  const unsigned char *second_space = memchr(
+    first_space + 1,
+    ' ',
+    request_line_length - (size_t)(first_space + 1 - input)
+  );
+  if (!second_space || memchr(second_space + 1, ' ', (size_t)(line_end - second_space - 1))) return 400;
+
+  size_t method_length = (size_t)(first_space - input);
+  size_t target_length = (size_t)(second_space - first_space - 1);
+  size_t version_length = (size_t)(line_end - second_space - 1);
+  if (method_length == 0 || method_length >= sizeof(request->method)) return 400;
+  if (target_length == 0 || target_length > LUMEN_HTTP_MAX_TARGET) return 414;
+  if (version_length >= sizeof(request->version)) return 400;
+
+  for (size_t index = 0; index < method_length; index += 1) {
+    if (!is_http_token_character(input[index])) return 400;
+  }
+  for (size_t index = 0; index < target_length; index += 1) {
+    unsigned char value = first_space[1 + index];
+    if (value <= 0x20 || value == 0x7f || value == '#') return 400;
+  }
+
+  memcpy(request->method, input, method_length);
+  request->method[method_length] = '\0';
+  memcpy(request->target, first_space + 1, target_length);
+  request->target[target_length] = '\0';
+  memcpy(request->version, second_space + 1, version_length);
+  request->version[version_length] = '\0';
+
+  if (strcmp(request->version, "HTTP/1.1") != 0 && strcmp(request->version, "HTTP/1.0") != 0) return 505;
+
+  int path_status = decode_request_path(request->target, target_length, request->path, sizeof(request->path));
+  if (path_status != 0) return path_status;
+
+  size_t offset = request_line_length + 2;
+  int header_count = 0;
+  int host_count = 0;
+  int content_length_count = 0;
+  *content_length = 0;
+
+  while (offset + 2 <= length) {
+    if (input[offset] == '\r' && input[offset + 1] == '\n') {
+      offset += 2;
+      break;
+    }
+
+    const unsigned char *end = find_bytes(
+      input + offset,
+      length - offset,
+      (const unsigned char *)"\r\n",
+      2
+    );
+    if (!end) return 400;
+
+    size_t line_length = (size_t)(end - (input + offset));
+    if (line_length == 0 || input[offset] == ' ' || input[offset] == '\t') return 400;
+    const unsigned char *colon = memchr(input + offset, ':', line_length);
+    if (!colon || colon == input + offset) return 400;
+
+    size_t name_length = (size_t)(colon - (input + offset));
+    for (size_t index = 0; index < name_length; index += 1) {
+      if (!is_http_token_character(input[offset + index])) return 400;
+    }
+
+    const char *value = (const char *)colon + 1;
+    const char *value_end = (const char *)end;
+    while (value < value_end && (*value == ' ' || *value == '\t')) value += 1;
+    while (value_end > value && (value_end[-1] == ' ' || value_end[-1] == '\t')) value_end -= 1;
+    for (const char *cursor = value; cursor < value_end; cursor += 1) {
+      unsigned char character = (unsigned char)*cursor;
+      if ((character < 0x20 && character != '\t') || character == 0x7f) return 400;
+    }
+
+    size_t value_length = (size_t)(value_end - value);
+    const char *name = (const char *)input + offset;
+    if (ascii_equal(name, name_length, "Host")) {
+      host_count += 1;
+      if (value_length == 0) return 400;
+    } else if (ascii_equal(name, name_length, "Content-Length")) {
+      size_t parsed_length = 0;
+      content_length_count += 1;
+      if (content_length_count > 1 || !parse_decimal_size(value, value_length, &parsed_length)) return 400;
+      if (parsed_length > LUMEN_HTTP_MAX_BODY) return 413;
+      *content_length = parsed_length;
+    } else if (ascii_equal(name, name_length, "Transfer-Encoding")) {
+      return 501;
+    } else if (ascii_equal(name, name_length, "Expect") && !ascii_equal(value, value_length, "")) {
+      return 417;
+    }
+
+    header_count += 1;
+    if (header_count > LUMEN_HTTP_MAX_HEADER_COUNT) return 431;
+    offset = (size_t)(end - input) + 2;
+  }
+
+  if (offset != length) return 400;
+  if (strcmp(request->version, "HTTP/1.1") == 0 && host_count != 1) return 400;
+  if (host_count > 1) return 400;
+  return 0;
+}
+
+static int request_header_value(
+  const LumenHttpRequest *request,
+  const char *wanted,
+  char *out,
+  size_t out_size
+) {
+  const char *cursor = strstr(request->headers, "\r\n");
+  if (!cursor || out_size == 0) return 0;
+  cursor += 2;
+
+  while (cursor < request->headers + request->headers_length - 2 && strncmp(cursor, "\r\n", 2) != 0) {
+    const char *end = strstr(cursor, "\r\n");
+    const char *colon = end ? memchr(cursor, ':', (size_t)(end - cursor)) : NULL;
+    if (!end || !colon) return 0;
+
+    if (ascii_equal(cursor, (size_t)(colon - cursor), wanted)) {
+      const char *value = colon + 1;
+      while (value < end && (*value == ' ' || *value == '\t')) value += 1;
+      while (end > value && (end[-1] == ' ' || end[-1] == '\t')) end -= 1;
+      size_t value_length = (size_t)(end - value);
+      if (value_length >= out_size) return 0;
+      memcpy(out, value, value_length);
+      out[value_length] = '\0';
+      return 1;
+    }
+
+    cursor = end + 2;
+  }
+
+  return 0;
+}
+
+static int header_has_token(const LumenHttpRequest *request, const char *name, const char *wanted) {
+  char value[512];
+  if (!request_header_value(request, name, value, sizeof(value))) return 0;
+
+  char *cursor = value;
+  while (*cursor) {
+    while (*cursor == ' ' || *cursor == '\t' || *cursor == ',') cursor += 1;
+    char *end = cursor;
+    while (*end && *end != ',') end += 1;
+    char *trimmed_end = end;
+    while (trimmed_end > cursor && (trimmed_end[-1] == ' ' || trimmed_end[-1] == '\t')) trimmed_end -= 1;
+    if (ascii_equal(cursor, (size_t)(trimmed_end - cursor), wanted)) return 1;
+    cursor = end;
+  }
+
+  return 0;
+}
+
+static int configure_client(int client, int timeout_seconds) {
+  struct timeval timeout;
+  timeout.tv_sec = timeout_seconds;
+  timeout.tv_usec = 0;
+
+  if (setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) != 0) return 0;
+  if (setsockopt(client, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) != 0) return 0;
+#ifdef SO_NOSIGPIPE
+  int yes = 1;
+  if (setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, &yes, sizeof(yes)) != 0) return 0;
+#endif
+  return 1;
+}
+
+static int read_exact(int client, void *buffer, size_t length) {
+  size_t offset = 0;
+  while (offset < length) {
+    ssize_t count = recv(client, (unsigned char *)buffer + offset, length - offset, 0);
+    if (count > 0) {
+      offset += (size_t)count;
+      continue;
+    }
+    if (count < 0 && errno == EINTR) continue;
+    return 0;
+  }
+  return 1;
+}
+
+static int send_all(int client, const void *buffer, size_t length) {
+  size_t offset = 0;
+  while (offset < length) {
+#ifdef MSG_NOSIGNAL
+    ssize_t count = send(client, (const unsigned char *)buffer + offset, length - offset, MSG_NOSIGNAL);
+#else
+    ssize_t count = send(client, (const unsigned char *)buffer + offset, length - offset, 0);
+#endif
+    if (count > 0) {
+      offset += (size_t)count;
+      continue;
+    }
+    if (count < 0 && errno == EINTR) continue;
+    return 0;
+  }
+  return 1;
+}
+
+static int read_http_request(int client, LumenHttpRequest *request) {
+  memset(request, 0, sizeof(*request));
+  const unsigned char delimiter[] = "\r\n\r\n";
+  unsigned char incoming[LUMEN_HTTP_MAX_HEADERS + 1];
+  size_t received = 0;
+  size_t header_length = 0;
+
+  while (received < LUMEN_HTTP_MAX_HEADERS) {
+    ssize_t count = recv(client, incoming + received, LUMEN_HTTP_MAX_HEADERS - received, 0);
+    if (count > 0) {
+      received += (size_t)count;
+      const unsigned char *end = find_bytes(
+        incoming,
+        received,
+        delimiter,
+        sizeof(delimiter) - 1
+      );
+      if (end) {
+        header_length = (size_t)(end - incoming) + 4;
+        break;
+      }
+      continue;
+    }
+    if (count < 0 && errno == EINTR) continue;
+    if (count < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) return 408;
+    return 400;
+  }
+
+  if (header_length == 0) return 431;
+
+  size_t content_length = 0;
+  int status = parse_http_request_head(
+    incoming,
+    header_length,
+    request,
+    &content_length
+  );
+  if (status != 0) return status;
+
+  size_t body_received = received - header_length;
+  if (body_received > content_length) return 400;
+
+  request->body = malloc(content_length + 1);
+  if (!request->body) return 500;
+  if (body_received > 0) memcpy(request->body, incoming + header_length, body_received);
+  if (!read_exact(client, request->body + body_received, content_length - body_received)) {
+    free(request->body);
+    request->body = NULL;
+    return errno == EAGAIN || errno == EWOULDBLOCK ? 408 : 400;
+  }
+
+  request->body[content_length] = '\0';
+  request->body_length = content_length;
+  return 0;
+}
+
+static const char *status_text(int status) {
+  switch (status) {
+    case 101: return "Switching Protocols";
+    case 200: return "OK";
+    case 204: return "No Content";
+    case 400: return "Bad Request";
+    case 404: return "Not Found";
+    case 405: return "Method Not Allowed";
+    case 408: return "Request Timeout";
+    case 413: return "Payload Too Large";
+    case 414: return "URI Too Long";
+    case 417: return "Expectation Failed";
+    case 426: return "Upgrade Required";
+    case 431: return "Request Header Fields Too Large";
+    case 500: return "Internal Server Error";
+    case 501: return "Not Implemented";
+    case 503: return "Service Unavailable";
+    case 505: return "HTTP Version Not Supported";
+    default: return "Error";
+  }
+}
+
+static int normalize_response_headers(const char *headers, char *out, size_t out_size) {
+  size_t offset = 0;
+  const char *cursor = headers ? headers : "";
+
+  while (*cursor) {
+    const char *end = strchr(cursor, '\n');
+    if (!end) end = cursor + strlen(cursor);
+    const char *line_end = end;
+    if (line_end > cursor && line_end[-1] == '\r') line_end -= 1;
+    if (line_end == cursor) {
+      cursor = *end ? end + 1 : end;
+      continue;
+    }
+
+    const char *colon = memchr(cursor, ':', (size_t)(line_end - cursor));
+    if (!colon || colon == cursor) return 0;
+    size_t name_length = (size_t)(colon - cursor);
+    for (size_t index = 0; index < name_length; index += 1) {
+      if (!is_http_token_character((unsigned char)cursor[index])) return 0;
+    }
+    if (ascii_equal(cursor, name_length, "Content-Length") ||
+      ascii_equal(cursor, name_length, "Connection") ||
+      ascii_equal(cursor, name_length, "Transfer-Encoding")) {
+      return 0;
+    }
+
+    const char *value = colon + 1;
+    while (value < line_end && (*value == ' ' || *value == '\t')) value += 1;
+    for (const char *item = value; item < line_end; item += 1) {
+      unsigned char character = (unsigned char)*item;
+      if ((character < 0x20 && character != '\t') || character == 0x7f) return 0;
+    }
+
+    size_t needed = name_length + 2 + (size_t)(line_end - value) + 2;
+    if (offset + needed >= out_size) return 0;
+    memcpy(out + offset, cursor, name_length);
+    offset += name_length;
+    out[offset++] = ':';
+    out[offset++] = ' ';
+    memcpy(out + offset, value, (size_t)(line_end - value));
+    offset += (size_t)(line_end - value);
+    out[offset++] = '\r';
+    out[offset++] = '\n';
+    cursor = *end ? end + 1 : end;
+  }
+
+  out[offset] = '\0';
+  return 1;
+}
+
+static int write_response_with_headers(
+  int client,
+  int status,
+  const char *headers,
+  const void *body,
+  size_t length,
+  int head_only
+) {
+  char normalized[8192];
+  if (!normalize_response_headers(headers, normalized, sizeof(normalized))) {
+    status = 500;
+    normalized[0] = '\0';
+    body = "internal server error\n";
+    length = strlen((const char *)body);
+  }
+
+  char header[9216];
+  int header_length = snprintf(
+    header,
+    sizeof(header),
+    "HTTP/1.1 %d %s\r\n%sContent-Length: %zu\r\nConnection: close\r\n\r\n",
+    status,
+    status_text(status),
+    normalized,
+    length
+  );
+  if (header_length < 0 || (size_t)header_length >= sizeof(header)) return 0;
+  if (!send_all(client, header, (size_t)header_length)) return 0;
+  return head_only || length == 0 || send_all(client, body, length);
+}
+
+static int write_response(
+  int client,
+  int status,
+  const char *type,
+  const void *body,
+  size_t length,
+  int head_only
+) {
+  char headers[256];
+  int count = snprintf(headers, sizeof(headers), "Content-Type: %s\r\n", type);
+  if (count < 0 || (size_t)count >= sizeof(headers)) return 0;
+  return write_response_with_headers(client, status, headers, body, length, head_only);
+}
+
+static void write_error_response(int client, int status) {
+  char body[128];
+  int length = snprintf(body, sizeof(body), "%d %s\n", status, status_text(status));
+  if (length > 0) write_response(client, status, "text/plain; charset=utf-8", body, (size_t)length, 0);
+}
+
+static const char *content_type(const char *path) {
+  const char *dot = strrchr(path, '.');
+  if (!dot) return "application/octet-stream";
+  if (strcmp(dot, ".html") == 0) return "text/html; charset=utf-8";
+  if (strcmp(dot, ".css") == 0) return "text/css; charset=utf-8";
+  if (strcmp(dot, ".js") == 0) return "text/javascript; charset=utf-8";
+  if (strcmp(dot, ".json") == 0) return "application/json";
+  if (strcmp(dot, ".svg") == 0) return "image/svg+xml";
+  if (strcmp(dot, ".png") == 0) return "image/png";
+  if (strcmp(dot, ".jpg") == 0 || strcmp(dot, ".jpeg") == 0) return "image/jpeg";
+  if (strcmp(dot, ".ico") == 0) return "image/x-icon";
+  if (strcmp(dot, ".wasm") == 0) return "application/wasm";
+  return "application/octet-stream";
+}
+
+static int open_static_file(int root_fd, const char *request_path, char *resolved, size_t resolved_size) {
+  const char *path = strcmp(request_path, "/") == 0 ? "/index.html" : request_path;
+  if (!validate_canonical_path(path)) return -1;
+  if (strlen(path) >= resolved_size) return -1;
+  snprintf(resolved, resolved_size, "%s", path);
+
+  char working[LUMEN_HTTP_MAX_TARGET + 1];
+  snprintf(working, sizeof(working), "%s", path + 1);
+  int directory = dup(root_fd);
+  if (directory < 0) return -1;
+
+  char *save = NULL;
+  char *segment = strtok_r(working, "/", &save);
+  while (segment) {
+    char *next = strtok_r(NULL, "/", &save);
+    int flags = O_RDONLY;
+#ifdef O_CLOEXEC
+    flags |= O_CLOEXEC;
+#endif
+#ifdef O_NOFOLLOW
+    flags |= O_NOFOLLOW;
+#endif
+    if (next) flags |= O_DIRECTORY;
+
+    int opened = openat(directory, segment, flags);
+    close(directory);
+    if (opened < 0) return -1;
+    directory = opened;
+    segment = next;
+  }
+
+  struct stat info;
+  if (fstat(directory, &info) != 0 || !S_ISREG(info.st_mode)) {
+    close(directory);
+    return -1;
+  }
+  return directory;
+}
+
+static int serve_static_file(int client, int root_fd, const char *path, int head_only) {
+  char resolved[LUMEN_HTTP_MAX_TARGET + 1];
+  int file = open_static_file(root_fd, path, resolved, sizeof(resolved));
+  if (file < 0) return 0;
+
+  struct stat info;
+  if (fstat(file, &info) != 0 || info.st_size < 0) {
+    close(file);
+    return 0;
+  }
+
+  char headers[256];
+  int headers_length = snprintf(
+    headers,
+    sizeof(headers),
+    "Content-Type: %s\r\n",
+    content_type(resolved)
+  );
+  if (headers_length < 0 || (size_t)headers_length >= sizeof(headers)) {
+    close(file);
+    return 0;
+  }
+
+  char normalized[512];
+  normalize_response_headers(headers, normalized, sizeof(normalized));
+  char response[1024];
+  int response_length = snprintf(
+    response,
+    sizeof(response),
+    "HTTP/1.1 200 OK\r\n%sContent-Length: %llu\r\nConnection: close\r\n\r\n",
+    normalized,
+    (unsigned long long)info.st_size
+  );
+  if (response_length < 0 || (size_t)response_length >= sizeof(response) ||
+    !send_all(client, response, (size_t)response_length)) {
+    close(file);
+    return 1;
+  }
+
+  if (!head_only) {
+    unsigned char chunk[16384];
+    for (;;) {
+      ssize_t count = read(file, chunk, sizeof(chunk));
+      if (count > 0) {
+        if (!send_all(client, chunk, (size_t)count)) break;
+        continue;
+      }
+      if (count < 0 && errno == EINTR) continue;
+      break;
+    }
+  }
+
+  close(file);
+  return 1;
+}
+
+static int json_skip_space(const unsigned char *input, size_t length, size_t *offset) {
+  while (*offset < length) {
+    unsigned char value = input[*offset];
+    if (value != ' ' && value != '\t' && value != '\r' && value != '\n') break;
+    *offset += 1;
+  }
+  return *offset < length;
+}
+
+static int json_parse_value(const unsigned char *input, size_t length, size_t *offset, int depth);
+static int valid_utf8(const unsigned char *input, size_t length);
+
+static int json_parse_string(const unsigned char *input, size_t length, size_t *offset) {
+  if (*offset >= length || input[*offset] != '"') return 0;
+  *offset += 1;
+
+  while (*offset < length) {
+    unsigned char value = input[(*offset)++];
+    if (value == '"') return 1;
+    if (value < 0x20) return 0;
+    if (value != '\\') continue;
+    if (*offset >= length) return 0;
+    value = input[(*offset)++];
+    if (value == '"' || value == '\\' || value == '/' || value == 'b' ||
+      value == 'f' || value == 'n' || value == 'r' || value == 't') continue;
+    if (value != 'u' || *offset + 4 > length) return 0;
+    for (int index = 0; index < 4; index += 1) {
+      if (!isxdigit(input[*offset + (size_t)index])) return 0;
+    }
+    *offset += 4;
+  }
+
+  return 0;
+}
+
+static int json_parse_number(const unsigned char *input, size_t length, size_t *offset) {
+  size_t cursor = *offset;
+  if (cursor < length && input[cursor] == '-') cursor += 1;
+  if (cursor >= length) return 0;
+
+  if (input[cursor] == '0') {
+    cursor += 1;
+  } else {
+    if (input[cursor] < '1' || input[cursor] > '9') return 0;
+    while (cursor < length && isdigit(input[cursor])) cursor += 1;
+  }
+
+  if (cursor < length && input[cursor] == '.') {
+    cursor += 1;
+    if (cursor >= length || !isdigit(input[cursor])) return 0;
+    while (cursor < length && isdigit(input[cursor])) cursor += 1;
+  }
+
+  if (cursor < length && (input[cursor] == 'e' || input[cursor] == 'E')) {
+    cursor += 1;
+    if (cursor < length && (input[cursor] == '+' || input[cursor] == '-')) cursor += 1;
+    if (cursor >= length || !isdigit(input[cursor])) return 0;
+    while (cursor < length && isdigit(input[cursor])) cursor += 1;
+  }
+
+  *offset = cursor;
+  return 1;
+}
+
+static int json_parse_value(const unsigned char *input, size_t length, size_t *offset, int depth) {
+  if (depth > 64 || !json_skip_space(input, length, offset)) return 0;
+
+  unsigned char value = input[*offset];
+  if (value == '"') return json_parse_string(input, length, offset);
+  if (value == '-' || isdigit(value)) return json_parse_number(input, length, offset);
+
+  if (value == '{' || value == '[') {
+    unsigned char close = value == '{' ? '}' : ']';
+    int object = value == '{';
+    *offset += 1;
+    json_skip_space(input, length, offset);
+    if (*offset < length && input[*offset] == close) {
+      *offset += 1;
+      return 1;
+    }
+
+    for (;;) {
+      if (object) {
+        if (!json_parse_string(input, length, offset)) return 0;
+        json_skip_space(input, length, offset);
+        if (*offset >= length || input[*offset] != ':') return 0;
+        *offset += 1;
+      }
+      if (!json_parse_value(input, length, offset, depth + 1)) return 0;
+      json_skip_space(input, length, offset);
+      if (*offset >= length) return 0;
+      if (input[*offset] == close) {
+        *offset += 1;
+        return 1;
+      }
+      if (input[*offset] != ',') return 0;
+      *offset += 1;
+      json_skip_space(input, length, offset);
+    }
+  }
+
+  const char *literal = value == 't' ? "true" : value == 'f' ? "false" : value == 'n' ? "null" : NULL;
+  if (!literal) return 0;
+  size_t literal_length = strlen(literal);
+  if (*offset + literal_length > length ||
+    memcmp(input + *offset, literal, literal_length) != 0) return 0;
+  *offset += literal_length;
+  return 1;
+}
+
+static int is_json_value(const unsigned char *input, size_t length, int require_object) {
+  if (!input || length == 0 || (require_object && input[0] != '{')) return 0;
+  size_t offset = 0;
+  if (!json_parse_value(input, length, &offset, 0)) return 0;
+  json_skip_space(input, length, &offset);
+  return offset == length;
+}
+
+static int socketio_append_message(const unsigned char *message, size_t length) {
+  if (length == 0 || !valid_utf8(message, length) || !is_json_value(message, length, 1)) return 0;
+
+  pthread_mutex_lock(&socketio_messages_mutex);
+  size_t separator = socketio_messages_length > 0 ? 1 : 0;
+  if (socketio_messages_length + separator + length >= sizeof(socketio_messages)) {
+    pthread_mutex_unlock(&socketio_messages_mutex);
+    return 0;
+  }
+
+  if (separator) socketio_messages[socketio_messages_length++] = ',';
+  memcpy(socketio_messages + socketio_messages_length, message, length);
+  socketio_messages_length += length;
+  socketio_messages[socketio_messages_length] = '\0';
+  pthread_mutex_unlock(&socketio_messages_mutex);
+  return 1;
+}
+
+static char *socketio_messages_json(void) {
+  pthread_mutex_lock(&socketio_messages_mutex);
+  char *out = malloc(socketio_messages_length + 3);
+  if (out) {
+    out[0] = '[';
+    memcpy(out + 1, socketio_messages, socketio_messages_length);
+    out[socketio_messages_length + 1] = ']';
+    out[socketio_messages_length + 2] = '\0';
+  }
+  pthread_mutex_unlock(&socketio_messages_mutex);
+  return out ? out : lumen_strdup("[]");
+}
+
+static void base64_encode(const unsigned char *input, size_t length, char *out, size_t out_size) {
+  static const char table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  size_t offset = 0;
+
+  for (size_t index = 0; index < length && offset + 4 < out_size; index += 3) {
+    unsigned int value = (unsigned int)input[index] << 16;
+    if (index + 1 < length) value |= (unsigned int)input[index + 1] << 8;
+    if (index + 2 < length) value |= input[index + 2];
+    out[offset++] = table[(value >> 18) & 63];
+    out[offset++] = table[(value >> 12) & 63];
+    out[offset++] = index + 1 < length ? table[(value >> 6) & 63] : '=';
+    out[offset++] = index + 2 < length ? table[value & 63] : '=';
+  }
+  out[offset] = '\0';
+}
+
+static int valid_websocket_key(const char *key) {
+  if (strlen(key) != 24 || key[22] != '=' || key[23] != '=') return 0;
+  for (size_t index = 0; index < 22; index += 1) {
+    unsigned char value = (unsigned char)key[index];
+    if (!isalnum(value) && value != '+' && value != '/') return 0;
+  }
+  return key[21] == 'A' || key[21] == 'Q' || key[21] == 'g' || key[21] == 'w';
+}
+
+static uint32_t rotate_left(uint32_t value, unsigned int count) {
+  return (value << count) | (value >> (32 - count));
+}
+
+static void portable_sha1(const unsigned char *input, size_t length, unsigned char digest[20]) {
+  uint32_t state[5] = {
+    0x67452301,
+    0xefcdab89,
+    0x98badcfe,
+    0x10325476,
+    0xc3d2e1f0
+  };
+  size_t padded_length = length + 1;
+  while (padded_length % 64 != 56) padded_length += 1;
+  size_t total_length = padded_length + 8;
+  unsigned char *message = malloc(total_length);
+  if (!message) {
+    memset(digest, 0, 20);
+    return;
+  }
+
+  memset(message, 0, total_length);
+  memcpy(message, input, length);
+  message[length] = 0x80;
+  uint64_t bit_length = (uint64_t)length * 8;
+  for (size_t index = 0; index < 8; index += 1) {
+    message[total_length - 1 - index] = (unsigned char)(bit_length >> (index * 8));
+  }
+
+  for (size_t block = 0; block < total_length; block += 64) {
+    uint32_t words[80];
+    for (size_t index = 0; index < 16; index += 1) {
+      size_t offset = block + index * 4;
+      words[index] =
+        ((uint32_t)message[offset] << 24) |
+        ((uint32_t)message[offset + 1] << 16) |
+        ((uint32_t)message[offset + 2] << 8) |
+        message[offset + 3];
+    }
+    for (size_t index = 16; index < 80; index += 1) {
+      words[index] = rotate_left(
+        words[index - 3] ^ words[index - 8] ^ words[index - 14] ^ words[index - 16],
+        1
+      );
+    }
+
+    uint32_t a = state[0];
+    uint32_t b = state[1];
+    uint32_t c = state[2];
+    uint32_t d = state[3];
+    uint32_t e = state[4];
+
+    for (size_t index = 0; index < 80; index += 1) {
+      uint32_t function;
+      uint32_t constant;
+      if (index < 20) {
+        function = (b & c) | ((~b) & d);
+        constant = 0x5a827999;
+      } else if (index < 40) {
+        function = b ^ c ^ d;
+        constant = 0x6ed9eba1;
+      } else if (index < 60) {
+        function = (b & c) | (b & d) | (c & d);
+        constant = 0x8f1bbcdc;
+      } else {
+        function = b ^ c ^ d;
+        constant = 0xca62c1d6;
+      }
+
+      uint32_t temporary = rotate_left(a, 5) + function + e + constant + words[index];
+      e = d;
+      d = c;
+      c = rotate_left(b, 30);
+      b = a;
+      a = temporary;
+    }
+
+    state[0] += a;
+    state[1] += b;
+    state[2] += c;
+    state[3] += d;
+    state[4] += e;
+  }
+
+  free(message);
+  for (size_t index = 0; index < 5; index += 1) {
+    digest[index * 4] = (unsigned char)(state[index] >> 24);
+    digest[index * 4 + 1] = (unsigned char)(state[index] >> 16);
+    digest[index * 4 + 2] = (unsigned char)(state[index] >> 8);
+    digest[index * 4 + 3] = (unsigned char)state[index];
+  }
+}
+
+static int websocket_accept_key(const char *client_key, char *out, size_t out_size) {
+  if (!valid_websocket_key(client_key)) return 0;
+  const char *guid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+  char combined[128];
+  unsigned char digest[20];
+  int length = snprintf(combined, sizeof(combined), "%s%s", client_key, guid);
+  if (length < 0 || (size_t)length >= sizeof(combined)) return 0;
+  portable_sha1((const unsigned char *)combined, (size_t)length, digest);
+  base64_encode(digest, sizeof(digest), out, out_size);
+  return 1;
+}
+
+static int parse_websocket_frame_header(
+  const unsigned char *input,
+  size_t length,
+  LumenWebSocketFrame *frame
+) {
+  if (!input || !frame || length < 2) return 0;
+  if ((input[0] & 0x70) != 0 || (input[0] & 0x80) == 0 || (input[1] & 0x80) == 0) return -1;
+
+  frame->fin = 1;
+  frame->opcode = input[0] & 0x0f;
+  if (frame->opcode != 1 && frame->opcode != 8 && frame->opcode != 9 && frame->opcode != 10) return -1;
+
+  uint64_t payload_length = input[1] & 0x7f;
+  size_t offset = 2;
+  if (payload_length == 126) {
+    if (length < 4) return 0;
+    payload_length = ((uint64_t)input[2] << 8) | input[3];
+    if (payload_length < 126) return -1;
+    offset = 4;
+  } else if (payload_length == 127) {
+    if (length < 10) return 0;
+    if (input[2] & 0x80) return -1;
+    payload_length = 0;
+    for (size_t index = 2; index < 10; index += 1) {
+      payload_length = (payload_length << 8) | input[index];
+    }
+    if (payload_length < 65536) return -1;
+    offset = 10;
+  }
+
+  if ((frame->opcode & 0x08) && payload_length > 125) return -1;
+  if (payload_length > LUMEN_WEBSOCKET_MAX_PAYLOAD) return -2;
+  if (length < offset + 4) return 0;
+
+  frame->payload_length = (size_t)payload_length;
+  frame->header_length = offset + 4;
+  memcpy(frame->mask, input + offset, 4);
+  return 1;
+}
+
+static int valid_utf8(const unsigned char *input, size_t length) {
+  size_t index = 0;
+  while (index < length) {
+    unsigned char first = input[index++];
+    if (first <= 0x7f) continue;
+
+    int continuation = 0;
+    uint32_t value = 0;
+    uint32_t minimum = 0;
+    if ((first & 0xe0) == 0xc0) {
+      continuation = 1;
+      value = first & 0x1f;
+      minimum = 0x80;
+    } else if ((first & 0xf0) == 0xe0) {
+      continuation = 2;
+      value = first & 0x0f;
+      minimum = 0x800;
+    } else if ((first & 0xf8) == 0xf0) {
+      continuation = 3;
+      value = first & 0x07;
+      minimum = 0x10000;
+    } else {
+      return 0;
+    }
+
+    if (index + (size_t)continuation > length) return 0;
+    for (int item = 0; item < continuation; item += 1) {
+      unsigned char next = input[index++];
+      if ((next & 0xc0) != 0x80) return 0;
+      value = (value << 6) | (next & 0x3f);
+    }
+    if (value < minimum || value > 0x10ffff || (value >= 0xd800 && value <= 0xdfff)) return 0;
+  }
+  return 1;
+}
+
+static int websocket_send_frame(int client, unsigned char opcode, const void *payload, size_t length) {
+  unsigned char header[10];
+  size_t header_length = 2;
+  header[0] = 0x80 | opcode;
+  if (length < 126) {
+    header[1] = (unsigned char)length;
+  } else if (length <= 65535) {
+    header[1] = 126;
+    header[2] = (unsigned char)(length >> 8);
+    header[3] = (unsigned char)length;
+    header_length = 4;
+  } else {
+    header[1] = 127;
+    for (size_t index = 0; index < 8; index += 1) {
+      header[2 + index] = (unsigned char)((uint64_t)length >> (56 - index * 8));
+    }
+    header_length = 10;
+  }
+  return send_all(client, header, header_length) && send_all(client, payload, length);
+}
+
+static void websocket_close(int client, unsigned short code) {
+  unsigned char payload[2] = {
+    (unsigned char)(code >> 8),
+    (unsigned char)(code & 255)
+  };
+  websocket_send_frame(client, 8, payload, sizeof(payload));
+}
+
+static int valid_websocket_close_code(unsigned short code) {
+  if (code >= 3000 && code <= 4999) return 1;
+  if (code < 1000 || code > 1014) return 0;
+  return code != 1004 && code != 1005 && code != 1006;
+}
+
+static int websocket_read_frame(int client, LumenWebSocketFrame *frame, unsigned char **payload) {
+  unsigned char header[14];
+  if (!read_exact(client, header, 2)) return 0;
+
+  size_t extra = (header[1] & 0x7f) == 126 ? 2 : (header[1] & 0x7f) == 127 ? 8 : 0;
+  if (!read_exact(client, header + 2, extra + 4)) return 0;
+
+  int parsed = parse_websocket_frame_header(header, 2 + extra + 4, frame);
+  if (parsed != 1) return parsed;
+
+  *payload = malloc(frame->payload_length + 1);
+  if (!*payload) return -2;
+  if (!read_exact(client, *payload, frame->payload_length)) {
+    free(*payload);
+    *payload = NULL;
+    return 0;
+  }
+  for (size_t index = 0; index < frame->payload_length; index += 1) {
+    (*payload)[index] ^= frame->mask[index % 4];
+  }
+  (*payload)[frame->payload_length] = '\0';
+  return 1;
+}
+
+static void websocket_chat_loop(int client) {
+  configure_client(client, 60);
+
+  for (;;) {
+    LumenWebSocketFrame frame;
+    unsigned char *payload = NULL;
+    int result = websocket_read_frame(client, &frame, &payload);
+    if (result == -2) {
+      websocket_close(client, 1009);
+      break;
+    }
+    if (result != 1) {
+      if (result < 0) websocket_close(client, 1002);
+      break;
+    }
+
+    if (frame.opcode == 8) {
+      unsigned short close_code = frame.payload_length >= 2
+        ? (unsigned short)(((unsigned short)payload[0] << 8) | payload[1])
+        : 1000;
+      if (frame.payload_length == 1 ||
+        (frame.payload_length >= 2 && !valid_websocket_close_code(close_code)) ||
+        (frame.payload_length > 2 && !valid_utf8(payload + 2, frame.payload_length - 2))) {
+        free(payload);
+        websocket_close(client, 1002);
+        break;
+      }
+      websocket_send_frame(client, 8, payload, frame.payload_length);
+      free(payload);
+      break;
+    }
+    if (frame.opcode == 9) {
+      websocket_send_frame(client, 10, payload, frame.payload_length);
+      free(payload);
+      continue;
+    }
+    if (frame.opcode == 10) {
+      free(payload);
+      continue;
+    }
+    if (!valid_utf8(payload, frame.payload_length) ||
+      !socketio_append_message(payload, frame.payload_length)) {
+      free(payload);
+      websocket_close(client, 1007);
+      break;
+    }
+
+    free(payload);
+    char *body = socketio_messages_json();
+    websocket_send_frame(client, 1, body, strlen(body));
+    free(body);
+  }
+}
+
+static int websocket_handshake(int client, const LumenHttpRequest *request) {
+  char key[128];
+  char version[32];
+  char accept_key[128];
+
+  if (strcmp(request->method, "GET") != 0 ||
+    strcmp(request->version, "HTTP/1.1") != 0 ||
+    !header_has_token(request, "Upgrade", "websocket") ||
+    !header_has_token(request, "Connection", "upgrade") ||
+    !request_header_value(request, "Sec-WebSocket-Version", version, sizeof(version)) ||
+    strcmp(version, "13") != 0 ||
+    !request_header_value(request, "Sec-WebSocket-Key", key, sizeof(key)) ||
+    !websocket_accept_key(key, accept_key, sizeof(accept_key))) {
+    return 0;
+  }
+
+  char response[512];
+  int length = snprintf(
+    response,
+    sizeof(response),
+    "HTTP/1.1 101 Switching Protocols\r\n"
+    "Upgrade: websocket\r\n"
+    "Connection: Upgrade\r\n"
+    "Sec-WebSocket-Accept: %s\r\n\r\n",
+    accept_key
+  );
+  return length > 0 && (size_t)length < sizeof(response) && send_all(client, response, (size_t)length);
+}
+
+static int make_server(int port) {
+  if (port < 1 || port > 65535) return -1;
+  int server = socket(AF_INET, SOCK_STREAM, 0);
+  if (server < 0) return -1;
+
+  int yes = 1;
+  if (setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) != 0) {
+    close(server);
+    return -1;
+  }
+
+  struct sockaddr_in address;
+  memset(&address, 0, sizeof(address));
+  address.sin_family = AF_INET;
+  address.sin_addr.s_addr = htonl(INADDR_ANY);
+  address.sin_port = htons((uint16_t)port);
+
+  if (bind(server, (struct sockaddr *)&address, sizeof(address)) < 0 ||
+    listen(server, LUMEN_HTTP_MAX_CONNECTIONS) < 0) {
+    close(server);
+    return -1;
+  }
+  return server;
+}
+
+static int open_root(const char *root) {
+  if (!root || !*root) return -1;
+  char canonical[PATH_MAX];
+  if (!realpath(root, canonical)) return -1;
+  int flags = O_RDONLY | O_DIRECTORY;
+#ifdef O_CLOEXEC
+  flags |= O_CLOEXEC;
+#endif
+  return open(canonical, flags);
+}
+
+static void handle_socketio(int client, LumenHttpServer *server, const LumenHttpRequest *request) {
+  const char *json_headers =
+    "Content-Type: application/json\r\n"
+    "Access-Control-Allow-Origin: *\r\n"
+    "Access-Control-Allow-Headers: content-type\r\n"
+    "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n";
+  const char *text_headers =
+    "Content-Type: text/plain; charset=utf-8\r\n"
+    "Access-Control-Allow-Origin: *\r\n"
+    "Access-Control-Allow-Headers: content-type\r\n"
+    "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n";
+
+  if (strcmp(request->method, "OPTIONS") == 0) {
+    write_response_with_headers(client, 204, json_headers, "", 0, 0);
+  } else if (strcmp(request->method, "GET") == 0 &&
+    (strcmp(request->path, "/socket.io") == 0 || strcmp(request->path, "/socket.io/") == 0)) {
+    const char *body =
+      "0{\"sid\":\"lumen\",\"upgrades\":[],\"pingInterval\":25000,"
+      "\"pingTimeout\":20000,\"maxPayload\":1048576}";
+    write_response_with_headers(client, 200, text_headers, body, strlen(body), 0);
+  } else if (strcmp(request->path, "/socket.io/ws") == 0) {
+    if (!websocket_handshake(client, request)) {
+      const char *upgrade_headers = "Sec-WebSocket-Version: 13\r\n";
+      const char *body = "websocket upgrade required\n";
+      write_response_with_headers(client, 426, upgrade_headers, body, strlen(body), 0);
+    } else {
+      websocket_chat_loop(client);
+    }
+  } else if (strcmp(request->method, "GET") == 0 &&
+    strcmp(request->path, "/socket.io/messages") == 0) {
+    char *body = socketio_messages_json();
+    write_response_with_headers(client, 200, json_headers, body, strlen(body), 0);
+    free(body);
+  } else if (strcmp(request->method, "POST") == 0 &&
+    strcmp(request->path, "/socket.io/emit") == 0) {
+    if (!socketio_append_message((const unsigned char *)request->body, request->body_length)) {
+      const char *body = "{\"ok\":false,\"error\":\"invalid or full payload\"}";
+      write_response_with_headers(client, 400, json_headers, body, strlen(body), 0);
+    } else {
+      const char *body = "{\"ok\":true}";
+      write_response_with_headers(client, 200, json_headers, body, strlen(body), 0);
+    }
+  } else if ((strcmp(request->method, "GET") == 0 || strcmp(request->method, "HEAD") == 0) &&
+    serve_static_file(client, server->root_fd, request->path, strcmp(request->method, "HEAD") == 0)) {
+    return;
+  } else {
+    write_error_response(client, 404);
+  }
+}
+
+static void handle_request(int client, LumenHttpServer *server, const LumenHttpRequest *request) {
+  if (server->mode == LUMEN_SERVER_SOCKETIO) {
+    handle_socketio(client, server, request);
+    return;
+  }
+
+  if (server->mode == LUMEN_SERVER_API) {
+    if (strcmp(request->method, server->api_method) == 0 &&
+      strcmp(request->path, server->api_route) == 0) {
+      write_response_with_headers(
+        client,
+        200,
+        server->api_headers,
+        server->api_body,
+        strlen(server->api_body),
+        strcmp(request->method, "HEAD") == 0
+      );
+    } else {
+      write_error_response(client, 404);
+    }
+    return;
+  }
+
+  if (server->mode == LUMEN_SERVER_HTTP) {
+    for (int index = 0; index < server->route_count; index += 1) {
+      if (strcmp(request->method, server->methods[index]) == 0 &&
+        strcmp(request->path, server->routes[index]) == 0) {
+        write_response_with_headers(
+          client,
+          200,
+          server->headers[index],
+          server->bodies[index],
+          strlen(server->bodies[index]),
+          strcmp(request->method, "HEAD") == 0
+        );
+        return;
+      }
+    }
+  }
+
+  if (strcmp(request->method, "GET") != 0 && strcmp(request->method, "HEAD") != 0) {
+    const char *headers = "Allow: GET, HEAD\r\nContent-Type: text/plain; charset=utf-8\r\n";
+    const char *body = "405 Method Not Allowed\n";
+    write_response_with_headers(client, 405, headers, body, strlen(body), 0);
+    return;
+  }
+
+  if (!serve_static_file(client, server->root_fd, request->path, strcmp(request->method, "HEAD") == 0)) {
+    write_error_response(client, 404);
+  }
+}
+
+static void server_remove_client(LumenHttpServer *server, int client) {
+  pthread_mutex_lock(&server->mutex);
+  for (int index = 0; index < server->client_count; index += 1) {
+    if (server->clients[index] == client) {
+      server->clients[index] = server->clients[server->client_count - 1];
+      server->client_count -= 1;
+      break;
+    }
+  }
+  if (server->client_count == 0) pthread_cond_signal(&server->idle);
+  pthread_mutex_unlock(&server->mutex);
+}
+
+static void *http_worker(void *raw_job) {
+  LumenHttpJob *job = raw_job;
+  LumenHttpServer *server = job->server;
+  int client = job->client;
+  free(job);
+
+  LumenHttpRequest request;
+  int status = configure_client(client, LUMEN_HTTP_IO_TIMEOUT_SECONDS)
+    ? read_http_request(client, &request)
+    : 500;
+  if (status == 0) {
+    handle_request(client, server, &request);
+    free(request.body);
+  } else {
+    write_error_response(client, status);
+  }
+
+  shutdown(client, SHUT_RDWR);
+  server_remove_client(server, client);
+  close(client);
+  return NULL;
+}
+
+static void http_stop_handler(int signal_number) {
+  (void)signal_number;
+  lumen_http_stop_requested = 1;
+  int listener = (int)lumen_http_listener;
+  lumen_http_listener = -1;
+  if (listener >= 0) close(listener);
+}
+
+static int run_server(LumenHttpServer *server, int port, const char *label) {
+  server->listener = make_server(port);
+  if (server->listener < 0) return 1;
+
+  pthread_mutex_init(&server->mutex, NULL);
+  pthread_cond_init(&server->idle, NULL);
+  server->client_count = 0;
+  lumen_http_stop_requested = 0;
+  lumen_http_listener = server->listener;
+
+  struct sigaction action;
+  struct sigaction old_int;
+  struct sigaction old_term;
+  struct sigaction old_pipe;
+  memset(&action, 0, sizeof(action));
+  action.sa_handler = http_stop_handler;
+  sigemptyset(&action.sa_mask);
+  sigaction(SIGINT, &action, &old_int);
+  sigaction(SIGTERM, &action, &old_term);
+  action.sa_handler = SIG_IGN;
+  sigaction(SIGPIPE, &action, &old_pipe);
+
+  if (label) {
+    printf("%s http://localhost:%d\n", label, port);
+    fflush(stdout);
+  }
+
+  while (!lumen_http_stop_requested) {
+    int client = accept(server->listener, NULL, NULL);
+    if (client < 0) {
+      if (errno == EINTR) continue;
+      if (lumen_http_stop_requested || errno == EBADF || errno == EINVAL) break;
+      continue;
+    }
+
+    pthread_mutex_lock(&server->mutex);
+    if (server->client_count >= LUMEN_HTTP_MAX_CONNECTIONS) {
+      pthread_mutex_unlock(&server->mutex);
+      configure_client(client, LUMEN_HTTP_IO_TIMEOUT_SECONDS);
+      write_error_response(client, 503);
+      close(client);
+      continue;
+    }
+    server->clients[server->client_count++] = client;
+    pthread_mutex_unlock(&server->mutex);
+
+    LumenHttpJob *job = malloc(sizeof(LumenHttpJob));
+    pthread_t thread;
+    pthread_attr_t attributes;
+    if (!job) {
+      write_error_response(client, 503);
+      server_remove_client(server, client);
+      close(client);
+      continue;
+    }
+    job->server = server;
+    job->client = client;
+
+    int attributes_ready = pthread_attr_init(&attributes) == 0;
+    int created_detached = 0;
+    if (attributes_ready) {
+      created_detached =
+        pthread_attr_setdetachstate(&attributes, PTHREAD_CREATE_DETACHED) == 0;
+      pthread_attr_setstacksize(&attributes, 256 * 1024);
+    }
+    int create_status = pthread_create(
+      &thread,
+      attributes_ready ? &attributes : NULL,
+      http_worker,
+      job
+    );
+    if (attributes_ready) pthread_attr_destroy(&attributes);
+
+    if (create_status != 0) {
+      free(job);
+      write_error_response(client, 503);
+      server_remove_client(server, client);
+      close(client);
+      continue;
+    }
+    if (!created_detached) pthread_detach(thread);
+  }
+
+  if (lumen_http_listener == server->listener) {
+    lumen_http_listener = -1;
+    close(server->listener);
+  }
+  server->listener = -1;
+
+  pthread_mutex_lock(&server->mutex);
+  for (int index = 0; index < server->client_count; index += 1) {
+    shutdown(server->clients[index], SHUT_RDWR);
+  }
+  while (server->client_count > 0) pthread_cond_wait(&server->idle, &server->mutex);
+  pthread_mutex_unlock(&server->mutex);
+
+  sigaction(SIGINT, &old_int, NULL);
+  sigaction(SIGTERM, &old_term, NULL);
+  sigaction(SIGPIPE, &old_pipe, NULL);
+  pthread_cond_destroy(&server->idle);
+  pthread_mutex_destroy(&server->mutex);
+  return 0;
+}
+
+char *lumen_socketio_event(const char *event, const char *payload) {
+  size_t length = strlen(event) + strlen(payload) + 8;
+  char *out = malloc(length);
+  if (!out) return "";
+  snprintf(out, length, "[\"%s\",%s]", event, payload);
+  return out;
+}
+
+char *lumen_socketio_emit(const char *room, const char *event, const char *payload) {
+  size_t length = strlen(room) + strlen(event) + strlen(payload) + 40;
+  char *out = malloc(length);
+  if (!out) return "";
+  snprintf(out, length, "{\"room\":\"%s\",\"event\":\"%s\",\"payload\":%s}", room, event, payload);
+  return out;
+}
+
+char *lumen_http_request(const char *method, const char *path, const char *body) {
+  size_t length = strlen(method) + strlen(path) + strlen(body) + 48;
+  char *out = malloc(length);
+  if (!out) return "";
+  snprintf(out, length, "{\"method\":\"%s\",\"path\":\"%s\",\"body\":%s}", method, path, body);
+  return out;
+}
+
+char *lumen_http_response(int status, const char *headers, const char *body) {
+  size_t length = strlen(headers) + strlen(body) + 48;
+  char *out = malloc(length);
+  if (!out) return "";
+  snprintf(out, length, "{\"status\":%d,\"headers\":%s,\"body\":%s}", status, headers, body);
+  return out;
+}
+
+int lumen_socketio_serve_chat(int port, const char *root) {
+  LumenHttpServer server;
+  memset(&server, 0, sizeof(server));
+  server.mode = LUMEN_SERVER_SOCKETIO;
+  server.root_fd = open_root(root);
+  if (server.root_fd < 0) return 1;
+  int result = run_server(&server, port, "Lumen Socket.IO chat listening on");
+  close(server.root_fd);
+  return result;
+}
+
+int lumen_http_serve_files(int port, const char *root) {
+  LumenHttpServer server;
+  memset(&server, 0, sizeof(server));
+  server.mode = LUMEN_SERVER_FILES;
+  server.root_fd = open_root(root);
+  if (server.root_fd < 0) return 1;
+  int result = run_server(&server, port, NULL);
+  close(server.root_fd);
+  return result;
+}
+
+int lumen_http_serve_api(int port, const char *method, const char *route, const char *headers, const char *body) {
+  LumenHttpServer server;
+  memset(&server, 0, sizeof(server));
+  server.mode = LUMEN_SERVER_API;
+  server.root_fd = -1;
+  server.api_method = method;
+  server.api_route = route;
+  server.api_headers = headers;
+  server.api_body = body;
+  return run_server(&server, port, NULL);
+}
+
+int lumen_http_serve_http(
+  int port,
+  const char *root,
+  const char **methods,
+  const char **routes,
+  const char **headers,
+  const char **bodies,
+  int route_count
+) {
+  if (route_count < 0 || (route_count > 0 && (!methods || !routes || !headers || !bodies))) return 1;
+
+  LumenHttpServer server;
+  memset(&server, 0, sizeof(server));
+  server.mode = LUMEN_SERVER_HTTP;
+  server.root_fd = open_root(root);
+  if (server.root_fd < 0) return 1;
+  server.methods = methods;
+  server.routes = routes;
+  server.headers = headers;
+  server.bodies = bodies;
+  server.route_count = route_count;
+
+  int result = run_server(&server, port, "Lumen HTTP listening on");
+  close(server.root_fd);
+  return result;
+}

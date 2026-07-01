@@ -2,11 +2,11 @@
 
 import { readFile } from 'node:fs/promises'
 import { validateBuiltinRegistry } from '../runtime/BuiltinRegistry.js'
+import { RuntimeUnits } from '../runtime/RuntimeUnits.js'
 
-const runtimeSources = await Promise.all([
-  'src/runtime/http.c',
-  'src/runtime/http_runtime.c'
-].map(path => readFile(path, 'utf8')))
+const runtimeSources = await Promise.all(
+  RuntimeUnits.map(runtimeUnit => readFile(runtimeUnit.source, 'utf8'))
+)
 const emitterSources = await Promise.all([
   'src/backend/AggregateLowering.js',
   'src/backend/BuiltinLowering.js',

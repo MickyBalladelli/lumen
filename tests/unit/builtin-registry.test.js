@@ -9,6 +9,10 @@ import {
   llvmDeclaration,
   validateBuiltinRegistry
 } from '../../src/runtime/BuiltinRegistry.js'
+import {
+  RuntimeUnits,
+  runtimeUnitsForLLVM
+} from '../../src/runtime/RuntimeUnits.js'
 import { ModuleRegistry } from '../../src/semantics/ModuleRegistry.js'
 
 test('built-in consumers share the canonical registry', () => {
@@ -31,20 +35,19 @@ test('runtime ABI declarations come from typed signatures', () => {
 })
 
 test('registry matches C runtime implementations', async () => {
-  const sources = await Promise.all([
-    'src/runtime/http.c',
-    'src/runtime/http_runtime.c'
-  ].map(path => readFile(path, 'utf8')))
+  const sources = await Promise.all(
+    RuntimeUnits.map(runtimeUnit => readFile(runtimeUnit.source, 'utf8'))
+  )
 
   assert.deepEqual(validateBuiltinRegistry(sources), [])
 })
 
 test('registry validator reports ABI drift', async () => {
-  const sources = await Promise.all([
-    'src/runtime/http.c',
-    'src/runtime/http_runtime.c'
-  ].map(path => readFile(path, 'utf8')))
-  sources[0] = sources[0].replace('_Bool lumen_map_has', 'int lumen_map_has')
+  const sources = await Promise.all(
+    RuntimeUnits.map(runtimeUnit => readFile(runtimeUnit.source, 'utf8'))
+  )
+  const collections = RuntimeUnits.findIndex(runtimeUnit => runtimeUnit.name === 'collections')
+  sources[collections] = sources[collections].replace('_Bool lumen_map_has', 'int lumen_map_has')
 
   assert.ok(validateBuiltinRegistry(sources).includes(
     'lumen_map_has returns i32 in C, registry says i1'
@@ -55,4 +58,28 @@ test('registry validator reports ABI drift', async () => {
   ]).includes(
     'Emitter uses unknown runtime symbol lumen_not_registered'
   ))
+})
+
+test('runtime linker selects only used units and their dependencies', () => {
+  const ownedSymbols = RuntimeUnits.flatMap(runtimeUnit => runtimeUnit.symbols)
+  const registeredSymbols = RuntimeSignatures
+    .map(signature => signature.symbol)
+    .filter(symbol => symbol.startsWith('lumen_'))
+
+  assert.equal(new Set(ownedSymbols).size, ownedSymbols.length)
+  assert.deepEqual(
+    registeredSymbols.filter(symbol => !ownedSymbols.includes(symbol)),
+    []
+  )
+  assert.deepEqual(
+    runtimeUnitsForLLVM('call ptr @lumen_map_get(ptr %map, ptr %key)')
+      .map(runtimeUnit => runtimeUnit.name),
+    ['system', 'collections']
+  )
+  assert.deepEqual(
+    runtimeUnitsForLLVM('call ptr @lumen_http_request(ptr %method, ptr %path, ptr %body)')
+      .map(runtimeUnit => runtimeUnit.name),
+    ['system', 'http']
+  )
+  assert.deepEqual(runtimeUnitsForLLVM('call i32 @printf(ptr %format)'), [])
 })

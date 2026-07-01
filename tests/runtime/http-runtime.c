@@ -1,5 +1,7 @@
 #include <assert.h>
 
+#include "../../src/runtime/system.c"
+#include "../../src/runtime/crypto.c"
 #include "../../src/runtime/http.c"
 
 typedef struct {

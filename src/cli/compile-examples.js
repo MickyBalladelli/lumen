@@ -1,6 +1,7 @@
 import { readdir, stat } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { Compiler } from '../compiler/Compiler.js'
+import { RuntimeUnits } from '../runtime/RuntimeUnits.js'
 
 const examplesDir = 'examples'
 const outputDir = 'build'
@@ -29,8 +30,11 @@ async function isFresh(inputPath, outputPath) {
   try {
     const input = await stat(inputPath)
     const output = await stat(outputPath)
-    const runtime = await stat('src/runtime/http.c')
-    return output.mtimeMs >= input.mtimeMs && output.mtimeMs >= runtime.mtimeMs
+    const runtimes = await Promise.all(
+      RuntimeUnits.map(runtimeUnit => stat(runtimeUnit.source))
+    )
+    return output.mtimeMs >= input.mtimeMs &&
+      runtimes.every(runtime => output.mtimeMs >= runtime.mtimeMs)
   } catch {
     return false
   }

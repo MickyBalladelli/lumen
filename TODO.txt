@@ -82,10 +82,9 @@ Project audit: 2026-06-30
   `arg`/`argCount`, crypto, and WebSocket handshake helpers currently return empty
   or zero outside macOS. Implement portable providers or return explicit errors.
 
-- [ ] Split `src/runtime/http.c` into real runtime units.
-  The six split files are comments while all 2,272 lines live in `http.c`. Create
-  headers, separate system/fs/string/collections/thread/crypto/http code, and link
-  only the units a program uses.
+- [x] Split `src/runtime/http.c` into real runtime units.
+  Headers and implementations now separate system/fs/string/collections/thread/
+  crypto/http code. The compiler links only referenced units and their dependencies.
 
 - [ ] Replace empty-string and integer error sentinels with typed errors.
   Cover file, environment, crypto, JSON, process, thread, and HTTP failures so a

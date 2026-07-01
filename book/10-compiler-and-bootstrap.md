@@ -134,15 +134,15 @@ components — there is no shared mutable state between compilations.
 
 ### C Runtime — `src/runtime/`
 
-The C runtime backs all built-in functions. Despite having split files, all C
-code is compiled as one translation unit for easy linking:
+The C runtime backs built-in functions. Each unit has its own implementation
+and header. The compiler links units based on referenced runtime symbols:
 
 | File | Purpose |
 | --- | --- |
-| `system.c` | Print, len, min, max, includes, uuid, date, env, encrypt, decrypt, arg, argCount, maps, results, options, channels, JSON, errors, arrays, string builder |
+| `system.c` | Allocation, uuid, date, env, args, results, options, channels, and errors |
 | `fs.c` | File read/write |
-| `http_runtime.c` | HTTP helper logic |
-| `http.c` | ~2,272 lines — contains ALL HTTP code (serveFiles, serveApi, serveHttp, chat, WebSocket). The split file comments exist but the code has not been separated |
+| `collections.c` | Lists, maps, JSON, and array helpers |
+| `http.c` | HTTP, WebSocket, Socket.IO, and server helpers |
 | `thread.c` | Semaphores, threading, appendFile |
 | `crypto.c` | AES-256 encryption/decryption |
 | `string.c` | String helpers (len, equals, trim, lower, upper, startsWith, endsWith, replace, split, indexOf, lastIndexOf, contains, repeat, padStart, padEnd, intToString, stringToInt) |
@@ -317,7 +317,7 @@ npm run bootstrap
 npm run compile -- examples/basic.lm build/basic.ll
 
 # Link and run
-clang -Wno-override-module build/basic.ll src/runtime/http.c -pthread -o build/basic
+clang -Wno-override-module build/basic.ll -o build/basic
 ./build/basic
 ```
 
@@ -509,9 +509,9 @@ LLVM output. Completion is computed from the run and written to
 - **Linux** — `arg` and `argCount` read `/proc/self/cmdline`. Crypto uses the
   same PBKDF2-HMAC-SHA256/AES-256-CTR wire format as macOS through a
   dependency-free provider. WebSocket handshakes use portable SHA-1/base64.
-- **Runtime split** — `src/runtime/http.c` contains all 2,272 lines of HTTP
-  code despite having separate `http_runtime.c`, `system.c`, `fs.c`, etc. in
-  the directory.
+- **Runtime units** — system, fs, collections, string, crypto, thread, and HTTP
+  compile separately. Generated programs link only referenced units and their
+  dependencies.
 
 ### Tooling
 

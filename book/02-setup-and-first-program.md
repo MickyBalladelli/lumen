@@ -150,17 +150,17 @@ the compile script.
 ### Step 3: Link The Native Executable
 
 ```bash
-clang -Wno-override-module build/basic.ll src/runtime/http.c -pthread -o build/basic
+clang -Wno-override-module build/basic.ll -o build/basic
 ```
 
 What each flag does:
 - `-Wno-override-module` — suppresses a warning about LLVM's target triple
   override, harmless for development
-- `src/runtime/http.c` — the C runtime that backs Lumen's standard library
-  (print, file I/O, HTTP, threads, crypto, strings, JSON, maps, results,
-  options)
-- `-pthread` — links the pthreads library for native thread support
 - `-o build/basic` — names the output executable
+
+This basic program only uses libc-backed output, so it needs no Lumen runtime
+unit. The JavaScript compiler driver selects required runtime units
+automatically for programs that use them.
 
 ### Step 4: Run
 

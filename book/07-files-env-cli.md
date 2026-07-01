@@ -157,7 +157,7 @@ The bootstrap compiler uses `exec` to:
 3. Check the return code to verify linking succeeded
 
 ```lumen
-let code = exec("clang build/out.ll src/runtime/http.c -pthread -o build/app")
+let code = exec("clang build/out.ll src/runtime/system.c src/runtime/fs.c -pthread -o build/app")
 if code != 0 {
   println("link failed")
   return 1
