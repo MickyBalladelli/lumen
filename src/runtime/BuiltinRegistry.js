@@ -13,6 +13,8 @@
  * @property {string[]} parameters
  * @property {string} returnType
  * @property {boolean} [variadic]
+ * @property {number} minArity
+ * @property {number|null} maxArity
  * @property {string} [runtime]
  * @property {'runtime'|'custom'} lowering
  */
@@ -132,6 +134,8 @@ const builtin = (key, module, name, parameters, returnType, options = {}) => Obj
   parameters: Object.freeze(parameters),
   returnType,
   variadic: options.variadic ?? false,
+  minArity: options.minArity ?? (options.variadic ? 0 : parameters.length),
+  maxArity: options.maxArity ?? (options.variadic ? null : parameters.length),
   runtime: options.runtime,
   lowering: options.lowering ?? 'custom'
 })
@@ -154,8 +158,16 @@ export const BuiltinSignatures = Object.freeze([
   builtin('Uuid', 'system', 'uuid', [], 'string', { runtime: 'lumen_uuid' }),
   builtin('Date', 'system', 'date', [], 'string', { runtime: 'lumen_date' }),
   builtin('Env', 'system', 'env', ['string'], 'string', { runtime: 'lumen_env' }),
-  builtin('Encrypt', 'system', 'encrypt', ['string', 'string', 'string'], 'string', { runtime: 'lumen_encrypt' }),
-  builtin('Decrypt', 'system', 'decrypt', ['string', 'string', 'string'], 'string', { runtime: 'lumen_decrypt' }),
+  builtin('Encrypt', 'system', 'encrypt', ['string', 'string', 'string'], 'string', {
+    runtime: 'lumen_encrypt',
+    minArity: 2,
+    maxArity: 3
+  }),
+  builtin('Decrypt', 'system', 'decrypt', ['string', 'string', 'string'], 'string', {
+    runtime: 'lumen_decrypt',
+    minArity: 2,
+    maxArity: 3
+  }),
   builtin('Arg', 'system', 'arg', ['i32'], 'string', { runtime: 'lumen_arg' }),
   builtin('ArgCount', 'system', 'argCount', [], 'i32', { runtime: 'lumen_arg_count' }),
   builtin('Map', 'system', 'map', ['string'], 'string', { variadic: true, runtime: 'lumen_map' }),

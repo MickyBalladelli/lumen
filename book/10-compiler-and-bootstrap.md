@@ -506,8 +506,9 @@ LLVM output. Completion is computed from the run and written to
 
 ### Platform Support
 
-- **Linux** — `arg`, `argCount`, crypto, and WebSocket return empty or zero on
-  Linux. Only macOS is fully supported.
+- **Linux** — `arg` and `argCount` read `/proc/self/cmdline`. Crypto uses the
+  same PBKDF2-HMAC-SHA256/AES-256-CTR wire format as macOS through a
+  dependency-free provider. WebSocket handshakes use portable SHA-1/base64.
 - **Runtime split** — `src/runtime/http.c` contains all 2,272 lines of HTTP
   code despite having separate `http_runtime.c`, `system.c`, `fs.c`, etc. in
   the directory.

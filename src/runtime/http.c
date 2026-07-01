@@ -7,12 +7,15 @@
 
 #include <arpa/inet.h>
 #ifdef __APPLE__
+#include <crt_externs.h>
+#endif
+#if defined(__APPLE__) && !defined(LUMEN_FORCE_PORTABLE_CRYPTO)
+#define LUMEN_USE_COMMON_CRYPTO 1
 #include <CommonCrypto/CommonCryptor.h>
 #include <CommonCrypto/CommonDigest.h>
 #include <CommonCrypto/CommonHMAC.h>
 #include <CommonCrypto/CommonKeyDerivation.h>
 #include <CommonCrypto/CommonRandom.h>
-#include <crt_externs.h>
 #endif
 #include <errno.h>
 #include <ctype.h>
@@ -33,11 +36,15 @@
 #include <time.h>
 #include <unistd.h>
 
+#ifndef LUMEN_USE_COMMON_CRYPTO
+#include "portable_crypto.h"
+#endif
+
 #ifndef PATH_MAX
 #define PATH_MAX 4096
 #endif
 
-#ifndef __APPLE__
+#ifndef LUMEN_USE_COMMON_CRYPTO
 #define CC_SHA1_DIGEST_LENGTH 20
 #define CC_SHA256_DIGEST_LENGTH 32
 typedef int CCOperation;
@@ -223,24 +230,89 @@ char *lumen_env(const char *name) {
   return "";
 }
 
+typedef struct {
+  char *data;
+  char **values;
+  int count;
+  int available;
+} LumenProcessArguments;
+
+static LumenProcessArguments lumen_process_arguments = {0};
+static pthread_once_t lumen_process_arguments_once = PTHREAD_ONCE_INIT;
+
+#if defined(__linux__) || defined(LUMEN_FORCE_LINUX_ARGS)
+static void lumen_load_process_arguments(void) {
+  long configured_limit = sysconf(_SC_ARG_MAX);
+  size_t capacity = configured_limit > 0
+    ? (size_t)configured_limit
+    : 2 * 1024 * 1024;
+  if (capacity > 16 * 1024 * 1024) capacity = 16 * 1024 * 1024;
+
+  const char *path = getenv("LUMEN_PROC_SELF_CMDLINE");
+  if (!path || path[0] == '\0') path = "/proc/self/cmdline";
+  FILE *file = fopen(path, "rb");
+  if (!file) return;
+
+  char *data = lumen_alloc(capacity + 1);
+  if (!data) {
+    fclose(file);
+    return;
+  }
+  size_t length = fread(data, 1, capacity, file);
+  int failed = ferror(file);
+  fclose(file);
+  if (failed || length == 0 || length == capacity) return;
+  data[length] = '\0';
+
+  int count = 0;
+  for (size_t index = 0; index < length; index += 1) {
+    if (data[index] == '\0') count += 1;
+  }
+  if (count == 0) return;
+
+  char **values = lumen_alloc(sizeof(char *) * (size_t)count);
+  if (!values) return;
+  int argument = 0;
+  values[argument++] = data;
+  for (size_t index = 0; index + 1 < length && argument < count; index += 1) {
+    if (data[index] == '\0') values[argument++] = data + index + 1;
+  }
+
+  lumen_process_arguments.data = data;
+  lumen_process_arguments.values = values;
+  lumen_process_arguments.count = argument;
+  lumen_process_arguments.available = 1;
+}
+#endif
+
 char *lumen_arg(int index) {
-#ifdef __APPLE__
+#if defined(__APPLE__) && !defined(LUMEN_FORCE_LINUX_ARGS)
   int argc = *_NSGetArgc();
   char **argv = *_NSGetArgv();
 
   if (index < 0 || index >= argc) return "";
   return argv[index];
+#elif defined(__linux__) || defined(LUMEN_FORCE_LINUX_ARGS)
+  pthread_once(&lumen_process_arguments_once, lumen_load_process_arguments);
+  if (!lumen_process_arguments.available) {
+    return "error: cannot read process arguments from /proc/self/cmdline";
+  }
+  if (index < 0 || index >= lumen_process_arguments.count) return "";
+  return lumen_process_arguments.values[index];
 #else
   (void)index;
-  return "";
+  return "error: process arguments are unsupported on this platform";
 #endif
 }
 
 int lumen_arg_count(void) {
-#ifdef __APPLE__
+#if defined(__APPLE__) && !defined(LUMEN_FORCE_LINUX_ARGS)
   return *_NSGetArgc();
+#elif defined(__linux__) || defined(LUMEN_FORCE_LINUX_ARGS)
+  pthread_once(&lumen_process_arguments_once, lumen_load_process_arguments);
+  return lumen_process_arguments.available ? lumen_process_arguments.count : -1;
 #else
-  return 0;
+  return -1;
 #endif
 }
 
@@ -1407,7 +1479,7 @@ static int lumen_protocol_is_aes256(const char *protocol) {
 }
 
 static int lumen_derive_crypto_keys(const char *password, const unsigned char *salt, unsigned char *keys) {
-#ifdef __APPLE__
+#ifdef LUMEN_USE_COMMON_CRYPTO
   return CCKeyDerivationPBKDF(
     kCCPBKDF2,
     password,
@@ -1420,15 +1492,12 @@ static int lumen_derive_crypto_keys(const char *password, const unsigned char *s
     64
   ) == kCCSuccess;
 #else
-  (void)password;
-  (void)salt;
-  (void)keys;
-  return 0;
+  return lumen_pbkdf2_sha256(password, salt, 16, 100000, keys, 64);
 #endif
 }
 
 static int lumen_aes_ctr_crypt(const unsigned char *input, size_t length, const unsigned char *key, const unsigned char *iv, unsigned char *output, CCOperation operation) {
-#ifdef __APPLE__
+#ifdef LUMEN_USE_COMMON_CRYPTO
   CCCryptorRef cryptor = NULL;
   CCCryptorStatus status = CCCryptorCreateWithMode(
     operation,
@@ -1453,18 +1522,13 @@ static int lumen_aes_ctr_crypt(const unsigned char *input, size_t length, const 
 
   return status == kCCSuccess && moved == length;
 #else
-  (void)input;
-  (void)length;
-  (void)key;
-  (void)iv;
-  (void)output;
   (void)operation;
-  return 0;
+  return lumen_aes256_ctr(input, length, key, iv, output);
 #endif
 }
 
 static void lumen_crypto_tag(const unsigned char *key, const unsigned char *salt, const unsigned char *iv, const unsigned char *cipher, size_t cipher_length, unsigned char *tag) {
-#ifdef __APPLE__
+#ifdef LUMEN_USE_COMMON_CRYPTO
   CCHmacContext context;
   CCHmacInit(&context, kCCHmacAlgSHA256, key, 32);
   CCHmacUpdate(&context, salt, 16);
@@ -1472,30 +1536,30 @@ static void lumen_crypto_tag(const unsigned char *key, const unsigned char *salt
   CCHmacUpdate(&context, cipher, cipher_length);
   CCHmacFinal(&context, tag);
 #else
-  (void)key;
-  (void)salt;
-  (void)iv;
-  (void)cipher;
-  (void)cipher_length;
-  memset(tag, 0, CC_SHA256_DIGEST_LENGTH);
+  const unsigned char *parts[] = {salt, iv, cipher};
+  const size_t lengths[] = {16, 16, cipher_length};
+  lumen_hmac_sha256_parts(key, 32, parts, lengths, 3, tag);
 #endif
 }
 
 char *lumen_encrypt(const char *value, const char *password, const char *protocol) {
-#ifndef __APPLE__
-  (void)value;
-  (void)password;
-  (void)protocol;
-  return "";
-#else
   if (!lumen_protocol_is_aes256(protocol)) return "";
 
   unsigned char salt[16];
   unsigned char iv[16];
   unsigned char keys[64];
 
+#ifdef LUMEN_USE_COMMON_CRYPTO
   if (CCRandomGenerateBytes(salt, sizeof(salt)) != kCCSuccess) return "";
   if (CCRandomGenerateBytes(iv, sizeof(iv)) != kCCSuccess) return "";
+#else
+  if (!lumen_secure_random(salt, sizeof(salt))) {
+    return "error: secure random provider unavailable";
+  }
+  if (!lumen_secure_random(iv, sizeof(iv))) {
+    return "error: secure random provider unavailable";
+  }
+#endif
   if (!lumen_derive_crypto_keys(password, salt, keys)) return "";
 
   size_t value_length = strlen(value);
@@ -1552,16 +1616,9 @@ char *lumen_encrypt(const char *value, const char *password, const char *protoco
   free(cipher_text);
   free(tag_text);
   return out;
-#endif
 }
 
 char *lumen_decrypt(const char *value, const char *password, const char *protocol) {
-#ifndef __APPLE__
-  (void)value;
-  (void)password;
-  (void)protocol;
-  return "";
-#else
   if (!lumen_protocol_is_aes256(protocol)) return "";
 
   char *copy = lumen_strdup(value);
@@ -1617,7 +1674,12 @@ char *lumen_decrypt(const char *value, const char *password, const char *protoco
   }
 
   lumen_crypto_tag(keys + 32, salt, iv, cipher, cipher_length, expected_tag);
-  if (memcmp(tag, expected_tag, CC_SHA256_DIGEST_LENGTH) != 0) {
+#ifdef LUMEN_USE_COMMON_CRYPTO
+  int valid_tag = memcmp(tag, expected_tag, CC_SHA256_DIGEST_LENGTH) == 0;
+#else
+  int valid_tag = lumen_constant_time_equal(tag, expected_tag, CC_SHA256_DIGEST_LENGTH);
+#endif
+  if (!valid_tag) {
     free(copy);
     free(salt);
     free(iv);
@@ -1653,7 +1715,6 @@ char *lumen_decrypt(const char *value, const char *password, const char *protoco
   free(cipher);
   free(tag);
   return (char *)plain;
-#endif
 }
 
 typedef struct {

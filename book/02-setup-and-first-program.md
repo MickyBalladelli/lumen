@@ -309,6 +309,6 @@ my-project/
 - A packaged `lumen` binary command — today `compile.js` has no packaged npm
   binary. Workflows go through `lmsh` or `npm run compile`.
 - Better CLI help output with subcommand descriptions and examples.
-- Cross-platform setup notes for Linux (some features return silent fallbacks).
+- Cross-platform setup notes for Linux.
 - An installed-package smoke test that verifies the complete npm global install
   workflow end-to-end.

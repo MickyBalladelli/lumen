@@ -1063,8 +1063,9 @@ src/
 
 The C runtime is still built as one translation unit for easy linking, but it is
 organized internally by system, fs, http, thread, crypto, string, map, result,
-option, and CLI helper sections. Platform-specific bits use macOS guards and
-Linux-safe fallbacks where a native provider is not wired yet.
+option, and CLI helper sections. Linux reads process arguments from
+`/proc/self/cmdline` and uses dependency-free PBKDF2-HMAC-SHA256,
+AES-256-CTR, secure random, and portable WebSocket SHA-1 support.
 
 Heap strings, JSON values, lists, maps, and runtime objects are runtime-owned.
 Returned allocations stay valid for the process lifetime, internal temporary

@@ -357,9 +357,13 @@ export class ExpressionInspector {
   }
 
   validateBuiltinCall(node, builtin) {
-    if (!builtin.variadic && node.arguments.length !== builtin.parameters.length) {
+    if (node.arguments.length < builtin.minArity ||
+      (builtin.maxArity !== null && node.arguments.length > builtin.maxArity)) {
+      const expected = builtin.minArity === builtin.maxArity
+        ? `${builtin.minArity}`
+        : `${builtin.minArity}-${builtin.maxArity ?? 'many'}`
       throw new Diagnostic(
-        `${builtin.name} expects ${builtin.parameters.length} argument(s)`,
+        `${builtin.name} expects ${expected} argument(s)`,
         node.location,
         'type'
       )

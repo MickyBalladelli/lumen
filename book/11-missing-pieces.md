@@ -167,11 +167,8 @@ Function names and signatures are currently duplicated across five places:
 
 ### Linux Support
 
-Several features silently return empty or zero on Linux:
-
-- `arg(index)` and `argCount()` — need Linux process argument access
-- `encrypt`/`decrypt` — need Linux crypto provider
-- WebSocket handshake — need Linux SHA1/base64 or equivalent
+Linux process arguments, encryption/decryption, and WebSocket handshakes now
+have portable providers. Runtime tests force these paths on macOS too.
 
 Either implement portable providers or return explicit typed errors rather than
 empty sentinels.

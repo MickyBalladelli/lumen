@@ -78,7 +78,7 @@ Project audit: 2026-06-30
 
 ## P1 - Runtime and portability
 
-- [ ] Support Linux instead of returning silent fallbacks.
+- [x] Support Linux instead of returning silent fallbacks.
   `arg`/`argCount`, crypto, and WebSocket handshake helpers currently return empty
   or zero outside macOS. Implement portable providers or return explicit errors.
 
