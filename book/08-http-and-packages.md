@@ -14,7 +14,12 @@ Serve a directory of static files:
 
 ```lumen
 function main(): i32 {
-  return serveFiles(8080, "examples/public")
+  let server = serveFiles(8080, "examples/public")
+  if !isOk(server) {
+    println(errorMessage(server))
+    return 1
+  }
+  return resultValue(server)
 }
 ```
 
@@ -35,7 +40,7 @@ Serve a single API endpoint:
 
 ```lumen
 function main(): i32 {
-  return serveApi(
+  let server = serveApi(
     8081,
     "GET",
     "/health",
@@ -44,6 +49,10 @@ X-Lumen: yes
 ',
     '{"ok":true}'
   )
+  if !isOk(server) {
+    return 1
+  }
+  return resultValue(server)
 }
 ```
 
@@ -83,7 +92,7 @@ function main(): i32 {
     "ok"
   ]
 
-  return serveHttp(
+  let server = serveHttp(
     8088,
     "examples/http-public",
     methods,
@@ -91,6 +100,10 @@ function main(): i32 {
     headers,
     bodies
   )
+  if !isOk(server) {
+    return 1
+  }
+  return resultValue(server)
 }
 ```
 
@@ -126,12 +139,13 @@ Build HTTP request and response strings for use in API code:
 
 ```lumen
 let request = httpRequest("POST", "/api/hello", '{"name":"lumen"}')
-let response = httpResponse(200, '{"content-type":"application/json"}', '{"message":"hello"}')
+if isOk(request) {
+  println(resultValue(request))
+}
 ```
 
-These are payload builders — they create formatted strings, they don't make
-actual HTTP connections. Useful for constructing request/response data
-structures in server code.
+These payload builders return `Result<string>`. They create formatted strings;
+they do not make actual HTTP connections.
 
 ## Socket.IO-Style Chat
 
@@ -142,7 +156,11 @@ communication.
 
 ```lumen
 function main(): i32 {
-  return serveSocketIoChat(8090, "examples/socket-chat-public")
+  let server = serveSocketIoChat(8090, "examples/socket-chat-public")
+  if !isOk(server) {
+    return 1
+  }
+  return resultValue(server)
 }
 ```
 
@@ -156,7 +174,9 @@ function main(): i32 {
 
 ```lumen
 let event = socketIoEvent("chat message", "hello everyone")
-let roomEvent = socketIoEmit("room1", "chat message", "hello room")
+if isOk(event) {
+  println(resultValue(event))
+}
 ```
 
 - `socketIoEvent(event, payload)` builds an event payload string
@@ -191,7 +211,6 @@ Socket.IO-**shaped**, not the full Socket.IO wire protocol. This means:
 - **No partial read/write loops** — large file transfers may be incomplete
 - **No canonical-path checks** — directory traversal via `../` in URL paths is
   not fully guarded
-- **Linux WebSocket** — WebSocket handshake helpers return empty on Linux
 
 ## Packages
 

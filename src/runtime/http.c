@@ -1458,39 +1458,39 @@ static int run_server(LumenHttpServer *server, int port, const char *label) {
   return 0;
 }
 
-char *lumen_socketio_event(const char *event, const char *payload) {
+static char *lumen_socketio_event_value(const char *event, const char *payload) {
   size_t length = strlen(event) + strlen(payload) + 8;
   char *out = malloc(length);
-  if (!out) return "";
+  if (!out) return NULL;
   snprintf(out, length, "[\"%s\",%s]", event, payload);
   return out;
 }
 
-char *lumen_socketio_emit(const char *room, const char *event, const char *payload) {
+static char *lumen_socketio_emit_value(const char *room, const char *event, const char *payload) {
   size_t length = strlen(room) + strlen(event) + strlen(payload) + 40;
   char *out = malloc(length);
-  if (!out) return "";
+  if (!out) return NULL;
   snprintf(out, length, "{\"room\":\"%s\",\"event\":\"%s\",\"payload\":%s}", room, event, payload);
   return out;
 }
 
-char *lumen_http_request(const char *method, const char *path, const char *body) {
+static char *lumen_http_request_value(const char *method, const char *path, const char *body) {
   size_t length = strlen(method) + strlen(path) + strlen(body) + 48;
   char *out = malloc(length);
-  if (!out) return "";
+  if (!out) return NULL;
   snprintf(out, length, "{\"method\":\"%s\",\"path\":\"%s\",\"body\":%s}", method, path, body);
   return out;
 }
 
-char *lumen_http_response(int status, const char *headers, const char *body) {
+static char *lumen_http_response_value(int status, const char *headers, const char *body) {
   size_t length = strlen(headers) + strlen(body) + 48;
   char *out = malloc(length);
-  if (!out) return "";
+  if (!out) return NULL;
   snprintf(out, length, "{\"status\":%d,\"headers\":%s,\"body\":%s}", status, headers, body);
   return out;
 }
 
-int lumen_socketio_serve_chat(int port, const char *root) {
+static int lumen_socketio_serve_chat_value(int port, const char *root) {
   LumenHttpServer server;
   memset(&server, 0, sizeof(server));
   server.mode = LUMEN_SERVER_SOCKETIO;
@@ -1501,7 +1501,7 @@ int lumen_socketio_serve_chat(int port, const char *root) {
   return result;
 }
 
-int lumen_http_serve_files(int port, const char *root) {
+static int lumen_http_serve_files_value(int port, const char *root) {
   LumenHttpServer server;
   memset(&server, 0, sizeof(server));
   server.mode = LUMEN_SERVER_FILES;
@@ -1512,7 +1512,7 @@ int lumen_http_serve_files(int port, const char *root) {
   return result;
 }
 
-int lumen_http_serve_api(int port, const char *method, const char *route, const char *headers, const char *body) {
+static int lumen_http_serve_api_value(int port, const char *method, const char *route, const char *headers, const char *body) {
   LumenHttpServer server;
   memset(&server, 0, sizeof(server));
   server.mode = LUMEN_SERVER_API;
@@ -1524,7 +1524,7 @@ int lumen_http_serve_api(int port, const char *method, const char *route, const 
   return run_server(&server, port, NULL);
 }
 
-int lumen_http_serve_http(
+static int lumen_http_serve_http_value(
   int port,
   const char *root,
   const char **methods,
@@ -1549,4 +1549,74 @@ int lumen_http_serve_http(
   int result = run_server(&server, port, "Lumen HTTP listening on");
   close(server.root_fd);
   return result;
+}
+
+void *lumen_socketio_event(const char *event, const char *payload) {
+  char *value = lumen_socketio_event_value(event, payload);
+  if (!value) return lumen_runtime_error("http", ENOMEM, "cannot build Socket.IO event");
+  return lumen_ok(value);
+}
+
+void *lumen_socketio_emit(const char *room, const char *event, const char *payload) {
+  char *value = lumen_socketio_emit_value(room, event, payload);
+  if (!value) return lumen_runtime_error("http", ENOMEM, "cannot build Socket.IO message");
+  return lumen_ok(value);
+}
+
+void *lumen_http_request(const char *method, const char *path, const char *body) {
+  char *value = lumen_http_request_value(method, path, body);
+  if (!value) return lumen_runtime_error("http", ENOMEM, "cannot build HTTP request");
+  return lumen_ok(value);
+}
+
+void *lumen_http_response(int status, const char *headers, const char *body) {
+  char *value = lumen_http_response_value(status, headers, body);
+  if (!value) return lumen_runtime_error("http", ENOMEM, "cannot build HTTP response");
+  return lumen_ok(value);
+}
+
+void *lumen_socketio_serve_chat(int port, const char *root) {
+  int code = lumen_socketio_serve_chat_value(port, root);
+  if (code != 0) return lumen_runtime_error("http", code, "Socket.IO server failed");
+  return lumen_ok_i32(0);
+}
+
+void *lumen_http_serve_files(int port, const char *root) {
+  int code = lumen_http_serve_files_value(port, root);
+  if (code != 0) return lumen_runtime_error("http", code, "file server failed");
+  return lumen_ok_i32(0);
+}
+
+void *lumen_http_serve_api(
+  int port,
+  const char *method,
+  const char *route,
+  const char *headers,
+  const char *body
+) {
+  int code = lumen_http_serve_api_value(port, method, route, headers, body);
+  if (code != 0) return lumen_runtime_error("http", code, "API server failed");
+  return lumen_ok_i32(0);
+}
+
+void *lumen_http_serve_http(
+  int port,
+  const char *root,
+  const char **methods,
+  const char **routes,
+  const char **headers,
+  const char **bodies,
+  int route_count
+) {
+  int code = lumen_http_serve_http_value(
+    port,
+    root,
+    methods,
+    routes,
+    headers,
+    bodies,
+    route_count
+  );
+  if (code != 0) return lumen_runtime_error("http", code, "HTTP server failed");
+  return lumen_ok_i32(0);
 }

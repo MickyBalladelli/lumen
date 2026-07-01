@@ -83,3 +83,23 @@ test('runtime linker selects only used units and their dependencies', () => {
   )
   assert.deepEqual(runtimeUnitsForLLVM('call i32 @printf(ptr %format)'), [])
 })
+
+test('fallible built-ins return typed results', () => {
+  const expected = {
+    readFile: 'Result<string>',
+    writeFile: 'Result<i32>',
+    env: 'Result<string>',
+    encrypt: 'Result<string>',
+    jsonGet: 'Result<string>',
+    argCount: 'Result<i32>',
+    exec: 'Result<i32>',
+    createSemaphore: 'Result<semaphore>',
+    startThread: 'Result<thread>',
+    serveFiles: 'Result<i32>',
+    httpRequest: 'Result<string>'
+  }
+
+  for (const [name, returnType] of Object.entries(expected)) {
+    assert.equal(builtinSignature(name).returnType, returnType)
+  }
+})

@@ -1,19 +1,45 @@
 function main(): i32 {
-  let payload: json = json('{"user":{"name":"lumen"},"items":["one","two"],"count":3}')
-  let quoted = jsonStringify('hello "lumen"')
+  let payloadResult = json('{"user":{"name":"lumen"},"items":["one","two"],"count":3}')
+  if !isOk(payloadResult) {
+    println(errorMessage(payloadResult))
+    return 1
+  }
+  let payload: json = resultValue(payloadResult)
+  let quoted = jsonQuote('hello "lumen"')
   let quotedAlias = jsonQuote("hi")
-  let micky = jsonQuote("micky")
-  let next = jsonSetPath(payload, "user.name", micky)
+  let mickyResult = jsonQuote("micky")
+  if !isOk(quoted) || !isOk(quotedAlias) || !isOk(mickyResult) {
+    println("JSON quote failed")
+    return 1
+  }
+  let micky = resultValue(mickyResult)
+  let nextResult = jsonSetPath(payload, "user.name", micky)
+  if !isOk(nextResult) {
+    println(errorMessage(nextResult))
+    return 1
+  }
+  let next = resultValue(nextResult)
 
-  println(jsonGet(payload, "user.name"))
-  println(jsonGetRaw(payload, "user"))
-  println(jsonGet(payload, "items[1]"))
-  println(jsonGet(payload, 'count'))
-  println(quoted)
-  println(quotedAlias)
-  println(jsonValid(payload))
-  println(jsonValid("nope"))
-  println(jsonGet(next, "user.name"))
+  let name = jsonGet(payload, "user.name")
+  let user = jsonGetRaw(payload, "user")
+  let item = jsonGet(payload, "items[1]")
+  let count = jsonGet(payload, 'count')
+  let valid = jsonValid(payload)
+  let invalid = jsonValid("nope")
+  let nextName = jsonGet(next, "user.name")
+  if !isOk(name) || !isOk(user) || !isOk(item) || !isOk(count) || !isOk(valid) || !isOk(invalid) || !isOk(nextName) {
+    println("JSON operation failed")
+    return 1
+  }
+  println(resultValue(name))
+  println(resultValue(user))
+  println(resultValue(item))
+  println(resultValue(count))
+  println(resultValue(quoted))
+  println(resultValue(quotedAlias))
+  println(resultValue(valid))
+  println(resultValue(invalid))
+  println(resultValue(nextName))
 
   return 0
 }

@@ -1,16 +1,16 @@
-function getRequest(path: string): string {
+function getRequest(path: string): Result<string> {
   return httpRequest("GET", path, "")
 }
 
-function postJsonRequest(path: string, body: string): string {
+function postJsonRequest(path: string, body: string): Result<string> {
   return httpRequest("POST", path, body)
 }
 
-function putJsonRequest(path: string, body: string): string {
+function putJsonRequest(path: string, body: string): Result<string> {
   return httpRequest("PUT", path, body)
 }
 
-function deleteRequest(path: string): string {
+function deleteRequest(path: string): Result<string> {
   return httpRequest("DELETE", path, "")
 }
 

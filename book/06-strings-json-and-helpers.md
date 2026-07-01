@@ -281,10 +281,9 @@ Lumen provides symmetric encryption with AES-256:
 
 ```lumen
 let secret = encrypt("hello lumen", "correct horse battery staple")
-println(includes(secret, "lumen:v1:"))    // "true"
-
-let original = decrypt(secret, "correct horse battery staple")
-println(original)                          // "hello lumen"
+if isOk(secret) {
+  println(includes(resultValue(secret), "lumen:v1:"))
+}
 ```
 
 ### How It Works
@@ -299,15 +298,14 @@ println(original)                          // "hello lumen"
 ### API
 
 ```
-encrypt(value, key)          → encrypted string
-encrypt(value, key, proto)   → encrypted string with protocol
-decrypt(value, key)          → decrypted string
-decrypt(value, key, proto)   → decrypted string with protocol
+encrypt(value, key)          → Result<string>
+encrypt(value, key, proto)   → Result<string>
+decrypt(value, key)          → Result<string>
+decrypt(value, key, proto)   → Result<string>
 ```
 
 ### Limitations
 
-- Encryption is only available on macOS (returns empty/zero on Linux)
 - Only the default protocol is implemented
 - Key management (generation, storage, rotation) is left to the application
 
@@ -359,7 +357,6 @@ or seed file.
 - **JSON arrays** — no direct array indexing for JSON values.
 - **String split result** — `split` returns a pipe-delimited string, not an
   array.
-- **Linux crypto** — `encrypt` and `decrypt` return empty on Linux.
 - **Linux date** — `date()` may return a different format or empty on Linux.
 - **Filter allocation** — `filter` creates a view, not a new array. You can't
   store the result for later use.

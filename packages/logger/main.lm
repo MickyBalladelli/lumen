@@ -18,7 +18,7 @@ function errorLine(message: string): string {
   return now + " ERROR " + message
 }
 
-function appendLog(path: string, level: string, message: string): i32 {
+function appendLog(path: string, level: string, message: string): Result<i32> {
   let line = logLine(level, message)
   return appendFile(path, line)
 }

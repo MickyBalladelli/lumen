@@ -1,6 +1,16 @@
 function main(): i32 {
-  let request = httpRequest("POST", "/api/hello", '{"name":"lumen"}')
-  let response = httpResponse(200, '{"content-type":"application/json"}', '{"message":"hello"}')
+  let requestResult = httpRequest("POST", "/api/hello", '{"name":"lumen"}')
+  let responseResult = httpResponse(200, '{"content-type":"application/json"}', '{"message":"hello"}')
+  if !isOk(requestResult) {
+    println(errorMessage(requestResult))
+    return 1
+  }
+  if !isOk(responseResult) {
+    println(errorMessage(responseResult))
+    return 1
+  }
+  let request = resultValue(requestResult)
+  let response = resultValue(responseResult)
 
   println(includes(request, "/api/hello"))
   println(includes(response, "hello"))

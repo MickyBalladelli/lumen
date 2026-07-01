@@ -1,7 +1,10 @@
 #include <assert.h>
 
 #include "../../src/runtime/system.c"
+#include "../../src/runtime/fs.c"
+#include "../../src/runtime/collections.c"
 #include "../../src/runtime/crypto.c"
+#include "../../src/runtime/thread.c"
 #include "../../src/runtime/http.c"
 
 typedef struct {
@@ -145,21 +148,79 @@ static void test_platform_providers(int argc, char **argv) {
 #ifdef LUMEN_FORCE_LINUX_ARGS
   (void)argc;
   (void)argv;
-  assert(lumen_arg_count() == 2);
-  assert(strcmp(lumen_arg(0), "portable-runtime") == 0);
-  assert(strcmp(lumen_arg(1), "provider-check") == 0);
+  void *count = lumen_arg_count();
+  assert(lumen_is_ok(count));
+  assert(atoi(lumen_result_value(count)) == 3);
+  void *zero = lumen_arg(0);
+  void *one = lumen_arg(1);
+  void *two = lumen_arg(2);
+  assert(lumen_is_ok(zero));
+  assert(lumen_is_ok(one));
+  assert(lumen_is_ok(two));
+  assert(strcmp(lumen_result_value(zero), "portable-runtime") == 0);
+  assert(strcmp(lumen_result_value(one), "provider-check") == 0);
+  assert(strcmp(lumen_result_value(two), "") == 0);
 #else
-  assert(lumen_arg_count() == argc);
-  assert(strcmp(lumen_arg(0), argv[0]) == 0);
-  if (argc > 1) assert(strcmp(lumen_arg(1), argv[1]) == 0);
+  void *count = lumen_arg_count();
+  assert(lumen_is_ok(count));
+  assert(atoi(lumen_result_value(count)) == argc);
+  void *zero = lumen_arg(0);
+  assert(lumen_is_ok(zero));
+  assert(strcmp(lumen_result_value(zero), argv[0]) == 0);
+  if (argc > 1) {
+    void *one = lumen_arg(1);
+    assert(lumen_is_ok(one));
+    assert(strcmp(lumen_result_value(one), argv[1]) == 0);
+  }
 #endif
 
-  char *encrypted = lumen_encrypt("portable lumen", "secret", "AES-256");
+  void *encrypted_result = lumen_encrypt("portable lumen", "secret", "AES-256");
+  assert(lumen_is_ok(encrypted_result));
+  char *encrypted = lumen_result_value(encrypted_result);
   const char *prefix = "lumen:v1:AES-256-CTR-HMAC-SHA256:";
   assert(strncmp(encrypted, prefix, strlen(prefix)) == 0);
-  char *decrypted = lumen_decrypt(encrypted, "secret", "AES-256");
+  void *decrypted_result = lumen_decrypt(encrypted, "secret", "AES-256");
+  assert(lumen_is_ok(decrypted_result));
+  char *decrypted = lumen_result_value(decrypted_result);
   assert(strcmp(decrypted, "portable lumen") == 0);
-  assert(strcmp(lumen_decrypt(encrypted, "wrong", "AES-256"), "") == 0);
+  assert(!lumen_is_ok(lumen_decrypt(encrypted, "wrong", "AES-256")));
+}
+
+static void test_typed_errors(void) {
+  assert(setenv("LUMEN_EMPTY_ENV", "", 1) == 0);
+  void *empty_env = lumen_env("LUMEN_EMPTY_ENV");
+  assert(lumen_is_ok(empty_env));
+  assert(strcmp(lumen_result_value(empty_env), "") == 0);
+  assert(!lumen_is_ok(lumen_env("LUMEN_DEFINITELY_MISSING_ENV")));
+
+  void *empty_file_write = lumen_write_file("/tmp/lumen-empty-runtime-test", "");
+  assert(lumen_is_ok(empty_file_write));
+  void *empty_file_read = lumen_read_file("/tmp/lumen-empty-runtime-test");
+  assert(lumen_is_ok(empty_file_read));
+  assert(strcmp(lumen_result_value(empty_file_read), "") == 0);
+  assert(!lumen_is_ok(lumen_read_file("/tmp/lumen-missing-runtime-test")));
+
+  void *empty_crypto = lumen_encrypt("", "secret", "AES-256");
+  assert(lumen_is_ok(empty_crypto));
+  void *empty_plain = lumen_decrypt(lumen_result_value(empty_crypto), "secret", "AES-256");
+  assert(lumen_is_ok(empty_plain));
+  assert(strcmp(lumen_result_value(empty_plain), "") == 0);
+
+  void *document = lumen_json("{\"empty\":\"\"}");
+  assert(lumen_is_ok(document));
+  void *empty_field = lumen_json_get(lumen_result_value(document), "empty");
+  assert(lumen_is_ok(empty_field));
+  assert(strcmp(lumen_result_value(empty_field), "") == 0);
+  assert(!lumen_is_ok(lumen_json_get(lumen_result_value(document), "missing")));
+  assert(!lumen_is_ok(lumen_json("not json")));
+
+  assert(!lumen_is_ok(lumen_arg(-1)));
+  void *exit_status = lumen_exec("exit 1");
+  assert(lumen_is_ok(exit_status));
+  assert(atoi(lumen_result_value(exit_status)) == 1);
+  assert(!lumen_is_ok(lumen_semaphore_create(-1)));
+  assert(!lumen_is_ok(lumen_thread_join(NULL)));
+  assert(!lumen_is_ok(lumen_http_serve_files(0, "/tmp/lumen-missing-http-root")));
 }
 
 #ifndef LUMEN_USE_COMMON_CRYPTO
@@ -211,6 +272,7 @@ int main(int argc, char **argv) {
   test_websocket_parser();
   test_paths_and_json();
   test_platform_providers(argc, argv);
+  test_typed_errors();
 #ifndef LUMEN_USE_COMMON_CRYPTO
   test_portable_crypto_vectors();
 #endif

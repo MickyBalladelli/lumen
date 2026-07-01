@@ -1,10 +1,27 @@
 function main(): i32 {
-  let payload: json = json('{"name":"lumen","count":3}')
-  let next = jsonSet(payload, "ready", "true")
+  let payloadResult = json('{"name":"lumen","count":3}')
+  if !isOk(payloadResult) {
+    println(errorMessage(payloadResult))
+    return 1
+  }
+  let payload: json = resultValue(payloadResult)
+  let nextResult = jsonSet(payload, "ready", "true")
+  if !isOk(nextResult) {
+    println(errorMessage(nextResult))
+    return 1
+  }
+  let next = resultValue(nextResult)
 
-  println(jsonGet(next, "name"))
-  println(jsonGet(next, "count"))
-  println(jsonGet(next, "ready"))
+  let name = jsonGet(next, "name")
+  let count = jsonGet(next, "count")
+  let ready = jsonGet(next, "ready")
+  if !isOk(name) || !isOk(count) || !isOk(ready) {
+    println("JSON field missing")
+    return 1
+  }
+  println(resultValue(name))
+  println(resultValue(count))
+  println(resultValue(ready))
 
   return 0
 }

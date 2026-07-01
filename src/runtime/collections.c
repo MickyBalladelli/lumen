@@ -60,15 +60,13 @@ int lumen_list_len(const char *list) {
 }
 
 
-char *lumen_json(const char *value) {
-  return lumen_strdup(value);
-}
+static _Bool json_is_valid(const char *value);
 
 static char *json_string_value(const char *start) {
   const char *cursor = start;
   if (*cursor == '"') cursor += 1;
   char *out = malloc(strlen(cursor) + 1);
-  if (!out) return "";
+  if (!out) return NULL;
 
   size_t length = 0;
   while (*cursor && *cursor != '"') {
@@ -124,7 +122,7 @@ static char *json_copy_value(const char *start) {
   const char *end = json_value_end(start);
   size_t length = (size_t)(end - start);
   char *out = malloc(length + 1);
-  if (!out) return "";
+  if (!out) return NULL;
   memcpy(out, start, length);
   out[length] = '\0';
   return out;
@@ -135,7 +133,7 @@ static char *json_copy_raw_value(const char *start) {
   const char *end = json_value_end(start);
   size_t length = (size_t)(end - start);
   char *out = malloc(length + 1);
-  if (!out) return "";
+  if (!out) return NULL;
   memcpy(out, start, length);
   out[length] = '\0';
   return out;
@@ -145,15 +143,15 @@ static char *json_get_one(const char *json, const char *key) {
   size_t key_length = strlen(key);
   size_t pattern_length = key_length + 4;
   char *pattern = malloc(pattern_length);
-  if (!pattern) return "";
+  if (!pattern) return NULL;
 
   snprintf(pattern, pattern_length, "\"%s\"", key);
   char *found = strstr(json, pattern);
   free(pattern);
-  if (!found) return "";
+  if (!found) return NULL;
 
   char *colon = strchr(found, ':');
-  if (!colon) return "";
+  if (!colon) return NULL;
   colon += 1;
   return json_copy_value(colon);
 }
@@ -162,28 +160,28 @@ static char *json_get_one_raw(const char *json, const char *key) {
   size_t key_length = strlen(key);
   size_t pattern_length = key_length + 4;
   char *pattern = malloc(pattern_length);
-  if (!pattern) return "";
+  if (!pattern) return NULL;
 
   snprintf(pattern, pattern_length, "\"%s\"", key);
   char *found = strstr(json, pattern);
   free(pattern);
-  if (!found) return "";
+  if (!found) return NULL;
 
   char *colon = strchr(found, ':');
-  if (!colon) return "";
+  if (!colon) return NULL;
   colon += 1;
   return json_copy_raw_value(colon);
 }
 
 static char *json_array_get(const char *json, int index) {
   const char *cursor = json_skip_ws(json);
-  if (*cursor != '[') return "";
+  if (*cursor != '[') return NULL;
   cursor += 1;
 
   int current = 0;
   while (*cursor) {
     cursor = json_skip_ws(cursor);
-    if (*cursor == ']') return "";
+    if (*cursor == ']') return NULL;
 
     if (current == index) return json_copy_value(cursor);
 
@@ -193,18 +191,18 @@ static char *json_array_get(const char *json, int index) {
     current += 1;
   }
 
-  return "";
+  return NULL;
 }
 
 static char *json_array_get_raw(const char *json, int index) {
   const char *cursor = json_skip_ws(json);
-  if (*cursor != '[') return "";
+  if (*cursor != '[') return NULL;
   cursor += 1;
 
   int current = 0;
   while (*cursor) {
     cursor = json_skip_ws(cursor);
-    if (*cursor == ']') return "";
+    if (*cursor == ']') return NULL;
 
     if (current == index) return json_copy_raw_value(cursor);
 
@@ -214,7 +212,7 @@ static char *json_array_get_raw(const char *json, int index) {
     current += 1;
   }
 
-  return "";
+  return NULL;
 }
 
 static char *json_path_get(const char *json, const char *key, int raw) {
@@ -230,7 +228,10 @@ static char *json_path_get(const char *json, const char *key, int raw) {
     }
     segment[length] = '\0';
 
-    if (length > 0) current = raw ? json_get_one_raw(current, segment) : json_get_one(current, segment);
+    if (length > 0) {
+      current = raw ? json_get_one_raw(current, segment) : json_get_one(current, segment);
+      if (!current) return NULL;
+    }
 
     while (*cursor == '[') {
       cursor += 1;
@@ -238,6 +239,7 @@ static char *json_path_get(const char *json, const char *key, int raw) {
       while (*cursor && *cursor != ']') cursor += 1;
       if (*cursor == ']') cursor += 1;
       current = raw ? json_array_get_raw(current, index) : json_array_get(current, index);
+      if (!current) return NULL;
     }
 
     if (*cursor == '.') cursor += 1;
@@ -246,15 +248,7 @@ static char *json_path_get(const char *json, const char *key, int raw) {
   return current;
 }
 
-char *lumen_json_get(const char *json, const char *key) {
-  return json_path_get(json, key, 0);
-}
-
-char *lumen_json_get_raw(const char *json, const char *key) {
-  return json_path_get(json, key, 1);
-}
-
-char *lumen_json_set(const char *json, const char *key, const char *value) {
+static char *json_set_value(const char *json, const char *key, const char *value) {
   size_t json_length = strlen(json);
   int object = json_length >= 2 && json[0] == '{' && json[json_length - 1] == '}';
 
@@ -262,7 +256,7 @@ char *lumen_json_set(const char *json, const char *key, const char *value) {
     size_t key_length = strlen(key);
     size_t pattern_length = key_length + 4;
     char *pattern = malloc(pattern_length);
-    if (!pattern) return "";
+    if (!pattern) return NULL;
 
     snprintf(pattern, pattern_length, "\"%s\"", key);
     char *found = strstr(json, pattern);
@@ -277,7 +271,7 @@ char *lumen_json_set(const char *json, const char *key, const char *value) {
         size_t value_length = strlen(value);
         size_t suffix_length = strlen(value_finish);
         char *out = malloc(prefix_length + value_length + suffix_length + 1);
-        if (!out) return "";
+        if (!out) return NULL;
 
         memcpy(out, json, prefix_length);
         memcpy(out + prefix_length, value, value_length);
@@ -289,7 +283,7 @@ char *lumen_json_set(const char *json, const char *key, const char *value) {
 
   size_t length = json_length + strlen(key) + strlen(value) + 8;
   char *out = malloc(length);
-  if (!out) return "";
+  if (!out) return NULL;
 
   if (!object || json_length == 2) {
     snprintf(out, length, "{\"%s\":%s}", key, value);
@@ -300,33 +294,34 @@ char *lumen_json_set(const char *json, const char *key, const char *value) {
   return out;
 }
 
-char *lumen_json_set_path(const char *json, const char *key, const char *value) {
+static char *json_set_path_value(const char *json, const char *key, const char *value) {
   const char *dot = strchr(key, '.');
-  if (!dot) return lumen_json_set(json, key, value);
+  if (!dot) return json_set_value(json, key, value);
 
   size_t root_length = (size_t)(dot - key);
   char *root = malloc(root_length + 1);
-  if (!root) return "";
+  if (!root) return NULL;
   memcpy(root, key, root_length);
   root[root_length] = '\0';
 
   const char *child = dot + 1;
-  char *current = lumen_json_get_raw(json, root);
-  if (strlen(current) == 0) current = lumen_strdup("{}");
+  char *current = json_path_get(json, root, 1);
+  if (!current) current = lumen_strdup("{}");
 
-  char *next = lumen_json_set_path(current, child, value);
-  char *out = lumen_json_set(json, root, next);
+  char *next = json_set_path_value(current, child, value);
+  if (!next) return NULL;
+  char *out = json_set_value(json, root, next);
   return out;
 }
 
-char *lumen_json_stringify(const char *value) {
+static char *json_stringify_value(const char *value) {
   size_t length = 3;
   for (const char *cursor = value; *cursor; cursor += 1) {
     length += (*cursor == '"' || *cursor == '\\' || *cursor == '\n') ? 2 : 1;
   }
 
   char *out = malloc(length);
-  if (!out) return "";
+  if (!out) return NULL;
 
   char *target = out;
   *target++ = '"';
@@ -350,7 +345,7 @@ char *lumen_json_stringify(const char *value) {
   return out;
 }
 
-_Bool lumen_json_valid(const char *value) {
+static _Bool json_is_valid(const char *value) {
   const char *cursor = json_skip_ws(value);
   char open = *cursor;
   if (open != '{' && open != '[' && open != '"') return 0;
@@ -386,6 +381,51 @@ _Bool lumen_json_valid(const char *value) {
   }
 
   return depth == 0 && !in_string;
+}
+
+void *lumen_json(const char *value) {
+  if (!json_is_valid(value)) return lumen_runtime_error("json", EINVAL, "invalid JSON");
+  char *copy = lumen_strdup(value);
+  if (!copy) return lumen_runtime_error("json", ENOMEM, "cannot allocate JSON");
+  return lumen_ok(copy);
+}
+
+void *lumen_json_get(const char *json, const char *key) {
+  if (!json_is_valid(json)) return lumen_runtime_error("json", EINVAL, "invalid JSON");
+  char *value = json_path_get(json, key, 0);
+  if (!value) return lumen_runtime_error("json", ENOENT, "JSON path not found");
+  return lumen_ok(value);
+}
+
+void *lumen_json_get_raw(const char *json, const char *key) {
+  if (!json_is_valid(json)) return lumen_runtime_error("json", EINVAL, "invalid JSON");
+  char *value = json_path_get(json, key, 1);
+  if (!value) return lumen_runtime_error("json", ENOENT, "JSON path not found");
+  return lumen_ok(value);
+}
+
+void *lumen_json_set(const char *json, const char *key, const char *value) {
+  if (!json_is_valid(json)) return lumen_runtime_error("json", EINVAL, "invalid JSON");
+  char *next = json_set_value(json, key, value);
+  if (!next) return lumen_runtime_error("json", ENOMEM, "cannot update JSON");
+  return lumen_ok(next);
+}
+
+void *lumen_json_set_path(const char *json, const char *key, const char *value) {
+  if (!json_is_valid(json)) return lumen_runtime_error("json", EINVAL, "invalid JSON");
+  char *next = json_set_path_value(json, key, value);
+  if (!next) return lumen_runtime_error("json", ENOMEM, "cannot update JSON path");
+  return lumen_ok(next);
+}
+
+void *lumen_json_stringify(const char *value) {
+  char *text = json_stringify_value(value);
+  if (!text) return lumen_runtime_error("json", ENOMEM, "cannot stringify JSON");
+  return lumen_ok(text);
+}
+
+void *lumen_json_valid(const char *value) {
+  return lumen_ok_i32(json_is_valid(value));
 }
 
 char *lumen_array_join(int count, const char **values, const char *separator) {

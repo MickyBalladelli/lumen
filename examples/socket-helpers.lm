@@ -1,6 +1,16 @@
 function main(): i32 {
-  let event = socketIoEvent("message", '{"text":"chat ready"}')
-  let emitted = socketIoEmit("main", "message", event)
+  let eventResult = socketIoEvent("message", '{"text":"chat ready"}')
+  if !isOk(eventResult) {
+    println(errorMessage(eventResult))
+    return 1
+  }
+  let event = resultValue(eventResult)
+  let emittedResult = socketIoEmit("main", "message", event)
+  if !isOk(emittedResult) {
+    println(errorMessage(emittedResult))
+    return 1
+  }
+  let emitted = resultValue(emittedResult)
 
   println(includes(emitted, "chat ready"))
 

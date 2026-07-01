@@ -1,41 +1,33 @@
 function envOr(name: string, fallback: string): string {
   let value = env(name)
 
-  if stringEquals(value, "") {
+  if !isOk(value) {
     return fallback
   }
 
-  return value
+  return resultValue(value)
 }
 
 function requireEnv(name: string): Result<string> {
   let value = env(name)
 
-  if stringEquals(value, "") {
-    return err("missing env " + name)
-  }
-
-  return ok(value)
+  return value
 }
 
 function configFromEnv(name: string, fallback: string): string {
   let value = env(name)
 
-  if stringEquals(value, "") {
+  if !isOk(value) {
     return fallback
   }
 
-  return value
+  return resultValue(value)
 }
 
 function configRequired(name: string): Result<string> {
   let value = env(name)
 
-  if stringEquals(value, "") {
-    return err("missing config " + name)
-  }
-
-  return ok(value)
+  return value
 }
 
 function configPair(name: string, value: string): string {

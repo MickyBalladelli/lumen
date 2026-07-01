@@ -167,11 +167,8 @@ Function names and signatures are currently duplicated across five places:
 
 ### Linux Support
 
-Linux process arguments, encryption/decryption, and WebSocket handshakes now
-have portable providers. Runtime tests force these paths on macOS too.
-
-Either implement portable providers or return explicit typed errors rather than
-empty sentinels.
+Completed. Linux process arguments, encryption/decryption, and WebSocket
+handshakes have portable providers. Runtime tests force these paths on macOS.
 
 ### Split The Runtime C Code
 
@@ -181,15 +178,9 @@ units linked into each generated program.
 
 ### Replace Error Sentinels With Typed Errors
 
-Many built-in functions use sentinel values for errors:
-- `readFile` returns empty string for missing files
-- `env` returns empty string for missing variables
-- `arg` returns empty string for out-of-bounds indices
-- Crypto functions return empty strings on failure
-- `exec` returns integer exit codes
-
-Replace these with typed `error` values so a valid empty value cannot be
-mistaken for an error condition.
+Completed. File, environment, crypto, JSON, process, thread, and HTTP
+operations return `Result<T>`. Valid empty strings and zero values remain
+successful values.
 
 ### Remove Shell Command Execution From Compiler Internals
 

@@ -101,14 +101,25 @@ function moduleNextLine(source: string, index: i32): i32 {
   return index
 }
 
-function moduleLoadFile(path: string, seen: string): string {
+function moduleLoadFile(path: string, seen: string): Result<string> {
+  if stringEquals(path, "packages/system/main.lm") ||
+    stringEquals(path, "packages/fs/main.lm") ||
+    stringEquals(path, "packages/http/main.lm") ||
+    stringEquals(path, "packages/thread/main.lm") {
+    return ok("")
+  }
+
   if mapHas(seen, path) {
-    return ""
+    return ok("")
   }
 
   seen = mapSet(seen, path, "1")
 
-  let source = readFile(path)
+  let sourceResult = readFile(path)
+  if !isOk(sourceResult) {
+    return err(errorMessage(sourceResult))
+  }
+  let source = resultValue(sourceResult)
   let base = moduleDirname(path)
   let prefix = stringBuilder()
   let body = stringBuilder()
@@ -123,7 +134,11 @@ function moduleLoadFile(path: string, seen: string): string {
       if includes(line, "from") {
         let specifier = moduleImportSpecifier(source, index)
         let child = moduleResolve(base, specifier)
-        let loaded = moduleLoadFile(child, seen)
+        let loadedResult = moduleLoadFile(child, seen)
+        if !isOk(loadedResult) {
+          return err(errorMessage(loadedResult))
+        }
+        let loaded = resultValue(loadedResult)
         prefix = stringBuilderAppend(prefix, loaded)
         prefix = stringBuilderAppend(prefix, "
 ")
@@ -138,10 +153,10 @@ function moduleLoadFile(path: string, seen: string): string {
   }
 
   prefix = stringBuilderAppend(prefix, body)
-  return prefix
+  return ok(prefix)
 }
 
-function loadModuleSource(path: string): string {
+function loadModuleSource(path: string): Result<string> {
   let seen = map("unused", "unused")
   return moduleLoadFile(path, seen)
 }

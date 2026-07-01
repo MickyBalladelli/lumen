@@ -35,7 +35,7 @@ try {
     portableExecutable
   ])
   await run(portableExecutable, ['provider-check'])
-  await writeFile(linuxArguments, Buffer.from('portable-runtime\\0provider-check\\0'.replaceAll('\\0', '\0')))
+  await writeFile(linuxArguments, Buffer.from('portable-runtime\\0provider-check\\0\\0'.replaceAll('\\0', '\0')))
   await run(compiler, [
     '-std=c11',
     '-Wall',

@@ -2,17 +2,17 @@ function jsonHeaders(): string {
   return '{"content-type":"application/json"}'
 }
 
-function jsonOk(body: string): string {
+function jsonOk(body: string): Result<string> {
   let headers = jsonHeaders()
   return httpResponse(200, headers, body)
 }
 
-function jsonError(status: i32, message: string): string {
+function jsonError(status: i32, message: string): Result<string> {
   let body = '{"error":"' + message + '"}'
   let headers = jsonHeaders()
   return httpResponse(status, headers, body)
 }
 
-function textResponse(status: i32, body: string): string {
+function textResponse(status: i32, body: string): Result<string> {
   return httpResponse(status, '{"content-type":"text/plain"}', body)
 }

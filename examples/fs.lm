@@ -1,5 +1,10 @@
 function main(): i32 {
-  let content = readFile("examples/data.txt")
+  let contentResult = readFile("examples/data.txt")
+  if !isOk(contentResult) {
+    println(errorMessage(contentResult))
+    return 1
+  }
+  let content = resultValue(contentResult)
 
   println(content)
   println(includes(content, "file"))

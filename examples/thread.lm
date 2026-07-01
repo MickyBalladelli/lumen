@@ -5,17 +5,31 @@ function writeLine(path: string, message: string, semaphore: semaphore): void {
 }
 
 function main(): i32 {
-  let semaphore = createSemaphore(1)
+  let semaphoreResult = createSemaphore(1)
+  if !isOk(semaphoreResult) {
+    println(errorMessage(semaphoreResult))
+    return 1
+  }
+  let semaphore = resultValue(semaphoreResult)
 
-  let one = startThread(writeLine, "build/thread-output.txt", "thread one", semaphore)
-  let two = startThread(writeLine, "build/thread-output.txt", "thread two", semaphore)
-  let three = startThread(writeLine, "build/thread-output.txt", "thread three", semaphore)
+  let oneResult = startThread(writeLine, "build/thread-output.txt", "thread one", semaphore)
+  let twoResult = startThread(writeLine, "build/thread-output.txt", "thread two", semaphore)
+  let threeResult = startThread(writeLine, "build/thread-output.txt", "thread three", semaphore)
+  if !isOk(oneResult) || !isOk(twoResult) || !isOk(threeResult) {
+    println("thread start failed")
+    return 1
+  }
 
-  joinThread(one)
-  joinThread(two)
-  joinThread(three)
+  joinThread(resultValue(oneResult))
+  joinThread(resultValue(twoResult))
+  joinThread(resultValue(threeResult))
 
-  let content = readFile("build/thread-output.txt")
+  let contentResult = readFile("build/thread-output.txt")
+  if !isOk(contentResult) {
+    println(errorMessage(contentResult))
+    return 1
+  }
+  let content = resultValue(contentResult)
 
   println(includes(content, "thread one"))
   println(includes(content, "thread two"))

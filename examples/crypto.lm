@@ -1,10 +1,30 @@
 function main(): i32 {
   let secret = "hello lumen"
   let key = "correct horse battery staple"
-  let encrypted = encrypt(secret, key)
-  let decrypted = decrypt(encrypted, key)
-  let encryptedCustom = encrypt(secret, key, "AES-256-CTR-HMAC-SHA256")
-  let decryptedCustom = decrypt(encryptedCustom, key, "AES-256-CTR-HMAC-SHA256")
+  let encryptedResult = encrypt(secret, key)
+  if !isOk(encryptedResult) {
+    println(errorMessage(encryptedResult))
+    return 1
+  }
+  let encrypted = resultValue(encryptedResult)
+  let decryptedResult = decrypt(encrypted, key)
+  if !isOk(decryptedResult) {
+    println(errorMessage(decryptedResult))
+    return 1
+  }
+  let decrypted = resultValue(decryptedResult)
+  let encryptedCustomResult = encrypt(secret, key, "AES-256-CTR-HMAC-SHA256")
+  if !isOk(encryptedCustomResult) {
+    println(errorMessage(encryptedCustomResult))
+    return 1
+  }
+  let encryptedCustom = resultValue(encryptedCustomResult)
+  let decryptedCustomResult = decrypt(encryptedCustom, key, "AES-256-CTR-HMAC-SHA256")
+  if !isOk(decryptedCustomResult) {
+    println(errorMessage(decryptedCustomResult))
+    return 1
+  }
+  let decryptedCustom = resultValue(decryptedCustomResult)
 
   println(includes(encrypted, "lumen:v1"))
   println(decrypted)

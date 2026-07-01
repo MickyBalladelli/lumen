@@ -1,5 +1,10 @@
 function main(): i32 {
-  let code = exec("true")
+  let codeResult = exec("true")
+  if !isOk(codeResult) {
+    println(errorMessage(codeResult))
+    return 1
+  }
+  let code = resultValue(codeResult)
 
   println(code)
 

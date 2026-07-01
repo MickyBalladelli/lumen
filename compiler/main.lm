@@ -83,7 +83,12 @@ function diagnosticMessage(source: string, tokens: string, message: string, toke
 }
 
 function compileTiny(input: string, output: string): i32 {
-  let source = loadModuleSource(input)
+  let sourceResult = loadModuleSource(input)
+  if !isOk(sourceResult) {
+    println(errorMessage(sourceResult))
+    return 1
+  }
+  let source = resultValue(sourceResult)
   let tokens = tokenize(source)
   let ast = parseAst(tokens)
   let semanticResult = analyzeSemantics(ast, tokens)
@@ -112,16 +117,37 @@ function compileTiny(input: string, output: string): i32 {
   program = irToProgram(ir, program)
   let llvm = emitIr(ir, program)
 
-  return writeFile(output, llvm)
+  let writeResult = writeFile(output, llvm)
+  if !isOk(writeResult) {
+    println(errorMessage(writeResult))
+    return 1
+  }
+  return resultValue(writeResult)
 }
 
 function main(): i32 {
-  let args = argCount()
+  let argsResult = argCount()
+  if !isOk(argsResult) {
+    println(errorMessage(argsResult))
+    return 1
+  }
+  let args = resultValue(argsResult)
 
   if args < 3 {
     println("usage: lumen-compiler input.lm output.ll")
     return 1
   }
 
-  return compileTiny(arg(1), arg(2))
+  let inputResult = arg(1)
+  let outputResult = arg(2)
+  if !isOk(inputResult) {
+    println(errorMessage(inputResult))
+    return 1
+  }
+  if !isOk(outputResult) {
+    println(errorMessage(outputResult))
+    return 1
+  }
+
+  return compileTiny(resultValue(inputResult), resultValue(outputResult))
 }

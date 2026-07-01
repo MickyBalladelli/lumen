@@ -16,13 +16,22 @@ function main(): i32 {
   let requiredName = mapRequire(data, "name")
   let items = list()
   let nextItems = listAppend(items, "first")
-  let okResponse = jsonOk('{"ok":true}')
-  let errorResponse = jsonError(400, "bad")
-  let text = textResponse(200, "hello")
+  let okResponseResult = jsonOk('{"ok":true}')
+  let errorResponseResult = jsonError(400, "bad")
+  let textResult = textResponse(200, "hello")
+  if !isOk(okResponseResult) || !isOk(errorResponseResult) || !isOk(textResult) {
+    return 1
+  }
+  let okResponse = resultValue(okResponseResult)
+  let errorResponse = resultValue(errorResponseResult)
+  let text = resultValue(textResult)
   let now = nowText()
   let note = timeNote("ready")
 
-  writeJsonText("build/photon-more.json", '{"ok":true}')
+  let writeResult = writeJsonText("build/photon-more.json", '{"ok":true}')
+  if !isOk(writeResult) {
+    return 1
+  }
 
   println(errorOr(mapped, "none"))
   println(valueOrEmpty(present))

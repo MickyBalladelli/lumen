@@ -1,26 +1,26 @@
 function jsonValueOr(data: json, key: string, fallback: string): string {
   let value = jsonGet(data, key)
 
-  if stringEquals(value, "") {
+  if !isOk(value) {
     return fallback
   }
 
-  return value
+  return resultValue(value)
 }
 
 function jsonHas(data: json, key: string): bool {
-  if stringEquals(jsonGet(data, key), "") {
+  if !isOk(jsonGet(data, key)) {
     return false
   }
 
   return true
 }
 
-function jsonStringSet(data: json, key: string, value: string): json {
+function jsonStringSet(data: json, key: string, value: string): Result<json> {
   return jsonSet(data, key, '"' + value + '"')
 }
 
-function jsonBoolSet(data: json, key: string, value: bool): json {
+function jsonBoolSet(data: json, key: string, value: bool): Result<json> {
   if value {
     return jsonSet(data, key, "true")
   }

@@ -12,13 +12,13 @@ the `thread` module (`appendFile`).
 
 ```lumen
 let text = readFile("examples/data.txt")
-println(text)
+if isOk(text) {
+  println(resultValue(text))
+}
 ```
 
-`readFile(path)` reads the entire file and returns its contents as a string.
-If the file does not exist, it returns an **empty string** — it does not throw
-or return an error type. This is a known limitation: there is no way to
-distinguish between an empty file and a missing file.
+`readFile(path)` returns `Result<string>`. Empty files produce `ok("")`;
+missing or unreadable files produce an error.
 
 The path is relative to the current working directory (where you run the
 program). Absolute paths work too.
@@ -29,9 +29,8 @@ program). Absolute paths work too.
 writeFile("build/report.txt", "done")
 ```
 
-`writeFile(path, content)` creates or overwrites a file with the given text
-content. It returns `0` on success. Directories in the path are created
-automatically if needed (e.g., `build/` in the example above).
+`writeFile(path, content)` creates or overwrites a file and returns
+`Result<i32>`.
 
 ### Appending To Files
 
@@ -39,14 +38,10 @@ automatically if needed (e.g., `build/` in the example above).
 appendFile("build/log.txt", "line one\n")
 ```
 
-`appendFile(path, content)` appends text to a file. If the file doesn't exist,
-it is created. This function is in the `thread` module because it is designed
-to be used with semaphore-guarded thread workers.
+`appendFile(path, content)` appends text and returns `Result<i32>`.
 
 ### File Limitations
 
-- **No error typing** — `readFile` returns an empty string for missing files,
-  making it impossible to distinguish "file not found" from "file is empty".
 - **No binary I/O** — all file operations work with strings. There is no byte
   buffer type.
 - **No directory listing** — there is no helper to list files in a directory.
@@ -59,12 +54,13 @@ to be used with semaphore-guarded thread workers.
 
 ```lumen
 let url = env("DATABASE_URL")
-println(url)
+if isOk(url) {
+  println(resultValue(url))
+}
 ```
 
-`env(name)` reads an environment variable. If the variable is set in the
-process environment, its value is returned. If not, Lumen checks for a `.env`
-file in the current directory.
+`env(name)` returns `Result<string>`. If the variable is not in the process
+environment, Lumen checks for a `.env` file.
 
 ### .env File Support
 
@@ -95,25 +91,30 @@ shell value, not the `.env` value.
 ## Command-Line Arguments
 
 ```lumen
-println(arg(0))        // program name (e.g., "./build/app")
-println(arg(1))        // first user argument
-println(argCount())    // total number of arguments
+let first = arg(1)
+if isOk(first) {
+  println(resultValue(first))
+}
 ```
 
-`arg(index)` returns the argument at the given position as a string. `arg(0)`
-is the program name (the path used to invoke the executable). User arguments
-start at index 1.
-
-`argCount()` returns the total number of arguments, including the program name.
+`arg(index)` returns `Result<string>`. `argCount()` returns `Result<i32>`.
 
 Example — create `echo.lm`:
 
 ```lumen
 function main(): i32 {
+  let countResult = argCount()
+  if !isOk(countResult) {
+    return 1
+  }
+  let count = resultValue(countResult)
   let i: i32 = 1
 
-  while i < argCount() do {
-    println(arg(i))
+  while i < count do {
+    let value = arg(i)
+    if isOk(value) {
+      println(resultValue(value))
+    }
     i++
   }
 
@@ -136,8 +137,6 @@ world
 ### Limitations
 
 - Arguments are strings. There is no type conversion or flag parsing built in.
-- `arg` and `argCount` return empty/zero on Linux (currently implemented for
-  macOS only).
 
 ## Process Execution
 
@@ -158,7 +157,7 @@ The bootstrap compiler uses `exec` to:
 
 ```lumen
 let code = exec("clang build/out.ll src/runtime/system.c src/runtime/fs.c -pthread -o build/app")
-if code != 0 {
+if !isOk(code) || resultValue(code) != 0 {
   println("link failed")
   return 1
 }
@@ -210,15 +209,16 @@ function writeLine(path: string, message: string, semaphore: semaphore): void {
 }
 
 function main(): i32 {
-  let semaphore = createSemaphore(1)
+  let semaphoreResult = createSemaphore(1)
+  if !isOk(semaphoreResult) {
+    return 1
+  }
+  let semaphore = resultValue(semaphoreResult)
 
   let one = startThread(writeLine, "build/output.txt", "thread one\n", semaphore)
-  let two = startThread(writeLine, "build/output.txt", "thread two\n", semaphore)
-  let three = startThread(writeLine, "build/output.txt", "thread three\n", semaphore)
-
-  joinThread(one)
-  joinThread(two)
-  joinThread(three)
+  if isOk(one) {
+    joinThread(resultValue(one))
+  }
 
   return 0
 }
@@ -231,10 +231,12 @@ function main(): i32 {
 | `createSemaphore(count)` | Creates a semaphore with an initial count. `createSemaphore(1)` creates a mutex-like semaphore (one thread at a time). |
 | `semaphoreWait(semaphore)` | Acquires the semaphore, blocking if the count is 0. Decrements the count. |
 | `semaphoreSignal(semaphore)` | Releases the semaphore, incrementing the count. Wakes a waiting thread if any. |
-| `startThread(func, ...args)` | Starts a new native thread running the given function with the provided arguments. Returns a thread handle. |
+| `startThread(func, ...args)` | Returns `Result<thread>`. |
 | `joinThread(handle)` | Waits for the thread to finish. Must be called for every started thread. |
 
 ### How Threads Work
+
+All thread operations return `Result<T>`.
 
 1. **Create a semaphore** — `createSemaphore(1)` acts as a mutex, allowing one
    thread into the critical section at a time.
@@ -269,13 +271,10 @@ semaphoreSignal(semaphore) // unlock
 
 ## Missing
 
-- **Typed file errors** — `readFile` returns an empty string for missing files.
-  No way to distinguish error cases.
 - **Directory helpers** — no `listDir`, `createDir`, `removeFile`, or `stat`.
 - **Binary I/O** — all file operations are text-only.
 - **CLI parsing** — no built-in flag or subcommand parser. The `cli` package
   exists but is basic.
-- **Linux argv** — `arg` and `argCount` return empty/zero on Linux.
 - **Process spawn** — `exec` uses shell string concatenation. No argument
   arrays, no output capture, no timeout.
 - **Thread lifecycle** — no thread detach, no cancellation, no error recovery.

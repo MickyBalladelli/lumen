@@ -170,33 +170,33 @@ static void lumen_crypto_tag(const unsigned char *key, const unsigned char *salt
 #endif
 }
 
-char *lumen_encrypt(const char *value, const char *password, const char *protocol) {
-  if (!lumen_protocol_is_aes256(protocol)) return "";
+static char *lumen_encrypt_value(const char *value, const char *password, const char *protocol) {
+  if (!lumen_protocol_is_aes256(protocol)) return NULL;
 
   unsigned char salt[16];
   unsigned char iv[16];
   unsigned char keys[64];
 
 #ifdef LUMEN_USE_COMMON_CRYPTO
-  if (CCRandomGenerateBytes(salt, sizeof(salt)) != kCCSuccess) return "";
-  if (CCRandomGenerateBytes(iv, sizeof(iv)) != kCCSuccess) return "";
+  if (CCRandomGenerateBytes(salt, sizeof(salt)) != kCCSuccess) return NULL;
+  if (CCRandomGenerateBytes(iv, sizeof(iv)) != kCCSuccess) return NULL;
 #else
   if (!lumen_secure_random(salt, sizeof(salt))) {
-    return "error: secure random provider unavailable";
+    return NULL;
   }
   if (!lumen_secure_random(iv, sizeof(iv))) {
-    return "error: secure random provider unavailable";
+    return NULL;
   }
 #endif
-  if (!lumen_derive_crypto_keys(password, salt, keys)) return "";
+  if (!lumen_derive_crypto_keys(password, salt, keys)) return NULL;
 
   size_t value_length = strlen(value);
   unsigned char *cipher = malloc(value_length + 1);
-  if (!cipher) return "";
+  if (!cipher) return NULL;
 
   if (!lumen_aes_ctr_crypt((const unsigned char *)value, value_length, keys, iv, cipher, kCCEncrypt)) {
     free(cipher);
-    return "";
+    return NULL;
   }
 
   unsigned char tag[CC_SHA256_DIGEST_LENGTH];
@@ -213,7 +213,7 @@ char *lumen_encrypt(const char *value, const char *password, const char *protoco
     free(iv_text);
     free(cipher_text);
     free(tag_text);
-    return "";
+    return NULL;
   }
 
   size_t output_length = strlen("lumen:v1:AES-256-CTR-HMAC-SHA256::::") +
@@ -225,7 +225,7 @@ char *lumen_encrypt(const char *value, const char *password, const char *protoco
   char *out = malloc(output_length + 1);
   if (!out) {
     free(cipher);
-    return "";
+    return NULL;
   }
 
   snprintf(
@@ -246,11 +246,11 @@ char *lumen_encrypt(const char *value, const char *password, const char *protoco
   return out;
 }
 
-char *lumen_decrypt(const char *value, const char *password, const char *protocol) {
-  if (!lumen_protocol_is_aes256(protocol)) return "";
+static char *lumen_decrypt_value(const char *value, const char *password, const char *protocol) {
+  if (!lumen_protocol_is_aes256(protocol)) return NULL;
 
   char *copy = lumen_strdup(value);
-  if (!copy) return "";
+  if (!copy) return NULL;
 
   char *parts[7];
   int count = 0;
@@ -269,7 +269,7 @@ char *lumen_decrypt(const char *value, const char *password, const char *protoco
     strcmp(parts[1], "v1") != 0 ||
     strcmp(parts[2], "AES-256-CTR-HMAC-SHA256") != 0) {
     free(copy);
-    return "";
+    return NULL;
   }
 
   size_t salt_length = 0;
@@ -287,7 +287,7 @@ char *lumen_decrypt(const char *value, const char *password, const char *protoco
     free(iv);
     free(cipher);
     free(tag);
-    return "";
+    return NULL;
   }
 
   unsigned char keys[64];
@@ -298,7 +298,7 @@ char *lumen_decrypt(const char *value, const char *password, const char *protoco
     free(iv);
     free(cipher);
     free(tag);
-    return "";
+    return NULL;
   }
 
   lumen_crypto_tag(keys + 32, salt, iv, cipher, cipher_length, expected_tag);
@@ -313,7 +313,7 @@ char *lumen_decrypt(const char *value, const char *password, const char *protoco
     free(iv);
     free(cipher);
     free(tag);
-    return "";
+    return NULL;
   }
 
   unsigned char *plain = malloc(cipher_length + 1);
@@ -323,7 +323,7 @@ char *lumen_decrypt(const char *value, const char *password, const char *protoco
     free(iv);
     free(cipher);
     free(tag);
-    return "";
+    return NULL;
   }
 
   if (!lumen_aes_ctr_crypt(cipher, cipher_length, keys, iv, plain, kCCDecrypt)) {
@@ -333,7 +333,7 @@ char *lumen_decrypt(const char *value, const char *password, const char *protoco
     free(cipher);
     free(tag);
     free(plain);
-    return "";
+    return NULL;
   }
 
   plain[cipher_length] = '\0';
@@ -343,4 +343,16 @@ char *lumen_decrypt(const char *value, const char *password, const char *protoco
   free(cipher);
   free(tag);
   return (char *)plain;
+}
+
+void *lumen_encrypt(const char *value, const char *password, const char *protocol) {
+  char *encrypted = lumen_encrypt_value(value, password, protocol);
+  if (!encrypted) return lumen_runtime_error("crypto", EINVAL, "encryption failed");
+  return lumen_ok(encrypted);
+}
+
+void *lumen_decrypt(const char *value, const char *password, const char *protocol) {
+  char *decrypted = lumen_decrypt_value(value, password, protocol);
+  if (!decrypted) return lumen_runtime_error("crypto", EINVAL, "decryption failed");
+  return lumen_ok(decrypted);
 }

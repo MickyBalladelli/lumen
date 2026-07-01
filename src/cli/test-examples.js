@@ -75,7 +75,7 @@ const expectations = new Map([
     code: 10
   }],
   ['env', {
-    stdout: 'from-env\nfrom-dotenv\n\n1\n1\n',
+    stdout: 'from-env\nfrom-dotenv\nvariable not found\n1\n1\n',
     code: 0
   }],
   ['empty-array', {
@@ -139,7 +139,7 @@ const expectations = new Map([
     code: 0
   }],
   ['photon-packages', {
-    stdout: 'fallback\nmissing env PHOTON_MISSING_ENV\n1\nurl package does not encode yet\n1\nemail must look like email\nlocal\nGET /health\n1\n1\n1\n1\njwt-lite does not verify signatures yet\nok string\nok number\n',
+    stdout: 'fallback\nvariable not found\n1\nurl package does not encode yet\n1\nemail must look like email\nlocal\nGET /health\n1\n1\n1\n1\njwt-lite does not verify signatures yet\nok string\nok number\n',
     code: 0
   }],
   ['photon-more-packages', {

@@ -117,15 +117,15 @@ char *lumen_date(void) {
   return out;
 }
 
-char *lumen_env(const char *name) {
+void *lumen_env(const char *name) {
   char *value = getenv(name);
-  if (value) return value;
+  if (value) return lumen_ok(value);
 
   const char *path = getenv("LUMEN_DOTENV_PATH");
   if (!path) path = ".env";
 
   FILE *file = fopen(path, "r");
-  if (!file) return "";
+  if (!file) return lumen_runtime_error("environment", errno, "variable not found");
 
   char line[4096];
   size_t name_length = strlen(name);
@@ -166,17 +166,17 @@ char *lumen_env(const char *name) {
     char *out = malloc(value_length + 1);
     if (!out) {
       fclose(file);
-      return "";
+      return lumen_runtime_error("environment", ENOMEM, "cannot allocate variable value");
     }
 
     memcpy(out, value_start, value_length);
     out[value_length] = '\0';
     fclose(file);
-    return out;
+    return lumen_ok(out);
   }
 
   fclose(file);
-  return "";
+  return lumen_runtime_error("environment", ENOENT, "variable not found");
 }
 
 #if defined(__linux__) || defined(LUMEN_FORCE_LINUX_ARGS)
@@ -234,43 +234,50 @@ static void lumen_load_process_arguments(void) {
 }
 #endif
 
-char *lumen_arg(int index) {
+void *lumen_arg(int index) {
 #if defined(__APPLE__) && !defined(LUMEN_FORCE_LINUX_ARGS)
   int argc = *_NSGetArgc();
   char **argv = *_NSGetArgv();
 
-  if (index < 0 || index >= argc) return "";
-  return argv[index];
+  if (index < 0 || index >= argc) {
+    return lumen_runtime_error("process", ERANGE, "argument index out of range");
+  }
+  return lumen_ok(argv[index]);
 #elif defined(__linux__) || defined(LUMEN_FORCE_LINUX_ARGS)
   pthread_once(&lumen_process_arguments_once, lumen_load_process_arguments);
   if (!lumen_process_arguments.available) {
-    return "error: cannot read process arguments from /proc/self/cmdline";
+    return lumen_runtime_error("process", EIO, "cannot read process arguments");
   }
-  if (index < 0 || index >= lumen_process_arguments.count) return "";
-  return lumen_process_arguments.values[index];
+  if (index < 0 || index >= lumen_process_arguments.count) {
+    return lumen_runtime_error("process", ERANGE, "argument index out of range");
+  }
+  return lumen_ok(lumen_process_arguments.values[index]);
 #else
   (void)index;
-  return "error: process arguments are unsupported on this platform";
+  return lumen_runtime_error("process", ENOTSUP, "process arguments unsupported");
 #endif
 }
 
-int lumen_arg_count(void) {
+void *lumen_arg_count(void) {
 #if defined(__APPLE__) && !defined(LUMEN_FORCE_LINUX_ARGS)
-  return *_NSGetArgc();
+  return lumen_ok_i32(*_NSGetArgc());
 #elif defined(__linux__) || defined(LUMEN_FORCE_LINUX_ARGS)
   pthread_once(&lumen_process_arguments_once, lumen_load_process_arguments);
-  return lumen_process_arguments.available ? lumen_process_arguments.count : -1;
+  if (!lumen_process_arguments.available) {
+    return lumen_runtime_error("process", EIO, "cannot read process arguments");
+  }
+  return lumen_ok_i32(lumen_process_arguments.count);
 #else
-  return -1;
+  return lumen_runtime_error("process", ENOTSUP, "process arguments unsupported");
 #endif
 }
 
 
-int lumen_exec(const char *command) {
+void *lumen_exec(const char *command) {
   int status = system(command);
-  if (status == -1) return 1;
-  if (WIFEXITED(status)) return WEXITSTATUS(status);
-  return status == 0 ? 0 : 1;
+  if (status == -1) return lumen_runtime_error("process", errno, "cannot start command");
+  if (WIFEXITED(status)) return lumen_ok_i32(WEXITSTATUS(status));
+  return lumen_runtime_error("process", status, "command terminated abnormally");
 }
 
 __attribute__((weak)) const char *lumen_compiler_image(void) {
@@ -340,37 +347,69 @@ char *lumen_error_text(const char *error) {
   return (char *)message + 1;
 }
 
-static char *lumen_prefixed(const char *prefix, const char *value) {
-  size_t prefix_length = strlen(prefix);
-  size_t value_length = strlen(value);
-  char *out = malloc(prefix_length + value_length + 1);
-  if (!out) return "";
+typedef struct {
+  _Bool ok;
+  void *value;
+  const char *kind;
+  int code;
+  const char *message;
+} LumenResult;
 
-  memcpy(out, prefix, prefix_length);
-  memcpy(out + prefix_length, value, value_length + 1);
-  return out;
+static void *lumen_result_new(
+  _Bool ok,
+  void *value,
+  const char *kind,
+  int code,
+  const char *message
+) {
+  LumenResult *result = malloc(sizeof(LumenResult));
+  if (!result) return NULL;
+  result->ok = ok;
+  result->value = value;
+  result->kind = kind;
+  result->code = code;
+  result->message = message;
+  return result;
 }
 
-char *lumen_ok(const char *value) {
-  return lumen_prefixed("ok:", value);
+void *lumen_ok(const char *value) {
+  return lumen_result_new(1, (void *)value, NULL, 0, NULL);
 }
 
-char *lumen_err(const char *message) {
-  return lumen_prefixed("err:", message);
+void *lumen_ok_pointer(void *value) {
+  return lumen_result_new(1, value, NULL, 0, NULL);
 }
 
-_Bool lumen_is_ok(const char *result) {
-  return strncmp(result, "ok:", 3) == 0;
+void *lumen_ok_i32(int value) {
+  char *text = malloc(32);
+  if (!text) return lumen_runtime_error("memory", ENOMEM, "cannot allocate result value");
+  snprintf(text, 32, "%d", value);
+  return lumen_ok(text);
 }
 
-char *lumen_result_value(const char *result) {
-  if (strncmp(result, "ok:", 3) != 0) return "";
-  return (char *)result + 3;
+void *lumen_err(const char *message) {
+  return lumen_runtime_error("user", 1, message);
 }
 
-char *lumen_error_message(const char *result) {
-  if (strncmp(result, "err:", 4) != 0) return "";
-  return (char *)result + 4;
+void *lumen_runtime_error(const char *kind, int code, const char *message) {
+  return lumen_result_new(0, NULL, kind, code, message);
+}
+
+_Bool lumen_is_ok(const void *raw_result) {
+  const LumenResult *result = raw_result;
+  return result && result->ok;
+}
+
+void *lumen_result_value(const void *raw_result) {
+  const LumenResult *result = raw_result;
+  if (!result || !result->ok) return NULL;
+  return result->value;
+}
+
+char *lumen_error_message(const void *raw_result) {
+  const LumenResult *result = raw_result;
+  if (!result || result->ok || !result->message) return "";
+  return (char *)result->message;
 }
 
 char *lumen_some(const char *value) {

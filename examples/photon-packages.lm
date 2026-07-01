@@ -12,7 +12,11 @@ function main(): i32 {
   let missingEnv = requireEnv("PHOTON_MISSING_ENV")
   let validName = requireString("name", "lumen")
   let invalidEmail = emailLike("email", "not-email")
-  let response = jsonResponse(200, '{"ok":true}')
+  let responseResult = jsonResponse(200, '{"ok":true}')
+  if !isOk(responseResult) {
+    return 1
+  }
+  let response = resultValue(responseResult)
   let info = infoLine("ready")
 
   println(envOr("PHOTON_MISSING_ENV", "fallback"))

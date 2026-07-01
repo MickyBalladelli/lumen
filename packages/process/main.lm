@@ -1,16 +1,19 @@
 function processArg(index: i32, fallback: string): string {
   let value = arg(index)
 
-  if stringEquals(value, "") {
+  if !isOk(value) {
     return fallback
   }
 
-  return value
+  return resultValue(value)
 }
 
 function processHasArgs(): bool {
   let count = argCount()
-  return count > 1
+  if !isOk(count) {
+    return false
+  }
+  return resultValue(count) > 1
 }
 
 function processName(fallback: string): string {

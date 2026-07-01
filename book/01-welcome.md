@@ -131,24 +131,23 @@ Escape with `jsonQuote`. Serialize with `jsonStringify`.
 `encrypt(value, key, protocol?)` encrypts a string with AES-256 (default
 protocol `AES-256`, implemented as `AES-256-CTR-HMAC-SHA256` with PBKDF2 key
 derivation, random salt, random nonce, and authentication before decrypt).
-`decrypt(value, key, protocol?)` reverses it. Returns portable encoded strings
-prefixed with `lumen:v1:`.
+`decrypt(value, key, protocol?)` reverses it. Both return `Result<string>`;
+successful encrypted values are prefixed with `lumen:v1:`.
 
 ### File System
 
-- `readFile(path)`: reads a file, returns a string (empty string for missing
-  files).
-- `writeFile(path, content)`: writes text, returns `0` on success.
+- `readFile(path)`: returns `Result<string>`.
+- `writeFile(path, content)`: returns `Result<i32>`.
 - `appendFile(path, content)`: appends a line to a file (thread-safe with
   semaphores).
 
 ### Environment and CLI
 
-- `env(name)`: reads an environment variable. Falls back to `.env` files.
+- `env(name)`: returns `Result<string>` and falls back to `.env` files.
   Process environment wins over `.env` values.
-- `arg(index)`: reads a CLI argument (`arg(0)` is the program name).
-- `argCount()`: returns the argument count.
-- `exec(command)`: runs a shell command and returns its exit code.
+- `arg(index)`: returns `Result<string>` (`arg(0)` is the program name).
+- `argCount()`: returns `Result<i32>`.
+- `exec(command)`: returns `Result<i32>` containing the exit code.
 
 ### Error Handling
 
@@ -164,7 +163,8 @@ prefixed with `lumen:v1:`.
 
 Native threads with semaphore-guarded critical sections:
 `createSemaphore(count)`, `semaphoreWait(...)`, `semaphoreSignal(...)`,
-`startThread(function, ...args)`, `joinThread(handle)`.
+`startThread(function, ...args)`, `joinThread(handle)`. Operations return
+`Result<T>`.
 
 ### HTTP
 
@@ -176,6 +176,8 @@ Native threads with semaphore-guarded critical sections:
 - `httpRequest(method, path, body)`, `httpResponse(status, headers, body)`
   payload helpers.
 - `socketIoEvent(event, payload)`, `socketIoEmit(room, event, payload)` helpers.
+
+HTTP operations return `Result<T>`.
 
 ### Compiler Bootstrap Helpers
 
@@ -224,8 +226,6 @@ path.
   type checking, and code generation)
 - Stronger type checker (boolean conditions not enforced, no return-on-all-paths
   analysis, no use-before-initialization rejection)
-- Linux support for `arg`, `argCount`, crypto, and WebSocket (return empty or
-  zero on Linux)
 - Async runtime (syntax reserved, lowers synchronously today)
 - Better HTTP routing and production-ready runtime hardening
 - A packaged `lumen` compiler binary command

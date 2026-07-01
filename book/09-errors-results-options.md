@@ -33,9 +33,8 @@ Typed errors are useful when:
 - You want to attach structured metadata (code) to an error
 - The error might be handled differently based on its code
 
-Currently, typed errors are not yet used by the standard library itself —
-built-in functions like `readFile` return empty strings on failure rather than
-error values. This is a known gap.
+Fallible standard-library operations return `Result<T>`, including file,
+environment, crypto, JSON, process, thread, and HTTP operations.
 
 ## `throw` And `catch`
 
@@ -268,25 +267,12 @@ fail, `throw`/`catch` for early-exit error handling within a function, and
 
 ## Error Handling In The Standard Library
 
-Currently, the standard library does **not** consistently use typed errors.
-Many built-in functions return sentinel values on failure:
-
-- `readFile` returns an empty string for missing files
-- `env` returns an empty string for missing variables
-- `arg` returns an empty string for out-of-bounds indices (on Linux, all
-  indices return empty)
-- Crypto functions return empty strings on Linux
-- `exec` returns an integer exit code (0 for success)
-
-These sentinel patterns mean a valid empty value cannot be distinguished from
-an error condition. Replacing sentinels with typed errors across the standard
-library is a known roadmap item.
+The standard library uses `Result<T>` for fallible operations. For example,
+`readFile` returns `ok("")` for an empty file and an error for a missing file.
+Use `isOk`, `resultValue`, and `errorMessage` to handle the result.
 
 ## Missing
 
-- **Typed errors in stdlib** — replace empty-string and integer sentinels with
-  typed errors across file, environment, crypto, JSON, process, thread, and
-  HTTP operations.
 - **Result/Option type checking** — the type parameters `T` in `Result<T>` and
   `T?` are not enforced.
 - **Pattern matching** — no `match` on Result or Option variants. Checking

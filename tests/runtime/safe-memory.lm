@@ -1,7 +1,15 @@
 function main(): i32 {
   let message = "hello " + "lumen"
-  let document = json('{"name":"lumen"}')
-  document = jsonSet(document, "mode", "safe")
+  let documentResult = json('{"name":"lumen"}')
+  if !isOk(documentResult) {
+    return 1
+  }
+  let document = resultValue(documentResult)
+  let updateResult = jsonSet(document, "mode", "safe")
+  if !isOk(updateResult) {
+    return 1
+  }
+  document = resultValue(updateResult)
 
   let values = list()
   values = listPush(values, message)
@@ -9,7 +17,11 @@ function main(): i32 {
   let entries = map("initial", "value")
   entries = mapSet(entries, "message", message)
 
-  println(jsonGet(document, "mode"))
+  let mode = jsonGet(document, "mode")
+  if !isOk(mode) {
+    return 1
+  }
+  println(resultValue(mode))
   println(listGet(values, 0))
   println(mapGet(entries, "message"))
   return 0

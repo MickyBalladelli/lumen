@@ -1,8 +1,18 @@
 function main(): i32 {
-  let first = arg(1)
+  let firstResult = arg(1)
+  let countResult = argCount()
+  if !isOk(firstResult) {
+    println(errorMessage(firstResult))
+    return 1
+  }
+  if !isOk(countResult) {
+    println(errorMessage(countResult))
+    return 1
+  }
+  let first = resultValue(firstResult)
 
   println(includes(first, "first"))
-  println(argCount())
+  println(resultValue(countResult))
 
   return 0
 }

@@ -23,48 +23,74 @@ typedef struct {
 } LumenThreadHandle;
 
 void *lumen_semaphore_create(int count) {
-  LumenSemaphore *semaphore = malloc(sizeof(LumenSemaphore));
-  if (!semaphore) return NULL;
+  if (count < 0) return lumen_runtime_error("thread", EINVAL, "negative semaphore count");
 
-  pthread_mutex_init(&semaphore->mutex, NULL);
-  pthread_cond_init(&semaphore->changed, NULL);
+  LumenSemaphore *semaphore = malloc(sizeof(LumenSemaphore));
+  if (!semaphore) return lumen_runtime_error("thread", ENOMEM, "cannot allocate semaphore");
+
+  int code = pthread_mutex_init(&semaphore->mutex, NULL);
+  if (code != 0) {
+    free(semaphore);
+    return lumen_runtime_error("thread", code, "cannot initialize semaphore mutex");
+  }
+  code = pthread_cond_init(&semaphore->changed, NULL);
+  if (code != 0) {
+    pthread_mutex_destroy(&semaphore->mutex);
+    free(semaphore);
+    return lumen_runtime_error("thread", code, "cannot initialize semaphore condition");
+  }
   semaphore->count = count;
 
-  return semaphore;
+  return lumen_ok_pointer(semaphore);
 }
 
-static void lumen_semaphore_wait_internal(LumenSemaphore *semaphore) {
-  pthread_mutex_lock(&semaphore->mutex);
+static int lumen_semaphore_wait_internal(LumenSemaphore *semaphore) {
+  int code = pthread_mutex_lock(&semaphore->mutex);
+  if (code != 0) return code;
   while (semaphore->count <= 0) {
-    pthread_cond_wait(&semaphore->changed, &semaphore->mutex);
+    code = pthread_cond_wait(&semaphore->changed, &semaphore->mutex);
+    if (code != 0) {
+      pthread_mutex_unlock(&semaphore->mutex);
+      return code;
+    }
   }
   semaphore->count -= 1;
-  pthread_mutex_unlock(&semaphore->mutex);
+  return pthread_mutex_unlock(&semaphore->mutex);
 }
 
-static void lumen_semaphore_signal_internal(LumenSemaphore *semaphore) {
-  pthread_mutex_lock(&semaphore->mutex);
+static int lumen_semaphore_signal_internal(LumenSemaphore *semaphore) {
+  int code = pthread_mutex_lock(&semaphore->mutex);
+  if (code != 0) return code;
   semaphore->count += 1;
-  pthread_cond_signal(&semaphore->changed);
-  pthread_mutex_unlock(&semaphore->mutex);
+  code = pthread_cond_signal(&semaphore->changed);
+  int unlock_code = pthread_mutex_unlock(&semaphore->mutex);
+  return code != 0 ? code : unlock_code;
 }
 
-void lumen_semaphore_wait(void *semaphore) {
-  lumen_semaphore_wait_internal((LumenSemaphore *)semaphore);
+void *lumen_semaphore_wait(void *semaphore) {
+  if (!semaphore) return lumen_runtime_error("thread", EINVAL, "invalid semaphore");
+  int code = lumen_semaphore_wait_internal((LumenSemaphore *)semaphore);
+  if (code != 0) return lumen_runtime_error("thread", code, "cannot wait on semaphore");
+  return lumen_ok_i32(0);
 }
 
-void lumen_semaphore_signal(void *semaphore) {
-  lumen_semaphore_signal_internal((LumenSemaphore *)semaphore);
+void *lumen_semaphore_signal(void *semaphore) {
+  if (!semaphore) return lumen_runtime_error("thread", EINVAL, "invalid semaphore");
+  int code = lumen_semaphore_signal_internal((LumenSemaphore *)semaphore);
+  if (code != 0) return lumen_runtime_error("thread", code, "cannot signal semaphore");
+  return lumen_ok_i32(0);
 }
 
-int lumen_append_file(const char *path, const char *message) {
+void *lumen_append_file(const char *path, const char *message) {
   FILE *file = fopen(path, "a");
-  if (!file) return 1;
+  if (!file) return lumen_runtime_error("thread", errno, "cannot open append file");
 
-  fputs(message, file);
-  fputc('\n', file);
-  fclose(file);
-  return 0;
+  int failed = fputs(message, file) == EOF || fputc('\n', file) == EOF;
+  if (fclose(file) != 0) failed = 1;
+  if (failed) {
+    return lumen_runtime_error("thread", errno ? errno : EIO, "cannot append file");
+  }
+  return lumen_ok_i32(0);
 }
 
 static void *lumen_thread_entry(void *data) {
@@ -74,10 +100,18 @@ static void *lumen_thread_entry(void *data) {
 }
 
 void *lumen_thread_start(void *function, const char *path, const char *message, void *semaphore) {
+  if (!function || !semaphore) {
+    return lumen_runtime_error("thread", EINVAL, "invalid thread arguments");
+  }
+
   LumenThreadHandle *handle = malloc(sizeof(LumenThreadHandle));
   LumenThreadJob *job = malloc(sizeof(LumenThreadJob));
 
-  if (!handle || !job) return NULL;
+  if (!handle || !job) {
+    free(handle);
+    free(job);
+    return lumen_runtime_error("thread", ENOMEM, "cannot allocate thread");
+  }
 
   job->function = (LumenThreadFunction)function;
   job->path = path;
@@ -85,21 +119,23 @@ void *lumen_thread_start(void *function, const char *path, const char *message, 
   job->semaphore = semaphore;
   handle->job = job;
 
-  if (pthread_create(&handle->thread, NULL, lumen_thread_entry, job) != 0) {
+  int code = pthread_create(&handle->thread, NULL, lumen_thread_entry, job);
+  if (code != 0) {
     free(job);
     free(handle);
-    return NULL;
+    return lumen_runtime_error("thread", code, "cannot start thread");
   }
 
-  return handle;
+  return lumen_ok_pointer(handle);
 }
 
-int lumen_thread_join(void *raw_handle) {
+void *lumen_thread_join(void *raw_handle) {
   LumenThreadHandle *handle = raw_handle;
-  if (!handle) return 1;
+  if (!handle) return lumen_runtime_error("thread", EINVAL, "invalid thread handle");
 
-  pthread_join(handle->thread, NULL);
+  int code = pthread_join(handle->thread, NULL);
+  if (code != 0) return lumen_runtime_error("thread", code, "cannot join thread");
   free(handle->job);
   free(handle);
-  return 0;
+  return lumen_ok_i32(0);
 }

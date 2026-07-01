@@ -6,27 +6,32 @@ function main(): i32 {
   let state = env("AUTH_STATE")
   let nonce = env("AUTH_NONCE")
 
-  if stringEquals(clientId, "") {
+  if !isOk(clientId) {
     println("missing GOOGLE_CLIENT_ID")
     return 0
   }
 
-  if stringEquals(redirectUri, "") {
+  if !isOk(redirectUri) {
     println("missing AUTH_REDIRECT_URI")
     return 0
   }
 
-  if stringEquals(state, "") {
+  if !isOk(state) {
     println("missing AUTH_STATE")
     return 0
   }
 
-  if stringEquals(nonce, "") {
+  if !isOk(nonce) {
     println("missing AUTH_NONCE")
     return 0
   }
 
-  println(googleAuthorizeUrl(clientId, redirectUri, state, nonce))
+  println(googleAuthorizeUrl(
+    resultValue(clientId),
+    resultValue(redirectUri),
+    resultValue(state),
+    resultValue(nonce)
+  ))
   println(authNeedsTokenExchange())
 
   return 0

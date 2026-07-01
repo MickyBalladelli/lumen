@@ -383,13 +383,14 @@ println(id)
 println(date())
 ```
 
-`env(name)` reads an environment variable. Missing variables return an empty
-string. If the variable is not in the process environment, Lumen also checks a
-`.env` file in the current directory.
+`env(name)` reads an environment variable as `Result<string>`. If the variable
+is not in the process environment, Lumen also checks a `.env` file.
 
 ```lumen
 let databaseUrl = env("DATABASE_URL")
-println(databaseUrl)
+if isOk(databaseUrl) {
+  println(resultValue(databaseUrl))
+}
 ```
 
 `.env` files support simple dotenv-style entries:
@@ -407,11 +408,13 @@ Real process environment values win over `.env` values.
 assert(total == 6, "bad total")
 ```
 
-`arg(index)` reads a CLI argument and `argCount()` returns the argument count.
+`arg(index)` returns `Result<string>` and `argCount()` returns `Result<i32>`.
 
 ```lumen
-println(arg(1))
-println(argCount())
+let first = arg(1)
+if isOk(first) {
+  println(resultValue(first))
+}
 ```
 
 `map(...)`, `mapGet(...)`, and `mapHas(...)` provide a simple string-keyed map.
@@ -474,12 +477,17 @@ let name: string? = some("lumen")
 println(valueOr(name, "fallback"))
 ```
 
-`json(...)`, `jsonGet(...)`, and `jsonSet(...)` provide a small JSON foundation
-for APIs and socket payloads.
+`json(...)`, `jsonGet(...)`, and `jsonSet(...)` return `Result<T>` values, so
+invalid JSON and missing paths cannot look like valid empty strings.
 
 ```lumen
-let payload: json = json('{"name":"lumen","count":3}')
-println(jsonGet(payload, "name"))
+let payloadResult = json('{"name":"lumen","count":3}')
+if isOk(payloadResult) {
+  let name = jsonGet(resultValue(payloadResult), "name")
+  if isOk(name) {
+    println(resultValue(name))
+  }
+}
 ```
 
 `newError(code, message)`, `errorCode(...)`, and `errorText(...)` provide typed
@@ -500,15 +508,13 @@ point.x = 4
 values[0] = 8
 ```
 
-`encrypt(value, key, protocol?)` encrypts a string and returns a portable
-encoded string. `decrypt(value, key, protocol?)` reverses it.
+`encrypt(value, key, protocol?)` and `decrypt(...)` return `Result<string>`.
 
 ```lumen
 let encrypted = encrypt("hello lumen", "correct horse battery staple")
-let decrypted = decrypt(encrypted, "correct horse battery staple")
-
-println(includes(encrypted, "lumen:v1"))
-println(decrypted)
+if isOk(encrypted) {
+  println(includes(resultValue(encrypted), "lumen:v1"))
+}
 ```
 
 The default protocol is `AES-256`, currently implemented as
@@ -531,20 +537,19 @@ The `fs` library starts with `readFile(path)`.
 
 ```lumen
 let content = readFile("examples/data.txt")
-println(content)
+if isOk(content) {
+  println(resultValue(content))
+}
 ```
 
-`readFile(...)` returns a string. Missing files currently return an empty
-string.
-
-`writeFile(path, content)` writes text and returns `0` on success.
+`readFile(...)` returns `Result<string>`. An empty file is `ok("")`; a missing
+file is an error. `writeFile(...)` returns `Result<i32>`.
 
 ```lumen
 writeFile("build/out.ll", content)
 ```
 
-`exec(command)` runs a shell command and returns its process code. This is the
-bootstrap hook used later to call `clang`.
+`exec(command)` returns `Result<i32>` containing the process exit code.
 
 ```lumen
 let code = exec("clang build/out.ll -o build/app")
@@ -613,7 +618,12 @@ The `http` library can serve a static file directory.
 
 ```lumen
 function main(): i32 {
-  return serveFiles(8080, "examples/public")
+  let server = serveFiles(8080, "examples/public")
+  if !isOk(server) {
+    println(errorMessage(server))
+    return 1
+  }
+  return resultValue(server)
 }
 ```
 
@@ -621,7 +631,7 @@ It can also serve a simple API route.
 
 ```lumen
 function main(): i32 {
-  return serveApi(
+  let server = serveApi(
     8081,
     "GET",
     "/health",
@@ -630,6 +640,10 @@ X-Lumen: yes
 ',
     '{"ok":true}'
   )
+  if !isOk(server) {
+    return 1
+  }
+  return resultValue(server)
 }
 ```
 
@@ -652,7 +666,7 @@ http://localhost:8088
 The full example serves static HTML and API routes from one server:
 
 ```lumen
-serveHttp(8088, "examples/http-public", methods, routes, headers, bodies)
+let server = serveHttp(8088, "examples/http-public", methods, routes, headers, bodies)
 ```
 
 Socket.IO-style chat helpers are also available:
@@ -681,7 +695,9 @@ HTTP request/response helper payloads are available for API code:
 
 ```lumen
 let request = httpRequest("POST", "/api/hello", '{"name":"lumen"}')
-let response = httpResponse(200, '{"content-type":"application/json"}', '{"message":"hello"}')
+if isOk(request) {
+  println(resultValue(request))
+}
 ```
 
 ### Error Handling
@@ -710,21 +726,19 @@ function writeLine(path: string, message: string, semaphore: semaphore): void {
   semaphoreSignal(semaphore)
 }
 
-let semaphore = createSemaphore(1)
-let one = startThread(writeLine, "build/thread-output.txt", "thread one", semaphore)
-let two = startThread(writeLine, "build/thread-output.txt", "thread two", semaphore)
-let three = startThread(writeLine, "build/thread-output.txt", "thread three", semaphore)
-
-joinThread(one)
-joinThread(two)
-joinThread(three)
+let semaphoreResult = createSemaphore(1)
+if !isOk(semaphoreResult) {
+  return 1
+}
+let semaphore = resultValue(semaphoreResult)
+let thread = startThread(writeLine, "build/thread-output.txt", "thread one", semaphore)
+if isOk(thread) {
+  joinThread(resultValue(thread))
+}
 ```
 
-`createSemaphore(1)` allows one thread into the critical section at a time.
-`startThread(...)` starts a native thread with the worker function and arguments.
-`joinThread(...)` waits for it to finish.
-`appendFile(path, message)` appends one line to a file; put it inside the
-worker function when the thread should write.
+Thread operations return `Result<T>`. `createSemaphore(1)` allows one thread
+into the critical section at a time.
 
 ## Run parser
 

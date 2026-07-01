@@ -1,16 +1,19 @@
 function argOr(index: i32, fallback: string): string {
   let value = arg(index)
 
-  if stringEquals(value, "") {
+  if !isOk(value) {
     return fallback
   }
 
-  return value
+  return resultValue(value)
 }
 
 function hasArgs(): bool {
   let count = argCount()
-  return count > 1
+  if !isOk(count) {
+    return false
+  }
+  return resultValue(count) > 1
 }
 
 function commandName(fallback: string): string {

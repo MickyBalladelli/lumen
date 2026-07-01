@@ -86,9 +86,9 @@ Project audit: 2026-06-30
   Headers and implementations now separate system/fs/string/collections/thread/
   crypto/http code. The compiler links only referenced units and their dependencies.
 
-- [ ] Replace empty-string and integer error sentinels with typed errors.
-  Cover file, environment, crypto, JSON, process, thread, and HTTP failures so a
-  valid empty value cannot be mistaken for failure.
+- [x] Replace empty-string and integer error sentinels with typed errors.
+  File, environment, crypto, JSON, process, thread, and HTTP operations return
+  `Result<T>`, preserving valid empty strings and zero values.
 
 - [ ] Remove shell-command execution from compiler internals.
   Pass argument arrays to child processes. Never build compiler commands by string

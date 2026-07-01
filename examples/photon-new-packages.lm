@@ -17,8 +17,25 @@ import { newUuid, uuidLooksValid } from "uuid"
 
 function main(): i32 {
   let cache = cacheSet(cacheEmpty(), "name", "lumen")
-  let data: json = json('{"name":"lumen"}')
-  let next = jsonBoolSet(jsonStringSet(data, "mode", "debug"), "ready", true)
+  let dataResult = json('{"name":"lumen"}')
+  if !isOk(dataResult) {
+    return 1
+  }
+  let data: json = resultValue(dataResult)
+  let modeResult = jsonStringSet(data, "mode", "debug")
+  if !isOk(modeResult) {
+    return 1
+  }
+  let nextResult = jsonBoolSet(resultValue(modeResult), "ready", true)
+  if !isOk(nextResult) {
+    return 1
+  }
+  let next = resultValue(nextResult)
+  let getResult = getRequest("/health")
+  let postResult = postJsonRequest("/items", '{"name":"lumen"}')
+  if !isOk(getResult) || !isOk(postResult) {
+    return 1
+  }
   let token = randomToken("tok")
   let id = newUuid()
 
@@ -26,8 +43,8 @@ function main(): i32 {
   println(betweenI32(5, 1, 10))
   println(jsonValueOr(next, "name", "missing"))
   println(jsonHas(next, "ready"))
-  println(getRequest("/health"))
-  println(postJsonRequest("/items", '{"name":"lumen"}'))
+  println(resultValue(getResult))
+  println(resultValue(postResult))
   println(envText("LUMEN_MISSING_ENV", "fallback"))
   println(envBool("LUMEN_MISSING_BOOL", true))
   println(pathJoin("build", pathExt("report", "txt")))

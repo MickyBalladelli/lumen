@@ -245,7 +245,7 @@ class BuiltinLowering {
     this.lines.push(`  ${result} = call ptr @lumen_env(ptr ${name.value})`)
 
     return {
-      type: LumenTypes.String,
+      type: 'Result<string>',
       value: result
     }
   }
@@ -266,7 +266,7 @@ class BuiltinLowering {
     this.lines.push(`  ${result} = call ptr @lumen_arg(i32 ${this.cast(index, LumenTypes.I32)})`)
 
     return {
-      type: LumenTypes.String,
+      type: 'Result<string>',
       value: result
     }
   }
@@ -280,10 +280,10 @@ class BuiltinLowering {
     }
 
     const result = this.nextTemp()
-    this.lines.push(`  ${result} = call i32 @lumen_arg_count()`)
+    this.lines.push(`  ${result} = call ptr @lumen_arg_count()`)
 
     return {
-      type: LumenTypes.I32,
+      type: 'Result<i32>',
       value: result
     }
   }
@@ -862,7 +862,7 @@ class BuiltinLowering {
     this.lines.push(`  ${result} = call ptr @lumen_encrypt(ptr ${value.value}, ptr ${key.value}, ptr ${protocol.value})`)
 
     return {
-      type: LumenTypes.String,
+      type: 'Result<string>',
       value: result
     }
   }
@@ -901,7 +901,7 @@ class BuiltinLowering {
     this.lines.push(`  ${result} = call ptr @lumen_decrypt(ptr ${value.value}, ptr ${key.value}, ptr ${protocol.value})`)
 
     return {
-      type: LumenTypes.String,
+      type: 'Result<string>',
       value: result
     }
   }
@@ -947,47 +947,11 @@ class BuiltinLowering {
       throw new Diagnostic('readFile path must be string', tokens[0].location, 'backend')
     }
 
-    const resultPointer = this.alloca('.readFile.result', LumenTypes.String)
-    const mode = this.globalCString('rb')
-    const empty = this.globalCString('')
-    const file = this.nextTemp()
-    const isMissing = this.nextTemp()
-    const missingLabel = this.nextLabel('read.missing')
-    const openLabel = this.nextLabel('read.open')
-    const endLabel = this.nextLabel('read.end')
-
-    this.lines.push(`  ${file} = call ptr @fopen(ptr ${path.value}, ptr ${mode.pointer})`)
-    this.lines.push(`  ${isMissing} = icmp eq ptr ${file}, null`)
-    this.lines.push(`  br i1 ${isMissing}, label %${missingLabel}, label %${openLabel}`)
-
-    this.lines.push(`${missingLabel}:`)
-    this.lines.push(`  store ptr ${empty.pointer}, ptr ${resultPointer}`)
-    this.lines.push(`  br label %${endLabel}`)
-
-    this.lines.push(`${openLabel}:`)
-    this.lines.push(`  call i32 @fseek(ptr ${file}, i64 0, i32 2)`)
-    const size = this.nextTemp()
-    this.lines.push(`  ${size} = call i64 @ftell(ptr ${file})`)
-    this.lines.push(`  call i32 @fseek(ptr ${file}, i64 0, i32 0)`)
-    const bufferSize = this.nextTemp()
-    const buffer = this.nextTemp()
-    const bytesRead = this.nextTemp()
-    const terminator = this.nextTemp()
-    this.lines.push(`  ${bufferSize} = add i64 ${size}, 1`)
-    this.lines.push(`  ${buffer} = call ptr @lumen_alloc(i64 ${bufferSize})`)
-    this.lines.push(`  ${bytesRead} = call i64 @fread(ptr ${buffer}, i64 1, i64 ${size}, ptr ${file})`)
-    this.lines.push(`  ${terminator} = getelementptr inbounds i8, ptr ${buffer}, i64 ${bytesRead}`)
-    this.lines.push(`  store i8 0, ptr ${terminator}`)
-    this.lines.push(`  call i32 @fclose(ptr ${file})`)
-    this.lines.push(`  store ptr ${buffer}, ptr ${resultPointer}`)
-    this.lines.push(`  br label %${endLabel}`)
-
-    this.lines.push(`${endLabel}:`)
     const result = this.nextTemp()
-    this.lines.push(`  ${result} = load ptr, ptr ${resultPointer}`)
+    this.lines.push(`  ${result} = call ptr @lumen_read_file(ptr ${path.value})`)
 
     return {
-      type: LumenTypes.String,
+      type: 'Result<string>',
       value: result
     }
   }
@@ -1009,10 +973,10 @@ class BuiltinLowering {
       location: tokens[0].location
     })
     const result = this.nextTemp()
-    this.lines.push(`  ${result} = call i32 @lumen_write_file(ptr ${path.value}, ptr ${content.value})`)
+    this.lines.push(`  ${result} = call ptr @lumen_write_file(ptr ${path.value}, ptr ${content.value})`)
 
     return {
-      type: LumenTypes.I32,
+      type: 'Result<i32>',
       value: result
     }
   }
@@ -1035,10 +999,10 @@ class BuiltinLowering {
     })
     const result = this.nextTemp()
 
-    this.lines.push(`  ${result} = call i32 @lumen_http_serve_files(i32 ${this.cast(port, LumenTypes.I32)}, ptr ${root.value})`)
+    this.lines.push(`  ${result} = call ptr @lumen_http_serve_files(i32 ${this.cast(port, LumenTypes.I32)}, ptr ${root.value})`)
 
     return {
-      type: LumenTypes.I32,
+      type: 'Result<i32>',
       value: result
     }
   }
@@ -1073,10 +1037,10 @@ class BuiltinLowering {
     })
     const result = this.nextTemp()
 
-    this.lines.push(`  ${result} = call i32 @lumen_http_serve_api(i32 ${this.cast(port, LumenTypes.I32)}, ptr ${method.value}, ptr ${route.value}, ptr ${headers.value}, ptr ${body.value})`)
+    this.lines.push(`  ${result} = call ptr @lumen_http_serve_api(i32 ${this.cast(port, LumenTypes.I32)}, ptr ${method.value}, ptr ${route.value}, ptr ${headers.value}, ptr ${body.value})`)
 
     return {
-      type: LumenTypes.I32,
+      type: 'Result<i32>',
       value: result
     }
   }
@@ -1107,10 +1071,10 @@ class BuiltinLowering {
     }
 
     const result = this.nextTemp()
-    this.lines.push(`  ${result} = call i32 @lumen_http_serve_http(i32 ${this.cast(port, LumenTypes.I32)}, ptr ${root.value}, ptr ${methods.pointer}, ptr ${routes.pointer}, ptr ${headers.pointer}, ptr ${bodies.pointer}, i32 ${methods.length})`)
+    this.lines.push(`  ${result} = call ptr @lumen_http_serve_http(i32 ${this.cast(port, LumenTypes.I32)}, ptr ${root.value}, ptr ${methods.pointer}, ptr ${routes.pointer}, ptr ${headers.pointer}, ptr ${bodies.pointer}, i32 ${methods.length})`)
 
     return {
-      type: LumenTypes.I32,
+      type: 'Result<i32>',
       value: result
     }
   }
@@ -1133,10 +1097,10 @@ class BuiltinLowering {
     })
     const result = this.nextTemp()
 
-    this.lines.push(`  ${result} = call i32 @lumen_socketio_serve_chat(i32 ${this.cast(port, LumenTypes.I32)}, ptr ${root.value})`)
+    this.lines.push(`  ${result} = call ptr @lumen_socketio_serve_chat(i32 ${this.cast(port, LumenTypes.I32)}, ptr ${root.value})`)
 
     return {
-      type: LumenTypes.I32,
+      type: 'Result<i32>',
       value: result
     }
   }
@@ -1162,7 +1126,7 @@ class BuiltinLowering {
     this.lines.push(`  ${result} = call ptr @lumen_socketio_event(ptr ${event.value}, ptr ${payload.value})`)
 
     return {
-      type: LumenTypes.String,
+      type: 'Result<string>',
       value: result
     }
   }
@@ -1192,7 +1156,7 @@ class BuiltinLowering {
     this.lines.push(`  ${result} = call ptr @lumen_socketio_emit(ptr ${room.value}, ptr ${event.value}, ptr ${payload.value})`)
 
     return {
-      type: LumenTypes.String,
+      type: 'Result<string>',
       value: result
     }
   }
@@ -1214,7 +1178,7 @@ class BuiltinLowering {
     this.lines.push(`  ${result} = call ptr @lumen_http_request(ptr ${values[0].value}, ptr ${values[1].value}, ptr ${values[2].value})`)
 
     return {
-      type: LumenTypes.String,
+      type: 'Result<string>',
       value: result
     }
   }
@@ -1244,7 +1208,7 @@ class BuiltinLowering {
     this.lines.push(`  ${result} = call ptr @lumen_http_response(i32 ${this.cast(status, LumenTypes.I32)}, ptr ${headers.value}, ptr ${body.value})`)
 
     return {
-      type: LumenTypes.String,
+      type: 'Result<string>',
       value: result
     }
   }
@@ -1265,7 +1229,7 @@ class BuiltinLowering {
     this.lines.push(`  ${result} = call ptr @lumen_semaphore_create(i32 ${this.cast(count, LumenTypes.I32)})`)
 
     return {
-      type: LumenTypes.Semaphore,
+      type: 'Result<semaphore>',
       value: result
     }
   }
@@ -1282,11 +1246,12 @@ class BuiltinLowering {
       tokens: args[0],
       location: tokens[0].location
     })
-    this.lines.push(`  call void @lumen_semaphore_wait(ptr ${semaphore.value})`)
+    const result = this.nextTemp()
+    this.lines.push(`  ${result} = call ptr @lumen_semaphore_wait(ptr ${semaphore.value})`)
 
     return {
-      type: LumenTypes.I32,
-      value: '0'
+      type: 'Result<i32>',
+      value: result
     }
   }
 
@@ -1302,11 +1267,12 @@ class BuiltinLowering {
       tokens: args[0],
       location: tokens[0].location
     })
-    this.lines.push(`  call void @lumen_semaphore_signal(ptr ${semaphore.value})`)
+    const result = this.nextTemp()
+    this.lines.push(`  ${result} = call ptr @lumen_semaphore_signal(ptr ${semaphore.value})`)
 
     return {
-      type: LumenTypes.I32,
-      value: '0'
+      type: 'Result<i32>',
+      value: result
     }
   }
 
@@ -1339,7 +1305,7 @@ class BuiltinLowering {
     this.lines.push(`  ${result} = call ptr @lumen_thread_start(ptr @${functionName}, ptr ${path.value}, ptr ${message.value}, ptr ${semaphore.value})`)
 
     return {
-      type: LumenTypes.Thread,
+      type: 'Result<thread>',
       value: result
     }
   }
@@ -1357,10 +1323,10 @@ class BuiltinLowering {
       location: tokens[0].location
     })
     const result = this.nextTemp()
-    this.lines.push(`  ${result} = call i32 @lumen_thread_join(ptr ${thread.value})`)
+    this.lines.push(`  ${result} = call ptr @lumen_thread_join(ptr ${thread.value})`)
 
     return {
-      type: LumenTypes.I32,
+      type: 'Result<i32>',
       value: result
     }
   }
@@ -1382,10 +1348,10 @@ class BuiltinLowering {
       location: tokens[0].location
     })
     const result = this.nextTemp()
-    this.lines.push(`  ${result} = call i32 @lumen_append_file(ptr ${path.value}, ptr ${message.value})`)
+    this.lines.push(`  ${result} = call ptr @lumen_append_file(ptr ${path.value}, ptr ${message.value})`)
 
     return {
-      type: LumenTypes.I32,
+      type: 'Result<i32>',
       value: result
     }
   }

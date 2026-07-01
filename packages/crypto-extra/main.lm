@@ -3,11 +3,11 @@ function randomToken(prefix: string): string {
   return prefix + "-" + id
 }
 
-function encryptText(value: string, key: string): string {
+function encryptText(value: string, key: string): Result<string> {
   return encrypt(value, key)
 }
 
-function decryptText(value: string, key: string): string {
+function decryptText(value: string, key: string): Result<string> {
   return decrypt(value, key)
 }
 
