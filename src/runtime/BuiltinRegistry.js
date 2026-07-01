@@ -145,7 +145,7 @@ const direct = (key, module, name, parameters, returnType, symbol) => {
 }
 
 export const BuiltinSignatures = Object.freeze([
-  builtin('Println', 'system', 'println', ['any'], 'void', { variadic: true }),
+  builtin('Println', 'system', 'println', ['any'], 'void'),
   builtin('Len', 'system', 'len', ['collection'], 'i32'),
   builtin('Min', 'system', 'min', ['number', 'number'], 'number'),
   builtin('Max', 'system', 'max', ['number', 'number'], 'number'),
@@ -270,4 +270,96 @@ export function llvmDeclaration(signature) {
     ...(signature.variadic ? ['...'] : [])
   ].join(', ')
   return `declare ${signature.returnType} @${signature.symbol}(${parameters})`
+}
+
+export function validateBuiltinRegistry(runtimeSources = [], emitterSources = []) {
+  const errors = []
+  const names = new Set()
+  const keys = new Set()
+  const symbols = new Set()
+
+  for (const signature of RuntimeSignatures) {
+    if (symbols.has(signature.symbol)) errors.push(`Duplicate runtime symbol ${signature.symbol}`)
+    symbols.add(signature.symbol)
+  }
+
+  for (const signature of BuiltinSignatures) {
+    if (names.has(signature.name)) errors.push(`Duplicate built-in name ${signature.name}`)
+    names.add(signature.name)
+
+    const qualifiedKey = `${signature.module}:${signature.key}`
+    if (keys.has(qualifiedKey)) errors.push(`Duplicate built-in key ${qualifiedKey}`)
+    keys.add(qualifiedKey)
+
+    if (signature.runtime && !runtimeBySymbol.has(signature.runtime)) {
+      errors.push(`${signature.name} uses unknown runtime symbol ${signature.runtime}`)
+    }
+  }
+
+  if (runtimeSources.length > 0) {
+    const source = runtimeSources.join('\n')
+    for (const signature of RuntimeSignatures.filter(item => item.symbol.startsWith('lumen_'))) {
+      const cSignature = findCSignature(source, signature.symbol)
+      if (!cSignature) {
+        errors.push(`Missing C implementation for ${signature.symbol}`)
+        continue
+      }
+      if (cSignature.returnType !== signature.returnType) {
+        errors.push(`${signature.symbol} returns ${cSignature.returnType} in C, registry says ${signature.returnType}`)
+      }
+      if (cSignature.parameters.join(',') !== signature.parameters.join(',')) {
+        errors.push(`${signature.symbol} has C parameters (${cSignature.parameters.join(',')}), registry says (${signature.parameters.join(',')})`)
+      }
+      if (cSignature.variadic !== signature.variadic) {
+        errors.push(`${signature.symbol} variadic marker differs between C and registry`)
+      }
+    }
+  }
+
+  if (emitterSources.length > 0) {
+    const usedSymbols = emitterSources
+      .join('\n')
+      .match(/@lumen_[A-Za-z0-9_]+/g) ?? []
+
+    for (const usedSymbol of new Set(usedSymbols.map(symbol => symbol.slice(1)))) {
+      if (!runtimeBySymbol.has(usedSymbol)) {
+        errors.push(`Emitter uses unknown runtime symbol ${usedSymbol}`)
+      }
+    }
+  }
+
+  return errors
+}
+
+function findCSignature(source, symbol) {
+  const pattern = new RegExp(
+    `(?:^|\\n)\\s*(?:__attribute__\\s*\\(\\([^\\n]*\\)\\)\\s*)?([^\\n;{}]+?)\\s*${symbol}\\s*\\(([^)]*)\\)\\s*\\{`,
+    'm'
+  )
+  const match = source.match(pattern)
+  if (!match) return null
+
+  const rawParameters = match[2].trim()
+  const parts = rawParameters === '' || rawParameters === 'void'
+    ? []
+    : rawParameters.split(',').map(parameter => parameter.trim())
+  const variadic = parts.at(-1) === '...'
+  const parameters = (variadic ? parts.slice(0, -1) : parts).map(cTypeToLLVM)
+
+  return {
+    returnType: cTypeToLLVM(match[1]),
+    parameters,
+    variadic
+  }
+}
+
+function cTypeToLLVM(type) {
+  const normalized = type.replace(/\s+/g, ' ').trim()
+  if (normalized.includes('*')) return 'ptr'
+  if (/\bsize_t\b/.test(normalized)) return 'i64'
+  if (/\bfloat\b/.test(normalized)) return 'float'
+  if (/\b_Bool\b/.test(normalized)) return 'i1'
+  if (/\bvoid\b/.test(normalized)) return 'void'
+  if (/\bint\b/.test(normalized)) return 'i32'
+  return `unknown:${normalized}`
 }

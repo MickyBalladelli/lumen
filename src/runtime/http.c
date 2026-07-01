@@ -308,7 +308,7 @@ int lumen_string_len(const char *value) {
   return (int)strlen(value);
 }
 
-int lumen_string_equals(const char *left, const char *right) {
+_Bool lumen_string_equals(const char *left, const char *right) {
   return strcmp(left, right) == 0;
 }
 
@@ -353,12 +353,12 @@ char *lumen_string_upper(const char *value) {
   return out;
 }
 
-int lumen_string_starts_with(const char *value, const char *prefix) {
+_Bool lumen_string_starts_with(const char *value, const char *prefix) {
   size_t prefix_length = strlen(prefix);
   return strncmp(value, prefix, prefix_length) == 0;
 }
 
-int lumen_string_ends_with(const char *value, const char *suffix) {
+_Bool lumen_string_ends_with(const char *value, const char *suffix) {
   size_t value_length = strlen(value);
   size_t suffix_length = strlen(suffix);
   if (suffix_length > value_length) return 0;
@@ -427,7 +427,7 @@ int lumen_string_last_index_of(const char *value, const char *needle) {
   return found;
 }
 
-int lumen_string_contains(const char *value, const char *needle) {
+_Bool lumen_string_contains(const char *value, const char *needle) {
   return strstr(value, needle) != NULL;
 }
 
@@ -642,7 +642,7 @@ char *lumen_parse_summary(const char *source) {
   return out;
 }
 
-void lumen_assert(int condition, const char *message) {
+void lumen_assert(_Bool condition, const char *message) {
   if (condition) return;
   fprintf(stderr, "assert failed: %s\n", message);
   exit(1);
@@ -1005,7 +1005,7 @@ char *lumen_json_stringify(const char *value) {
   return out;
 }
 
-int lumen_json_valid(const char *value) {
+_Bool lumen_json_valid(const char *value) {
   const char *cursor = json_skip_ws(value);
   char open = *cursor;
   if (open != '{' && open != '[' && open != '"') return 0;
@@ -1110,7 +1110,7 @@ char *lumen_err(const char *message) {
   return lumen_prefixed("err:", message);
 }
 
-int lumen_is_ok(const char *result) {
+_Bool lumen_is_ok(const char *result) {
   return strncmp(result, "ok:", 3) == 0;
 }
 
@@ -1132,7 +1132,7 @@ char *lumen_none(void) {
   return "";
 }
 
-int lumen_has_value(const char *option) {
+_Bool lumen_has_value(const char *option) {
   return strlen(option) > 0;
 }
 
@@ -1303,7 +1303,7 @@ char *lumen_map_get(const char *map, const char *key) {
   return "";
 }
 
-int lumen_map_has(const char *map, const char *key) {
+_Bool lumen_map_has(const char *map, const char *key) {
   return strlen(lumen_map_get(map, key)) > 0;
 }
 

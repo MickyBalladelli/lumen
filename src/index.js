@@ -26,6 +26,14 @@ export { SystemFunctions, SystemLibrary } from './system/SystemLibrary.js'
 export { FsFunctions, FsLibrary } from './fs/FsLibrary.js'
 export { HttpFunctions, HttpLibrary } from './http/HttpLibrary.js'
 export { ThreadFunctions, ThreadLibrary } from './thread/ThreadLibrary.js'
+export {
+  BuiltinSignatures,
+  RuntimeSignatures,
+  builtinSignature,
+  builtinsForModule,
+  runtimeSignature,
+  validateBuiltinRegistry
+} from './runtime/BuiltinRegistry.js'
 export * from './ast/nodes.js'
 export { AstNodeRegistry } from './ast/AstNodeRegistry.js'
 export { AstVisitor } from './ast/AstVisitor.js'

@@ -1,6 +1,7 @@
 import { TokenType } from '../lexer/TokenType.js'
 import { Diagnostic } from '../diagnostics/Diagnostic.js'
 import { LumenTypes } from '../semantics/TypeSystem.js'
+import { runtimeSignature } from '../runtime/BuiltinRegistry.js'
 
 class BuiltinLowering {
   emitPrintln(tokens) {
@@ -630,22 +631,14 @@ class BuiltinLowering {
     }
   }
 
-  emitRuntimeCall(tokens, runtimeName, returnType, expectedCount, displayName) {
-    if (['lumen_map_get', 'lumen_map_has'].includes(runtimeName)) this.usesMaps = true
-    if (['lumen_ok', 'lumen_err', 'lumen_is_ok', 'lumen_error_message'].includes(runtimeName)) this.usesResults = true
-    if (['lumen_some', 'lumen_has_value', 'lumen_value_or'].includes(runtimeName)) this.usesOptions = true
-    if (['lumen_json', 'lumen_json_get', 'lumen_json_get_raw', 'lumen_json_set', 'lumen_json_set_path', 'lumen_json_stringify', 'lumen_json_valid'].includes(runtimeName)) this.usesJsonRuntime = true
-    if (['lumen_error_code', 'lumen_error_text'].includes(runtimeName)) this.usesErrorRuntime = true
-    if (runtimeName.startsWith('lumen_string') ||
-      runtimeName.startsWith('lumen_list') ||
-      runtimeName.startsWith('lumen_map_') ||
-      ['lumen_exec', 'lumen_source_snippet', 'lumen_tokenize_source', 'lumen_parse_summary', 'lumen_compiler_image'].includes(runtimeName)) {
-      this.usesStringRuntime = true
-    }
+  emitRuntimeCall(tokens, builtin) {
+    const abi = runtimeSignature(builtin.runtime)
+    if (!abi) throw new Diagnostic(`Missing runtime ABI for ${builtin.name}`, tokens[0].location, 'backend')
+    this[abi.flag] = true
 
     const args = this.callArguments(tokens)
-    if (args.length !== expectedCount) {
-      throw new Diagnostic(`${displayName} expects ${expectedCount} argument(s)`, tokens[0].location, 'backend')
+    if (args.length !== builtin.parameters.length) {
+      throw new Diagnostic(`${builtin.name} expects ${builtin.parameters.length} argument(s)`, tokens[0].location, 'backend')
     }
 
     const values = args.map(arg => this.emitExpression({
@@ -655,12 +648,12 @@ class BuiltinLowering {
     const result = this.nextTemp()
     const signature = values.map(() => 'ptr').join(', ')
     const callArgs = values.map(value => `ptr ${value.value}`).join(', ')
-    const llvmReturnType = this.llvmType(returnType)
+    const llvmReturnType = this.llvmType(builtin.returnType)
 
-    this.lines.push(`  ${result} = call ${llvmReturnType} @${runtimeName}(${signature ? `${callArgs}` : ''})`)
+    this.lines.push(`  ${result} = call ${llvmReturnType} @${abi.symbol}(${signature ? `${callArgs}` : ''})`)
 
     return {
-      type: returnType,
+      type: builtin.returnType,
       value: result
     }
   }

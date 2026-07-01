@@ -62,7 +62,7 @@ Project audit: 2026-06-30
   use before initialization, fully validate match arms, and define generic,
   nullable, Result, and collection variance rules.
 
-- [ ] Define one built-in/runtime ABI registry.
+- [x] Define one built-in/runtime ABI registry.
   Function names and signatures are duplicated across module registry, expression
   inspection, type checking, emitter code, and C. Generate or consume these tables
   from one typed definition and fail when implementations drift.

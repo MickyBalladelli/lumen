@@ -331,7 +331,10 @@ export class ExpressionInspector {
       return this.typeSystem.elementType(collection)
     }
     const builtin = builtinSignature(name)
-    if (builtin) return builtin.returnType
+    if (builtin) {
+      this.validateBuiltinCall(node, builtin)
+      return builtin.returnType
+    }
 
     const symbol = this.scope.resolve(name)
     if (symbol?.kind !== 'function') return LumenTypes.Unknown
@@ -350,6 +353,39 @@ export class ExpressionInspector {
       }
     }
     return symbol.type ?? LumenTypes.Unknown
+  }
+
+  validateBuiltinCall(node, builtin) {
+    if (!builtin.variadic && node.arguments.length !== builtin.parameters.length) {
+      throw new Diagnostic(
+        `${builtin.name} expects ${builtin.parameters.length} argument(s)`,
+        node.location,
+        'type'
+      )
+    }
+
+    for (const [index, argument] of node.arguments.entries()) {
+      const expected = builtin.parameters[Math.min(index, builtin.parameters.length - 1)] ?? 'any'
+      const actual = this.inferNode(argument)
+
+      if (!this.builtinTypeAccepts(actual, expected)) {
+        throw new Diagnostic(`Cannot pass ${actual} to ${expected}`, argument.location, 'type')
+      }
+    }
+  }
+
+  builtinTypeAccepts(actual, expected) {
+    if (expected === 'any' || expected.includes('T') || expected.includes('->')) return true
+    if (expected === 'number') return this.typeSystem.isNumeric(actual)
+    if (expected === 'number[]') {
+      return this.typeSystem.isArray(actual) &&
+        this.typeSystem.isNumeric(this.typeSystem.elementType(actual))
+    }
+    if (expected === 'collection') {
+      return actual === LumenTypes.String || this.typeSystem.isArray(actual)
+    }
+    if (expected === 'function') return true
+    return this.typeSystem.canAssign(actual, expected)
   }
 
   numericPairType(node, name) {
