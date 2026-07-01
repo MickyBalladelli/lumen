@@ -57,7 +57,7 @@ Project audit: 2026-06-30
   Separate control flow, values, aggregates, built-ins, debug metadata, and runtime
   ABI declarations. Add small golden LLVM tests for each lowering family.
 
-- [ ] Strengthen the type checker.
+- [x] Strengthen the type checker.
   Require boolean conditions, prove non-void functions return on every path, reject
   use before initialization, fully validate match arms, and define generic,
   nullable, Result, and collection variance rules.

@@ -84,3 +84,228 @@ test('failed compilation does not poison later compilations', () => {
     /Unknown type "FailedType"/
   )
 })
+
+test('conditions must be boolean', () => {
+  assert.throws(
+    () => compile([
+      'function main(): i32 {',
+      '  if 1 {',
+      '    return 1',
+      '  }',
+      '  return 0',
+      '}'
+    ].join('\n')),
+    /if condition must be bool, got i32/
+  )
+
+  assert.throws(
+    () => compile([
+      'function main(): i32 {',
+      '  while "yes" {',
+      '    return 1',
+      '  }',
+      '  return 0',
+      '}'
+    ].join('\n')),
+    /while condition must be bool, got string/
+  )
+})
+
+test('non-void functions must return on every path', () => {
+  assert.doesNotThrow(() => compile([
+    'function choose(flag: bool): i32 {',
+    '  if flag {',
+    '    return 1',
+    '  } else {',
+    '    return 2',
+    '  }',
+    '}',
+    'function main(): i32 {',
+    '  return choose(true)',
+    '}'
+  ].join('\n')))
+
+  assert.throws(
+    () => compile([
+      'function choose(flag: bool): i32 {',
+      '  if flag {',
+      '    return 1',
+      '  }',
+      '}',
+      'function main(): i32 {',
+      '  return 0',
+      '}'
+    ].join('\n')),
+    /does not return on every path/
+  )
+
+  assert.throws(
+    () => compile([
+      'function choose(value: i32): i32 {',
+      '  switch value {',
+      '    case 1 {',
+      '      break;',
+      '      return 1',
+      '    }',
+      '    default {',
+      '      return 2',
+      '    }',
+      '  }',
+      '}',
+      'function main(): i32 {',
+      '  return choose(1)',
+      '}'
+    ].join('\n')),
+    /does not return on every path/
+  )
+})
+
+test('variables must be initialized before use on every path', () => {
+  assert.throws(
+    () => compile([
+      'function main(): i32 {',
+      '  let value: i32',
+      '  return value',
+      '}'
+    ].join('\n')),
+    /used before initialization/
+  )
+
+  assert.doesNotThrow(() => compile([
+    'function choose(flag: bool): i32 {',
+    '  let value: i32',
+    '  if flag {',
+    '    value = 1',
+    '  } else {',
+    '    value = 2',
+    '  }',
+    '  return value',
+    '}',
+    'function main(): i32 {',
+    '  return choose(true)',
+    '}'
+  ].join('\n')))
+
+  assert.throws(
+    () => compile([
+      'function choose(flag: bool): i32 {',
+      '  let value: i32',
+      '  if flag {',
+      '    value = 1',
+      '  }',
+      '  return value',
+      '}',
+      'function main(): i32 {',
+      '  return choose(true)',
+      '}'
+    ].join('\n')),
+    /used before initialization/
+  )
+})
+
+test('match validates coverage, ordering, patterns, and arm types', () => {
+  assert.doesNotThrow(() => compile([
+    'enum Status {',
+    '  Ready',
+    '  Done',
+    '}',
+    'function main(): i32 {',
+    '  let status: Status = Ready',
+    '  return match status {',
+    '    Ready => 1',
+    '    Done => 2',
+    '  }',
+    '}'
+  ].join('\n')))
+
+  assert.throws(
+    () => compile([
+      'enum Status {',
+      '  Ready',
+      '  Done',
+      '}',
+      'function main(): i32 {',
+      '  let status: Status = Ready',
+      '  return match status {',
+      '    Ready => 1',
+      '  }',
+      '}'
+    ].join('\n')),
+    /Match is missing Done/
+  )
+
+  assert.throws(
+    () => compile([
+      'function main(): i32 {',
+      '  return match true {',
+      '    _ => 1',
+      '    false => 2',
+      '  }',
+      '}'
+    ].join('\n')),
+    /wildcard must be last/
+  )
+
+  assert.throws(
+    () => compile([
+      'function main(): i32 {',
+      '  return match true {',
+      '    true => 1',
+      '    false => "no"',
+      '  }',
+      '}'
+    ].join('\n')),
+    /Match arms return i32 and string/
+  )
+})
+
+test('type system defines nullable and generic variance', () => {
+  const types = new TypeSystem()
+
+  assert.equal(types.canAssign('i32', 'i32?'), true)
+  assert.equal(types.canAssign('i32?', 'i32'), false)
+  assert.equal(types.canAssign('i32?', 'i64?'), true)
+  assert.equal(types.canAssign('Result<i32>', 'Result<i64>'), true)
+  assert.equal(types.canAssign('Result<i32>', 'Result<string>'), false)
+  assert.equal(types.canAssign('Map<i32,string>', 'Map<i64,string>'), false)
+  assert.equal(types.canAssign('i32[]', 'i64[]'), false)
+  assert.equal(types.canAssign('Result<i32>', 'string'), false)
+  assert.equal(types.assertKnown('Other<i32>'), false)
+  assert.equal(types.assertKnown('Result<i32,string>'), false)
+})
+
+test('collections validate element and lookup types', () => {
+  assert.doesNotThrow(() => compile('let values: i64[] = [1, 2]'))
+
+  assert.throws(
+    () => compile('let values = [1, "two"]'),
+    /Array elements have types i32 and string/
+  )
+
+  assert.throws(
+    () => compile([
+      'function main(): i32 {',
+      '  let values: i32[] = [1, 2]',
+      '  if includes(values, "two") {',
+      '    return 1',
+      '  }',
+      '  return 0',
+      '}'
+    ].join('\n')),
+    /Cannot search i32\[\] for string/
+  )
+})
+
+test('nullable generic types and first assignment are checked', () => {
+  assert.doesNotThrow(() => compile([
+    'function main(): i32 {',
+    '  let result: Result<i32>? = some(ok(1))',
+    '  let value',
+    '  value = 2',
+    '  if hasValue(result) {',
+    '    return value',
+    '  }',
+    '  return 0',
+    '}'
+  ].join('\n')))
+})

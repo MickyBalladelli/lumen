@@ -131,7 +131,14 @@ export class ExpressionInspector {
     if (node.kind === 'IdentifierExpression') return this.identifierType(node)
     if (node.kind === 'AwaitExpression') return this.inferNode(node.argument)
     if (node.kind === 'UnaryExpression') {
-      return node.operator === '!' ? LumenTypes.Bool : this.inferNode(node.argument)
+      const argument = this.inferNode(node.argument)
+      if (node.operator === '!') {
+        if (argument !== LumenTypes.Bool) {
+          throw new Diagnostic(`Operator ! needs bool, got ${argument}`, node.location, 'type')
+        }
+        return LumenTypes.Bool
+      }
+      return argument
     }
     if (node.kind === 'BinaryExpression') return this.binaryType(node)
     if (node.kind === 'CallExpression') return this.callType(node)
@@ -161,8 +168,24 @@ export class ExpressionInspector {
     if (!node) return
 
     if (node.kind === 'IdentifierExpression') {
-      if (locals.has(node.name) || this.scope.resolve(node.name) || this.typeSystem.enumVariant(node.name)) return
+      const symbol = this.scope.resolve(node.name)
+      if (symbol?.initialized === false) {
+        throw new Diagnostic(`Variable "${node.name}" is used before initialization`, node.location, 'type')
+      }
+      if (locals.has(node.name) || symbol || this.typeSystem.enumVariant(node.name)) return
       throw new Diagnostic(`Unknown symbol "${node.name}"`, node.location, 'semantic')
+    }
+
+    if (node.kind === 'AssignmentExpression') {
+      this.validateNode(node.right, locals)
+      if (node.left.kind === 'IdentifierExpression') {
+        if (!this.scope.resolve(node.left.name)) {
+          throw new Diagnostic(`Unknown symbol "${node.left.name}"`, node.left.location, 'semantic')
+        }
+      } else {
+        this.validateNode(node.left, locals)
+      }
+      return
     }
 
     if (node.kind === 'CallExpression') {
@@ -225,7 +248,24 @@ export class ExpressionInspector {
     const left = this.inferNode(node.left)
     const right = this.inferNode(node.right)
 
-    if (['<', '<=', '>', '>=', '==', '===', '!=', '!==', '&&', '||'].includes(node.operator)) {
+    if (['&&', '||'].includes(node.operator)) {
+      if (left !== LumenTypes.Bool || right !== LumenTypes.Bool) {
+        throw new Diagnostic(`Operator ${node.operator} needs bool operands`, node.location, 'type')
+      }
+      return LumenTypes.Bool
+    }
+
+    if (['<', '<=', '>', '>='].includes(node.operator)) {
+      if (!this.typeSystem.isNumeric(left) || !this.typeSystem.isNumeric(right)) {
+        throw new Diagnostic(`Operator ${node.operator} needs numbers`, node.location, 'type')
+      }
+      return LumenTypes.Bool
+    }
+
+    if (['==', '===', '!=', '!=='].includes(node.operator)) {
+      if (!this.typeSystem.canAssign(left, right) && !this.typeSystem.canAssign(right, left)) {
+        throw new Diagnostic(`Cannot compare ${left} with ${right}`, node.location, 'type')
+      }
       return LumenTypes.Bool
     }
 
@@ -250,7 +290,13 @@ export class ExpressionInspector {
         throw new Diagnostic('filter expects array and predicate', node.location, 'semantic')
       }
       const collectionType = this.inferNode(node.arguments[0])
+      if (!this.typeSystem.isArray(collectionType)) {
+        throw new Diagnostic('filter expects an array', node.location, 'type')
+      }
       const predicate = node.arguments[1]
+      if (predicate.params.length !== 1) {
+        throw new Diagnostic('filter predicate expects one parameter', predicate.location, 'type')
+      }
       const parameterType = this.typeSystem.elementType(collectionType) ?? LumenTypes.Unknown
       const predicateScope = new Scope(this.scope)
       predicate.params[0].inferredType = parameterType
@@ -268,7 +314,10 @@ export class ExpressionInspector {
         this.httpLibrary,
         this.threadLibrary
       )
-      predicateInspector.inferNode(predicate.body)
+      const predicateType = predicateInspector.inferNode(predicate.body)
+      if (predicateType !== LumenTypes.Bool) {
+        throw new Diagnostic(`filter predicate must return bool, got ${predicateType}`, predicate.location, 'type')
+      }
       predicate.inferredType = LumenTypes.Unknown
       return collectionType
     }
@@ -280,12 +329,31 @@ export class ExpressionInspector {
       if (collection !== LumenTypes.String && !this.typeSystem.isArray(collection)) {
         throw new Diagnostic('includes needs string or array', node.location, 'semantic')
       }
+      if (this.typeSystem.isArray(collection)) {
+        const valueType = this.inferNode(node.arguments[1])
+        const elementType = this.typeSystem.elementType(collection)
+        if (!this.typeSystem.canAssign(valueType, elementType)) {
+          throw new Diagnostic(`Cannot search ${collection} for ${valueType}`, node.location, 'type')
+        }
+      }
       return LumenTypes.Bool
     }
     if (name === SystemFunctions.Ok) {
+      if (node.arguments.length !== 1) {
+        throw new Diagnostic('ok expects one value', node.location, 'semantic')
+      }
       return `Result<${node.arguments[0] ? this.inferNode(node.arguments[0]) : LumenTypes.Unknown}>`
     }
+    if (name === SystemFunctions.Err) {
+      if (node.arguments.length !== 1 || this.inferNode(node.arguments[0]) !== LumenTypes.String) {
+        throw new Diagnostic('err expects one string', node.location, 'type')
+      }
+      return 'Result<unknown>'
+    }
     if (name === SystemFunctions.ResultValue) {
+      if (node.arguments.length !== 1) {
+        throw new Diagnostic('resultValue expects Result<T>', node.location, 'semantic')
+      }
       const result = node.arguments[0] ? this.inferNode(node.arguments[0]) : LumenTypes.Unknown
       if (!this.typeSystem.isGeneric(result) || this.typeSystem.genericBase(result) !== 'Result') {
         throw new Diagnostic('resultValue expects Result<T>', node.location, 'semantic')
@@ -293,19 +361,59 @@ export class ExpressionInspector {
       return this.typeSystem.genericArgs(result)[0] ?? LumenTypes.Unknown
     }
     if (name === SystemFunctions.Some) {
-      return `${node.arguments[0] ? this.inferNode(node.arguments[0]) : LumenTypes.Unknown}?`
+      if (node.arguments.length !== 1) {
+        throw new Diagnostic('some expects one value', node.location, 'semantic')
+      }
+      const value = node.arguments[0] ? this.inferNode(node.arguments[0]) : LumenTypes.Unknown
+      return this.typeSystem.isNullable(value) ? value : `${value}?`
+    }
+    if (name === SystemFunctions.None) {
+      if (node.arguments.length !== 0) {
+        throw new Diagnostic('none expects no values', node.location, 'semantic')
+      }
+      return LumenTypes.Unknown
+    }
+    if (name === SystemFunctions.HasValue) {
+      if (node.arguments.length !== 1) {
+        throw new Diagnostic('hasValue expects one nullable value', node.location, 'semantic')
+      }
+      const maybe = this.inferNode(node.arguments[0])
+      if (!this.typeSystem.isNullable(maybe)) {
+        throw new Diagnostic(`hasValue expects nullable value, got ${maybe}`, node.location, 'type')
+      }
+      return LumenTypes.Bool
     }
     if (name === SystemFunctions.ValueOr) {
+      if (node.arguments.length !== 2) {
+        throw new Diagnostic('valueOr expects nullable value and fallback', node.location, 'semantic')
+      }
       const maybe = node.arguments[0] ? this.inferNode(node.arguments[0]) : LumenTypes.Unknown
-      return this.typeSystem.isNullable(maybe)
-        ? this.typeSystem.nonNullable(maybe)
-        : node.arguments[1] ? this.inferNode(node.arguments[1]) : LumenTypes.Unknown
+      if (!this.typeSystem.isNullable(maybe)) {
+        throw new Diagnostic(`valueOr expects nullable value, got ${maybe}`, node.location, 'type')
+      }
+      const valueType = this.typeSystem.nonNullable(maybe)
+      const fallbackType = this.inferNode(node.arguments[1])
+      if (!this.typeSystem.canAssign(fallbackType, valueType)) {
+        throw new Diagnostic(`Cannot use ${fallbackType} as fallback for ${maybe}`, node.location, 'type')
+      }
+      return valueType
+    }
+    if (name === SystemFunctions.IsOk || name === SystemFunctions.ErrorMessage) {
+      if (node.arguments.length !== 1) {
+        throw new Diagnostic(`${name} expects one Result<T>`, node.location, 'semantic')
+      }
+      const result = this.inferNode(node.arguments[0])
+      if (!this.typeSystem.isGeneric(result) || this.typeSystem.genericBase(result) !== 'Result') {
+        throw new Diagnostic(`${name} expects Result<T>, got ${result}`, node.location, 'type')
+      }
+      return name === SystemFunctions.IsOk ? LumenTypes.Bool : LumenTypes.String
     }
     if (name === SystemFunctions.ArrayFirst || name === SystemFunctions.ArrayLast) {
       const collection = node.arguments[0] ? this.inferNode(node.arguments[0]) : LumenTypes.Unknown
-      return this.typeSystem.isArray(collection)
-        ? this.typeSystem.elementType(collection)
-        : LumenTypes.Unknown
+      if (node.arguments.length !== 1 || !this.typeSystem.isArray(collection)) {
+        throw new Diagnostic(`${name} expects an array`, node.location, 'type')
+      }
+      return this.typeSystem.elementType(collection)
     }
     if (FIXED_CALL_TYPES.has(name)) return FIXED_CALL_TYPES.get(name)
 
@@ -347,11 +455,26 @@ export class ExpressionInspector {
         if (objectType !== LumenTypes.String) {
           throw new Diagnostic('Slice needs string', node.location, 'semantic')
         }
+        for (const bound of [node.property.start, node.property.end]) {
+          if (bound && this.inferNode(bound) !== LumenTypes.I32) {
+            throw new Diagnostic('Slice bounds must be i32', bound.location, 'type')
+          }
+        }
         return LumenTypes.String
       }
-      if (objectType === LumenTypes.String) return LumenTypes.String
+      if (objectType === LumenTypes.String) {
+        const indexType = this.inferNode(node.property)
+        if (indexType !== LumenTypes.I32) {
+          throw new Diagnostic(`String index must be i32, got ${indexType}`, node.property.location, 'type')
+        }
+        return LumenTypes.String
+      }
       if (!this.typeSystem.isArray(objectType)) {
         throw new Diagnostic('Expected array', node.location, 'semantic')
+      }
+      const indexType = this.inferNode(node.property)
+      if (indexType !== LumenTypes.I32) {
+        throw new Diagnostic(`Array index must be i32, got ${indexType}`, node.property.location, 'type')
       }
       return this.typeSystem.elementType(objectType)
     }
@@ -369,26 +492,63 @@ export class ExpressionInspector {
     if (target !== LumenTypes.Unknown && !this.typeSystem.canAssign(value, target)) {
       throw new Diagnostic(`Cannot assign ${value} to ${target}`, node.location, 'type')
     }
+    if (node.left.kind === 'IdentifierExpression') {
+      const symbol = this.scope.resolve(node.left.name)
+      if (symbol) {
+        symbol.initialized = true
+        if (symbol.type === LumenTypes.Unknown) {
+          symbol.type = value
+          if (symbol.node) symbol.node.inferredType = value
+          node.left.inferredType = value
+        }
+      }
+    }
     return target === LumenTypes.Unknown ? value : target
   }
 
   arrayType(node) {
-    if (node.elements.length === 0) return LumenTypes.Unknown
+    if (node.elements.length === 0) return `${LumenTypes.Unknown}[]`
     let type = this.inferNode(node.elements[0])
     for (const element of node.elements.slice(1)) {
       const elementType = this.inferNode(element)
       if (this.typeSystem.isNumeric(type) && this.typeSystem.isNumeric(elementType)) {
         type = this.typeSystem.widest(type, elementType)
+      } else if (this.typeSystem.canAssign(elementType, type)) {
+        continue
+      } else if (this.typeSystem.canAssign(type, elementType)) {
+        type = elementType
+      } else {
+        throw new Diagnostic(`Array elements have types ${type} and ${elementType}`, element.location, 'type')
       }
     }
     return `${type}[]`
   }
 
   matchType(node) {
-    if (node.arms.length === 0) return LumenTypes.Unknown
+    if (node.arms.length === 0) {
+      throw new Diagnostic('Match needs at least one arm', node.location, 'type')
+    }
     const discriminantType = this.inferNode(node.discriminant)
-    for (const arm of node.arms) {
-      if (!arm.pattern) continue
+    const seenPatterns = new Set()
+    let hasWildcard = false
+
+    for (const [index, arm] of node.arms.entries()) {
+      if (!arm.pattern) {
+        if (hasWildcard) {
+          throw new Diagnostic('Match has duplicate wildcard arm', arm.location, 'type')
+        }
+        if (index !== node.arms.length - 1) {
+          throw new Diagnostic('Match wildcard must be last', arm.location, 'type')
+        }
+        hasWildcard = true
+        continue
+      }
+      if (!['LiteralExpression', 'IdentifierExpression'].includes(arm.pattern.kind)) {
+        throw new Diagnostic('Match pattern must be a literal, enum variant, or wildcard', arm.location, 'type')
+      }
+      if (arm.pattern.kind === 'IdentifierExpression' && !this.typeSystem.enumVariant(arm.pattern.name)) {
+        throw new Diagnostic('Match identifier pattern must be an enum variant', arm.location, 'type')
+      }
       const patternType = this.inferNode(arm.pattern)
       if (!this.typeSystem.canAssign(patternType, discriminantType) &&
         !this.typeSystem.canAssign(discriminantType, patternType)) {
@@ -398,6 +558,27 @@ export class ExpressionInspector {
           'type'
         )
       }
+      const key = arm.pattern.kind === 'IdentifierExpression'
+        ? `enum:${arm.pattern.name}`
+        : `literal:${arm.pattern.token.lexeme}`
+      if (seenPatterns.has(key)) {
+        throw new Diagnostic('Match has duplicate pattern', arm.location, 'type')
+      }
+      seenPatterns.add(key)
+    }
+
+    const enumType = this.typeSystem.getEnum(discriminantType)
+    if (!hasWildcard && enumType) {
+      const missing = enumType.variants.filter(variant => !seenPatterns.has(`enum:${variant.name}`))
+      if (missing.length > 0) {
+        throw new Diagnostic(`Match is missing ${missing.map(variant => variant.name).join(', ')}`, node.location, 'type')
+      }
+    } else if (!hasWildcard && discriminantType === LumenTypes.Bool) {
+      if (!seenPatterns.has('literal:true') || !seenPatterns.has('literal:false')) {
+        throw new Diagnostic('Match on bool needs true and false arms', node.location, 'type')
+      }
+    } else if (!hasWildcard && !enumType) {
+      throw new Diagnostic(`Match on ${discriminantType} needs a wildcard arm`, node.location, 'type')
     }
 
     let type = this.inferNode(node.arms[0].value)
@@ -405,7 +586,11 @@ export class ExpressionInspector {
       const armType = this.inferNode(arm.value)
       if (this.typeSystem.isNumeric(type) && this.typeSystem.isNumeric(armType)) {
         type = this.typeSystem.widest(type, armType)
-      } else if (!this.typeSystem.canAssign(armType, type) && !this.typeSystem.canAssign(type, armType)) {
+      } else if (this.typeSystem.canAssign(armType, type)) {
+        continue
+      } else if (this.typeSystem.canAssign(type, armType)) {
+        type = armType
+      } else {
         throw new Diagnostic(`Match arms return ${type} and ${armType}`, arm.location, 'type')
       }
     }

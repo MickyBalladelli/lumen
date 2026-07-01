@@ -106,11 +106,15 @@ export class TypeChecker {
         kind: 'param',
         node: param,
         type: paramType,
-        mutable: false
+        mutable: false,
+        initialized: true
       })
     }
 
     this.checkNode(node.body, scope, node)
+    if (returnType !== LumenTypes.Void && !this.alwaysReturns(node.body)) {
+      throw new Diagnostic(`Function "${node.name.name}" does not return on every path`, node.location, 'type')
+    }
     return returnType
   }
 
@@ -143,7 +147,11 @@ export class TypeChecker {
         : expected ?? LumenTypes.Unknown
       const finalType = expected ?? actual
 
-      if (expected && actual !== LumenTypes.Unknown && !this.typeSystem.canAssign(actual, expected)) {
+      const isArrayLiteral = declaration.initializer?.parsed?.kind === 'ArrayExpression'
+      if (expected &&
+        actual !== LumenTypes.Unknown &&
+        !isArrayLiteral &&
+        !this.typeSystem.canAssign(actual, expected)) {
         throw new Diagnostic(`Cannot assign ${actual} to ${expected}`, declaration.location, 'type')
       }
 
@@ -160,7 +168,8 @@ export class TypeChecker {
         kind: 'variable',
         node: declaration,
         type: finalType,
-        mutable: node.declarationKind === 'let'
+        mutable: node.declarationKind === 'let',
+        initialized: Boolean(declaration.initializer)
       })
     }
 
@@ -176,9 +185,11 @@ export class TypeChecker {
       this.checkExpression(node.init, scope)
     }
 
-    if (node.test) this.checkExpression(node.test, scope)
-    if (node.update) this.checkExpression(node.update, scope)
+    if (node.test) this.checkCondition(node.test, scope, 'for')
+    const beforeLoop = this.captureInitialization(scope)
     this.withLoop(() => this.checkNode(node.body, scope, currentFunction))
+    if (node.update) this.checkExpression(node.update, scope)
+    this.restoreInitialization(beforeLoop)
     return LumenTypes.Void
   }
 
@@ -199,44 +210,58 @@ export class TypeChecker {
       kind: 'variable',
       node: node.item,
       type: itemType,
-      mutable: false
+      mutable: false,
+      initialized: true
     })
 
+    const beforeLoop = this.captureInitialization(parentScope)
     this.withLoop(() => this.checkNode(node.body, scope, currentFunction))
+    this.restoreInitialization(beforeLoop)
     return LumenTypes.Void
   }
 
   checkForRange(node, parentScope, currentFunction) {
-    this.checkExpression(node.start, parentScope)
-    this.checkExpression(node.end, parentScope)
+    const startType = this.checkExpression(node.start, parentScope)
+    const endType = this.checkExpression(node.end, parentScope)
+    if (!this.typeSystem.isNumeric(startType) || !this.typeSystem.isNumeric(endType)) {
+      throw new Diagnostic('Range bounds must be numbers', node.location, 'type')
+    }
     const scope = new Scope(parentScope)
     node.item.inferredType = LumenTypes.I32
     scope.define(node.item.name, {
       kind: 'variable',
       node: node.item,
       type: LumenTypes.I32,
-      mutable: false
+      mutable: false,
+      initialized: true
     })
+    const beforeLoop = this.captureInitialization(parentScope)
     this.withLoop(() => this.checkNode(node.body, scope, currentFunction))
+    this.restoreInitialization(beforeLoop)
     return LumenTypes.Void
   }
 
   checkWhile(node, parentScope, currentFunction) {
-    this.checkExpression(node.test, parentScope)
+    this.checkCondition(node.test, parentScope, 'while')
+    const beforeLoop = this.captureInitialization(parentScope)
     this.withLoop(() => this.checkNode(node.body, new Scope(parentScope), currentFunction))
+    this.restoreInitialization(beforeLoop)
     return LumenTypes.Void
   }
 
   checkDoUntil(node, parentScope, currentFunction) {
     this.withLoop(() => this.checkNode(node.body, new Scope(parentScope), currentFunction))
-    this.checkExpression(node.test, parentScope)
+    this.checkCondition(node.test, parentScope, 'until')
     return LumenTypes.Void
   }
 
   withLoop(callback) {
     this.loopDepth += 1
-    callback()
-    this.loopDepth -= 1
+    try {
+      callback()
+    } finally {
+      this.loopDepth -= 1
+    }
   }
 
   checkLoopControl(node, name) {
@@ -250,9 +275,22 @@ export class TypeChecker {
   }
 
   checkIf(node, parentScope, currentFunction) {
-    this.checkExpression(node.test, parentScope)
+    this.checkCondition(node.test, parentScope, 'if')
+    const before = this.captureInitialization(parentScope)
     this.checkNode(node.consequent, this.narrowedScope(node.test, parentScope), currentFunction)
-    if (node.alternate) this.checkNode(node.alternate, new Scope(parentScope), currentFunction)
+    const consequentState = this.captureInitialization(parentScope)
+    this.restoreInitialization(before)
+
+    let alternateState = before
+    if (node.alternate) {
+      this.checkNode(node.alternate, new Scope(parentScope), currentFunction)
+      alternateState = this.captureInitialization(parentScope)
+    }
+
+    const continuingStates = []
+    if (!this.alwaysReturns(node.consequent)) continuingStates.push(consequentState)
+    if (!node.alternate || !this.alwaysReturns(node.alternate)) continuingStates.push(alternateState)
+    this.mergeInitialization(before, continuingStates)
     return LumenTypes.Void
   }
 
@@ -281,19 +319,38 @@ export class TypeChecker {
 
   checkSwitch(node, parentScope, currentFunction) {
     const discriminantType = this.checkExpression(node.discriminant, parentScope)
+    const before = this.captureInitialization(parentScope)
+    const continuingStates = []
 
     this.switchDepth += 1
-    for (const switchCase of node.cases) {
-      const caseType = this.checkExpression(switchCase.test, parentScope)
-      if (!this.typeSystem.canAssign(caseType, discriminantType) && !this.typeSystem.canAssign(discriminantType, caseType)) {
-        throw new Diagnostic(`Cannot compare switch ${discriminantType} with case ${caseType}`, switchCase.location, 'type')
+    try {
+      for (const switchCase of node.cases) {
+        this.restoreInitialization(before)
+        const caseType = this.checkExpression(switchCase.test, parentScope)
+        if (!this.typeSystem.canAssign(caseType, discriminantType) && !this.typeSystem.canAssign(discriminantType, caseType)) {
+          throw new Diagnostic(`Cannot compare switch ${discriminantType} with case ${caseType}`, switchCase.location, 'type')
+        }
+
+        this.checkNode(switchCase.body, new Scope(parentScope), currentFunction)
+        if (!this.alwaysReturns(switchCase.body)) {
+          continuingStates.push(this.captureInitialization(parentScope))
+        }
       }
 
-      this.checkNode(switchCase.body, new Scope(parentScope), currentFunction)
+      this.restoreInitialization(before)
+      if (node.defaultCase) {
+        this.checkNode(node.defaultCase, new Scope(parentScope), currentFunction)
+        if (!this.alwaysReturns(node.defaultCase)) {
+          continuingStates.push(this.captureInitialization(parentScope))
+        }
+      } else {
+        continuingStates.push(before)
+      }
+    } finally {
+      this.switchDepth -= 1
     }
 
-    if (node.defaultCase) this.checkNode(node.defaultCase, new Scope(parentScope), currentFunction)
-    this.switchDepth -= 1
+    this.mergeInitialization(before, continuingStates)
     return LumenTypes.Void
   }
 
@@ -319,7 +376,10 @@ export class TypeChecker {
   }
 
   checkTryCatch(node, parentScope, currentFunction) {
+    const before = this.captureInitialization(parentScope)
     this.checkNode(node.tryBlock, parentScope, currentFunction)
+    const tryState = this.captureInitialization(parentScope)
+    this.restoreInitialization(before)
 
     const catchScope = new Scope(parentScope)
     node.catchParam.inferredType = LumenTypes.String
@@ -327,10 +387,16 @@ export class TypeChecker {
       kind: 'variable',
       node: node.catchParam,
       type: LumenTypes.String,
-      mutable: false
+      mutable: false,
+      initialized: true
     })
 
     this.checkNode(node.catchBlock, catchScope, currentFunction)
+    const catchState = this.captureInitialization(parentScope)
+    const continuingStates = []
+    if (!this.alwaysReturns(node.tryBlock)) continuingStates.push(tryState)
+    if (!this.alwaysReturns(node.catchBlock)) continuingStates.push(catchState)
+    this.mergeInitialization(before, continuingStates)
     return LumenTypes.Void
   }
 
@@ -338,6 +404,121 @@ export class TypeChecker {
     const inspector = new ExpressionInspector(scope, this.typeSystem)
     inspector.validateNames(expression)
     return inspector.infer(expression)
+  }
+
+  checkCondition(expression, scope, construct) {
+    const type = this.checkExpression(expression, scope)
+    if (type !== LumenTypes.Bool) {
+      throw new Diagnostic(`${construct} condition must be bool, got ${type}`, expression.location, 'type')
+    }
+    return type
+  }
+
+  captureInitialization(scope) {
+    const state = new Map()
+    let current = scope
+
+    while (current) {
+      for (const symbol of current.symbols.values()) {
+        if (symbol.initialized !== undefined && !state.has(symbol)) {
+          state.set(symbol, symbol.initialized)
+        }
+      }
+      current = current.parent
+    }
+
+    return state
+  }
+
+  restoreInitialization(state) {
+    for (const [symbol, initialized] of state) symbol.initialized = initialized
+  }
+
+  mergeInitialization(before, states) {
+    if (states.length === 0) {
+      this.restoreInitialization(before)
+      return
+    }
+
+    for (const [symbol, initialized] of before) {
+      symbol.initialized = initialized || states.every(state => state.get(symbol) === true)
+    }
+  }
+
+  alwaysReturns(node) {
+    const outcomes = this.completionKinds(node)
+    return outcomes.size > 0 && [...outcomes].every(outcome => outcome === 'return')
+  }
+
+  completionKinds(node) {
+    if (!node) return new Set(['normal'])
+    if (node.kind === 'ReturnStatement' || node.kind === 'ThrowStatement') return new Set(['return'])
+    if (node.kind === 'BreakStatement') return new Set(['break'])
+    if (node.kind === 'ContinueStatement') return new Set(['continue'])
+
+    if (node.kind === 'BlockStatement') {
+      let outcomes = new Set(['normal'])
+      for (const child of node.body) {
+        if (!outcomes.has('normal')) break
+        outcomes.delete('normal')
+        for (const outcome of this.completionKinds(child)) outcomes.add(outcome)
+      }
+      return outcomes
+    }
+
+    if (node.kind === 'IfStatement') {
+      const outcomes = new Set(this.completionKinds(node.consequent))
+      const alternate = node.alternate
+        ? this.completionKinds(node.alternate)
+        : new Set(['normal'])
+      for (const outcome of alternate) outcomes.add(outcome)
+      return outcomes
+    }
+
+    if (node.kind === 'SwitchStatement') {
+      const outcomes = new Set()
+      for (const switchCase of node.cases) {
+        for (const outcome of this.completionKinds(switchCase.body)) {
+          outcomes.add(outcome === 'break' ? 'normal' : outcome)
+        }
+      }
+      if (node.defaultCase) {
+        for (const outcome of this.completionKinds(node.defaultCase)) {
+          outcomes.add(outcome === 'break' ? 'normal' : outcome)
+        }
+      } else {
+        outcomes.add('normal')
+      }
+      return outcomes
+    }
+
+    if (node.kind === 'TryCatchStatement') {
+      const outcomes = new Set(this.completionKinds(node.tryBlock))
+      for (const outcome of this.completionKinds(node.catchBlock)) outcomes.add(outcome)
+      return outcomes
+    }
+
+    if (node.kind === 'DoUntilStatement') {
+      const outcomes = this.completionKinds(node.body)
+      if (outcomes.has('return') && outcomes.size === 1) return outcomes
+      return new Set(['normal', ...(outcomes.has('return') ? ['return'] : [])])
+    }
+
+    if (node.kind === 'WhileStatement' || node.kind === 'ForStatement') {
+      const test = node.kind === 'WhileStatement'
+        ? node.test?.kind === 'RawExpression' ? node.test.parsed : node.test
+        : null
+      const definitelyRuns = node.kind === 'WhileStatement'
+        ? test?.kind === 'LiteralExpression' && test.token.lexeme === 'true'
+        : !node.test
+      const bodyOutcomes = this.completionKinds(node.body)
+      if (definitelyRuns && bodyOutcomes.size === 1 && bodyOutcomes.has('return')) {
+        return new Set(['return'])
+      }
+      return new Set(['normal', ...(bodyOutcomes.has('return') ? ['return'] : [])])
+    }
+
+    return new Set(['normal'])
   }
 
   checkStructLiteral(expression, typeName, scope) {

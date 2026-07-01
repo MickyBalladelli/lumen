@@ -45,7 +45,15 @@ export class TypeSystem {
     const normalized = this.normalize(typeName)
     if (this.isNullable(normalized)) return this.assertKnown(this.nonNullable(normalized))
     if (this.isArray(normalized)) return this.assertKnown(this.elementType(normalized))
-    if (this.isGeneric(normalized)) return this.genericArgs(normalized).every(arg => this.assertKnown(arg))
+    if (this.isGeneric(normalized)) {
+      const base = this.genericBase(normalized)
+      const args = this.genericArgs(normalized)
+      const arity = base === 'Result' ? 1 : base === 'Map' ? 2 : null
+
+      return arity !== null &&
+        args.length === arity &&
+        args.every(arg => this.assertKnown(arg))
+    }
     return this.known.has(normalized)
   }
 
@@ -78,22 +86,46 @@ export class TypeSystem {
     const to = this.normalize(toType)
 
     if (from === to) return true
-    if (this.isNullable(to) && this.canAssign(from, this.nonNullable(to))) return true
-    if (from === LumenTypes.Unknown && this.isNullable(to)) return true
+    if (this.isNullable(from) || this.isNullable(to)) {
+      if (!this.isNullable(to)) return false
+      if (from === LumenTypes.Unknown) return true
+      return this.isNullable(from)
+        ? this.canAssign(this.nonNullable(from), this.nonNullable(to))
+        : this.canAssign(from, this.nonNullable(to))
+    }
     if (this.isArray(from) || this.isArray(to)) {
       if (this.isArray(from) && this.elementType(from) === LumenTypes.Unknown && this.isArray(to)) return true
       return this.isArray(from) &&
         this.isArray(to) &&
-        this.canAssign(this.elementType(from), this.elementType(to))
+        this.sameType(this.elementType(from), this.elementType(to))
     }
     if (this.isGeneric(from) && this.isGeneric(to)) return this.canAssignGeneric(from, to)
-    if (this.isGeneric(to) && from === LumenTypes.String) return true
-    if (this.isGeneric(from) && to === LumenTypes.String) return true
+    if (this.genericBase(to) === 'Map' && from === LumenTypes.String) return true
+    if (this.genericBase(from) === 'Map' && to === LumenTypes.String) return true
     if (to === LumenTypes.Json && from === LumenTypes.String) return true
     if (to === LumenTypes.Error && from === LumenTypes.String) return true
     if (this.isGeneric(from) || this.isGeneric(to)) return from === to
     if (from === LumenTypes.I32 && [LumenTypes.I64, LumenTypes.F32].includes(to)) return true
-    if (from === LumenTypes.Bool && this.isNumeric(to)) return true
+
+    return false
+  }
+
+  sameType(leftType, rightType) {
+    const left = this.normalize(leftType)
+    const right = this.normalize(rightType)
+
+    if (left === right) return true
+    if (this.isArray(left) && this.isArray(right)) {
+      return this.sameType(this.elementType(left), this.elementType(right))
+    }
+    if (this.isNullable(left) && this.isNullable(right)) {
+      return this.sameType(this.nonNullable(left), this.nonNullable(right))
+    }
+    if (this.isGeneric(left) && this.isGeneric(right)) {
+      return this.genericBase(left) === this.genericBase(right) &&
+        this.genericArgs(left).length === this.genericArgs(right).length &&
+        this.genericArgs(left).every((arg, index) => this.sameType(arg, this.genericArgs(right)[index]))
+    }
 
     return false
   }
@@ -145,7 +177,22 @@ export class TypeSystem {
 
   genericArgs(typeName) {
     if (!this.isGeneric(typeName)) return []
-    return typeName.slice(typeName.indexOf('<') + 1, -1).split(',').map(type => type.trim())
+    const source = typeName.slice(typeName.indexOf('<') + 1, -1)
+    const args = []
+    let depth = 0
+    let start = 0
+
+    for (let index = 0; index < source.length; index += 1) {
+      if (source[index] === '<') depth += 1
+      if (source[index] === '>') depth -= 1
+      if (source[index] === ',' && depth === 0) {
+        args.push(source.slice(start, index).trim())
+        start = index + 1
+      }
+    }
+
+    args.push(source.slice(start).trim())
+    return args
   }
 
   genericBase(typeName) {
@@ -153,11 +200,18 @@ export class TypeSystem {
   }
 
   canAssignGeneric(from, to) {
-    if (this.genericBase(from) !== this.genericBase(to)) return false
+    const base = this.genericBase(from)
+    if (base !== this.genericBase(to)) return false
 
     const fromArgs = this.genericArgs(from)
     const toArgs = this.genericArgs(to)
     if (fromArgs.length !== toArgs.length) return false
+
+    if (base === 'Map') {
+      return fromArgs.every((arg, index) => this.sameType(arg, toArgs[index]))
+    }
+
+    if (base !== 'Result') return false
 
     return fromArgs.every((arg, index) => {
       return arg === LumenTypes.Unknown ||

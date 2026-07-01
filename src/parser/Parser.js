@@ -448,15 +448,6 @@ export class Parser {
     const token = this.consume(TokenType.Identifier, 'Expected type name')
     let name = token.lexeme
 
-    if (this.matchPunctuation('[')) {
-      this.consumePunctuation(']', 'Expected "]" after array type')
-      name = `${name}[]`
-    }
-
-    if (this.matchOperator('?')) {
-      name = `${name}?`
-    }
-
     if (this.matchOperator('<')) {
       const args = []
       do {
@@ -464,6 +455,15 @@ export class Parser {
       } while (this.matchPunctuation(','))
       this.consumeOperator('>', 'Expected ">" after generic type arguments')
       name = `${name}<${args.join(',')}>`
+    }
+
+    if (this.matchPunctuation('[')) {
+      this.consumePunctuation(']', 'Expected "]" after array type')
+      name = `${name}[]`
+    }
+
+    if (this.matchOperator('?')) {
+      name = `${name}?`
     }
 
     return new TypeAnnotationNode(name, token.location)
