@@ -67,7 +67,7 @@ Project audit: 2026-06-30
   inspection, type checking, emitter code, and C. Generate or consume these tables
   from one typed definition and fail when implementations drift.
 
-- [ ] Make diagnostics module-aware and recoverable.
+- [x] Make diagnostics module-aware and recoverable.
   Preserve file/range data through parsing, module loading, IR, and LLVM emission.
   Report multiple diagnostics per run with snippets, notes, and imported-file paths.
 

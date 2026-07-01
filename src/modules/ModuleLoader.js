@@ -2,7 +2,11 @@ import { access, readFile, realpath } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { Tokenizer } from '../lexer/Tokenizer.js'
 import { Parser } from '../parser/Parser.js'
-import { Diagnostic } from '../diagnostics/Diagnostic.js'
+import {
+  Diagnostic,
+  DiagnosticCollection,
+  throwDiagnostics
+} from '../diagnostics/Diagnostic.js'
 import { ModuleGraph } from './ModuleGraph.js'
 
 export class ModuleLoader {
@@ -33,6 +37,9 @@ export class ModuleLoader {
         const source = graph.sources.get(error.location?.sourcePath)
         if (source) throw error.withSource(source)
       }
+      if (error instanceof DiagnosticCollection) {
+        throw error.withSources(graph.sources, graph.entry.source)
+      }
       throw error
     }
   }
@@ -58,9 +65,14 @@ export class ModuleLoader {
       tokens = new this.tokenizer(source, {
         sourcePath: canonicalPath
       }).tokenize()
-      ast = new this.parser(tokens).parseProgram()
+      const diagnostics = []
+      ast = new this.parser(tokens).parseProgram({ diagnostics })
+      throwDiagnostics(diagnostics)
     } catch (error) {
       if (error instanceof Diagnostic) throw error.withSource(source)
+      if (error instanceof DiagnosticCollection) {
+        throw error.withSources(new Map([[canonicalPath, source]]), source)
+      }
       throw error
     }
     const module = {

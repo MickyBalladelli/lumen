@@ -7,65 +7,85 @@ export class SemanticAnalyzer {
     this.moduleRegistry = moduleRegistry
   }
 
-  analyze(program) {
+  analyze(program, { diagnostics = null } = {}) {
+    this.diagnostics = diagnostics
     const scope = new Scope()
 
     for (const node of program.body) {
       if (node.kind === 'StructDeclaration') {
-        this.defineStruct(scope, node)
+        this.attempt(() => this.defineStruct(scope, node))
       }
       if (node.kind === 'EnumDeclaration') {
-        this.defineEnum(scope, node)
+        this.attempt(() => this.defineEnum(scope, node))
       }
       if (node.kind === 'FunctionDeclaration') {
-        this.defineFunction(scope, node)
+        this.attempt(() => this.defineFunction(scope, node))
       }
       if (node.kind === 'ExternFunctionDeclaration') {
-        this.defineFunction(scope, node)
+        this.attempt(() => this.defineFunction(scope, node))
       }
     }
 
     for (const node of program.body) {
-      this.visit(node, scope)
+      this.attempt(() => this.visit(node, scope))
     }
 
+    this.diagnostics = null
     return scope
   }
 
+  attempt(callback) {
+    try {
+      return callback()
+    } catch (error) {
+      if (!(error instanceof Diagnostic) || !this.diagnostics) throw error
+      this.diagnostics.push(error)
+      return null
+    }
+  }
+
   defineStruct(scope, node) {
+    const previous = scope.resolve(node.name.name)
     if (!scope.define(node.name.name, {
       kind: 'struct',
       node
     })) {
-      throw new Diagnostic(`Duplicate type "${node.name.name}"`, node.location, 'semantic')
+      throw duplicateDiagnostic(`Duplicate type "${node.name.name}"`, node.location, previous)
     }
   }
 
   defineFunction(scope, node) {
+    const previous = scope.resolve(node.name.name)
     if (!scope.define(node.name.name, {
       kind: 'function',
       node
     })) {
-      throw new Diagnostic(`Duplicate function "${node.name.name}"`, node.location, 'semantic')
+      throw duplicateDiagnostic(`Duplicate function "${node.name.name}"`, node.location, previous)
     }
   }
 
   defineEnum(scope, node) {
+    const previous = scope.resolve(node.name.name)
     if (!scope.define(node.name.name, {
       kind: 'enum',
       node
     })) {
-      throw new Diagnostic(`Duplicate enum "${node.name.name}"`, node.location, 'semantic')
+      throw duplicateDiagnostic(`Duplicate enum "${node.name.name}"`, node.location, previous)
     }
 
     for (const variant of node.variants) {
+      const previousVariant = scope.resolve(variant.name)
       if (!scope.define(variant.name, {
         kind: 'enumVariant',
         node: variant,
         enumName: node.name.name,
         mutable: false
       })) {
-        throw new Diagnostic(`Duplicate enum variant "${variant.name}"`, variant.location, 'semantic')
+        throw duplicateDiagnostic(
+          `Duplicate enum variant "${variant.name}"`,
+          variant.location,
+          previousVariant
+        )
       }
     }
   }
@@ -100,12 +120,13 @@ export class SemanticAnalyzer {
     const functionScope = new Scope(scope)
 
     for (const param of node.params) {
+      const previous = functionScope.symbols.get(param.name)
       if (!functionScope.define(param.name, {
         kind: 'param',
         node: param,
         mutable: false
       })) {
-        throw new Diagnostic(`Duplicate parameter "${param.name}"`, param.location, 'semantic')
+        throw duplicateDiagnostic(`Duplicate parameter "${param.name}"`, param.location, previous)
       }
     }
 
@@ -139,12 +160,17 @@ export class SemanticAnalyzer {
   visitVariableDeclaration(node, scope) {
     for (const declaration of node.declarations) {
       this.visitExpression(declaration.initializer, scope)
+      const previous = scope.symbols.get(declaration.id.name)
       if (!scope.define(declaration.id.name, {
         kind: 'variable',
         node: declaration,
         mutable: node.declarationKind === 'let'
       })) {
-        throw new Diagnostic(`Duplicate variable "${declaration.id.name}"`, declaration.location, 'semantic')
+        throw duplicateDiagnostic(
+          `Duplicate variable "${declaration.id.name}"`,
+          declaration.location,
+          previous
+        )
       }
     }
   }
@@ -242,6 +268,14 @@ export class SemanticAnalyzer {
 
     for (const child of expressionChildren(node)) this.visitExpression(child, scope)
   }
+}
+
+function duplicateDiagnostic(message, location, previous) {
+  const diagnostic = new Diagnostic(message, location, 'semantic')
+  if (previous?.node?.location) {
+    diagnostic.addNote('First definition is here', previous.node.location)
+  }
+  return diagnostic
 }
 
 function expressionChildren(node) {

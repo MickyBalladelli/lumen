@@ -10,15 +10,16 @@ export class TypeChecker {
     this.switchDepth = 0
   }
 
-  check(program) {
+  check(program, { diagnostics = null } = {}) {
+    this.diagnostics = diagnostics
     const scope = new Scope()
 
     for (const node of program.body) {
       if (node.kind === 'StructDeclaration') {
-        this.registerStruct(node)
+        this.attempt(() => this.registerStruct(node))
       }
       if (node.kind === 'EnumDeclaration') {
-        this.registerEnum(node)
+        this.attempt(() => this.registerEnum(node))
       }
       if (node.kind === 'FunctionDeclaration') {
         scope.define(node.name.name, {
@@ -36,18 +37,32 @@ export class TypeChecker {
       }
     }
 
-    for (const node of program.body) this.checkNode(node, scope, null)
+    for (const node of program.body) {
+      this.attempt(() => this.checkNode(node, scope, null))
+    }
+    this.diagnostics = null
     return program
   }
 
+  attempt(callback) {
+    try {
+      return callback()
+    } catch (error) {
+      if (!(error instanceof Diagnostic) || !this.diagnostics) throw error
+      this.diagnostics.push(error)
+      return null
+    }
+  }
+
   registerStruct(node) {
-    const seen = new Set()
+    const seen = new Map()
     const fields = node.fields.map(field => {
       if (seen.has(field.name)) {
         throw new Diagnostic(`Duplicate field "${field.name}"`, field.location, 'type')
+          .addNote('First field is here', seen.get(field.name))
       }
 
-      seen.add(field.name)
+      seen.set(field.name, field.location)
       return {
         name: field.name,
         type: this.resolveType(field.typeAnnotation, null),

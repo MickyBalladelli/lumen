@@ -320,6 +320,16 @@ export class ExpressionParser {
 
   finish(node, start) {
     node.tokens = this.tokens.slice(start, this.current)
+    const first = node.tokens[0]?.location
+    const last = node.tokens.at(-1)?.location
+    if (first && last) {
+      node.location = {
+        ...first,
+        endLine: last.endLine ?? last.line,
+        endColumn: last.endColumn ?? last.column + 1,
+        endOffset: last.endOffset ?? last.offset + 1
+      }
+    }
     return node
   }
 

@@ -27,6 +27,12 @@ export { FsFunctions, FsLibrary } from './fs/FsLibrary.js'
 export { HttpFunctions, HttpLibrary } from './http/HttpLibrary.js'
 export { ThreadFunctions, ThreadLibrary } from './thread/ThreadLibrary.js'
 export {
+  Diagnostic,
+  DiagnosticCollection,
+  diagnosticsFrom,
+  formatDiagnostic
+} from './diagnostics/Diagnostic.js'
+export {
   BuiltinSignatures,
   RuntimeSignatures,
   builtinSignature,

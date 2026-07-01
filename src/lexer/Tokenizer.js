@@ -325,6 +325,9 @@ export class Tokenizer {
       line: this.tokenLine,
       column: this.tokenColumn,
       offset: this.start,
+      endLine: this.line,
+      endColumn: this.column,
+      endOffset: this.current,
       sourcePath: this.sourcePath
     }
   }

@@ -1,6 +1,7 @@
-import { fileURLToPath } from 'node:url'
+import { pathToFileURL } from 'node:url'
 import { Compiler } from '../compiler/Compiler.js'
 import { formatSource } from '../formatter/Formatter.js'
+import { diagnosticsFrom } from '../diagnostics/Diagnostic.js'
 
 export class LspServer {
   constructor({
@@ -78,10 +79,11 @@ export class LspServer {
 
     try {
       this.compiler.compileSource(source, {
-        sourcePath: uri.startsWith('file:') ? fileURLToPath(uri) : null
+        sourcePath: uri
       })
     } catch (error) {
-      diagnostics.push(toDiagnostic(error))
+      const errors = diagnosticsFrom(error)
+      diagnostics.push(...(errors.length > 0 ? errors : [error]).map(toDiagnostic))
     }
 
     this.notify('textDocument/publishDiagnostics', {
@@ -111,14 +113,46 @@ export function toDiagnostic(error) {
   const location = error.location ?? { line: 1, column: 1 }
   const line = Math.max(location.line - 1, 0)
   const character = Math.max(location.column - 1, 0)
+  const endLine = Math.max((location.endLine ?? location.line) - 1, line)
+  const endCharacter = Math.max(
+    (location.endColumn ?? location.column + 1) - 1,
+    endLine === line ? character + 1 : 0
+  )
 
   return {
     range: {
       start: { line, character },
-      end: { line, character: character + 1 }
+      end: { line: endLine, character: endCharacter }
     },
     severity: 1,
     source: error.phase ?? 'lumen',
-    message: error.rawMessage ?? error.message
+    message: error.rawMessage ?? error.message,
+    relatedInformation: (error.notes ?? [])
+      .filter(note => note.location?.sourcePath)
+      .map(note => ({
+        location: {
+          uri: diagnosticUri(note.location.sourcePath),
+          range: diagnosticRange(note.location)
+        },
+        message: note.message
+      }))
+  }
+}
+
+function diagnosticUri(sourcePath) {
+  return sourcePath.includes('://')
+    ? sourcePath
+    : pathToFileURL(sourcePath).href
+}
+
+function diagnosticRange(location) {
+  const line = Math.max((location.line ?? 1) - 1, 0)
+  const character = Math.max((location.column ?? 1) - 1, 0)
+  return {
+    start: { line, character },
+    end: {
+      line: Math.max((location.endLine ?? location.line ?? 1) - 1, line),
+      character: Math.max((location.endColumn ?? location.column + 1) - 1, character + 1)
+    }
   }
 }

@@ -126,6 +126,7 @@ export class LLVMEmitter {
 
     this.lines.push('}')
     this.currentDebugScope = null
+    this.currentDebugFile = null
     return this.lines
   }
 

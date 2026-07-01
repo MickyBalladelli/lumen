@@ -19,18 +19,22 @@ export class IRBuilder {
       .filter(node => node.kind === 'StructDeclaration')
       .map(node => ({
         name: node.name.name,
+        location: cloneLocation(node.location),
         fields: node.fields.map(field => ({
           name: field.name,
-          type: field.typeAnnotation.name
+          type: field.typeAnnotation.name,
+          location: cloneLocation(field.location)
         }))
       }))
     const enums = program.body
       .filter(node => node.kind === 'EnumDeclaration')
       .map(node => ({
         name: node.name.name,
+        location: cloneLocation(node.location),
         variants: node.variants.map((variant, index) => ({
           name: variant.name,
-          value: index
+          value: index,
+          location: cloneLocation(variant.location)
         }))
       }))
     const functions = program.body
@@ -40,7 +44,13 @@ export class IRBuilder {
       .filter(node => node.kind === 'ExternFunctionDeclaration')
       .map(node => this.buildExtern(node))
 
-    return this.validator.validate(new IRModule(functions, structs, enums, externs))
+    return this.validator.validate(new IRModule(
+      functions,
+      structs,
+      enums,
+      externs,
+      cloneLocation(program.location)
+    ))
   }
 
   buildFunction(node) {

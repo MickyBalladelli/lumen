@@ -1,10 +1,11 @@
 export class IRModule {
-  constructor(functions = [], structs = [], enums = [], externs = []) {
+  constructor(functions = [], structs = [], enums = [], externs = [], location = null) {
     this.kind = 'IRModule'
     this.functions = functions
     this.structs = structs
     this.enums = enums
     this.externs = externs
+    this.location = location
   }
 }
 

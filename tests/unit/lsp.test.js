@@ -27,6 +27,30 @@ test('lsp publishes diagnostics for invalid document', () => {
   assert.match(diagnostic.params.diagnostics[0].message, /Cannot assign string to i32/)
 })
 
+test('lsp publishes multiple diagnostics with full ranges', () => {
+  const messages = []
+  const server = new LspServer({
+    write: message => messages.push(message)
+  })
+
+  openDocument(server, 'untitled://many.lm', [
+    'function first(): i32 {',
+    '  return "one"',
+    '}',
+    'function second(): bool {',
+    '  return 2',
+    '}'
+  ].join('\n'))
+
+  const published = messages.find(message => {
+    return message.method === 'textDocument/publishDiagnostics'
+  })
+  assert.equal(published.params.diagnostics.length, 2)
+  assert.ok(published.params.diagnostics.every(item => {
+    return item.range.end.character > item.range.start.character
+  }))
+})
+
 test('lsp returns full document formatting edit', () => {
   const messages = []
   const server = new LspServer({

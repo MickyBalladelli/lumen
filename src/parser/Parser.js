@@ -44,7 +44,7 @@ export class Parser {
     this.expressionParser = expressionParser
   }
 
-  parseProgram() {
+  parseProgram({ diagnostics = null } = {}) {
     // Top-level parse loop stays tiny by design.
     // New declarations can plug into declaration() without touching lexer code.
     const body = []
@@ -52,10 +52,39 @@ export class Parser {
     while (!this.isAtEnd()) {
       this.skipTerminators()
       if (this.isAtEnd()) break
-      body.push(this.declaration())
+      try {
+        body.push(this.declaration())
+      } catch (error) {
+        if (!(error instanceof Diagnostic) || !diagnostics) throw error
+        diagnostics.push(error)
+        this.synchronizeTopLevel()
+      }
     }
 
     return new ProgramNode(body, body[0]?.location ?? null)
+  }
+
+  synchronizeTopLevel() {
+    let depth = 0
+    for (let index = 0; index < this.current; index += 1) {
+      if (this.tokens[index].lexeme === '{') depth += 1
+      if (this.tokens[index].lexeme === '}') depth = Math.max(depth - 1, 0)
+    }
+
+    if (!this.isAtEnd()) this.advance()
+    while (!this.isAtEnd()) {
+      const token = this.peek()
+      if (depth === 0 &&
+        token.type === TokenType.Keyword &&
+        ['import', 'extern', 'enum', 'struct', 'async', 'function', 'let', 'const'].includes(token.lexeme)) {
+        return
+      }
+
+      if (token.lexeme === '{') depth += 1
+      if (token.lexeme === '}') depth = Math.max(depth - 1, 0)
+      this.advance()
+      if (depth === 0 && token.type === TokenType.Semicolon) return
+    }
   }
 
   declaration() {
@@ -434,7 +463,7 @@ export class Parser {
       tokens.push(this.advance())
     }
 
-    const expression = new RawExpressionNode(tokens, tokens[0]?.location ?? this.peek().location)
+    const expression = new RawExpressionNode(tokens, rangeLocation(tokens) ?? this.peek().location)
     if (parse) expression.parsed = this.expressionParser.parse(tokens)
     return expression
   }
@@ -598,5 +627,17 @@ export class Parser {
   error(token, message) {
     const location = token.location ?? { line: 0, column: 0 }
     return new Diagnostic(message, location, 'parser')
+  }
+}
+
+function rangeLocation(tokens) {
+  const first = tokens[0]?.location
+  const last = tokens.at(-1)?.location
+  if (!first || !last) return null
+  return {
+    ...first,
+    endLine: last.endLine ?? last.line,
+    endColumn: last.endColumn ?? last.column + 1,
+    endOffset: last.endOffset ?? last.offset + 1
   }
 }

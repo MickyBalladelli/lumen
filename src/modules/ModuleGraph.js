@@ -1,5 +1,5 @@
 import { ProgramNode } from '../ast/nodes.js'
-import { Diagnostic } from '../diagnostics/Diagnostic.js'
+import { Diagnostic, throwDiagnostics } from '../diagnostics/Diagnostic.js'
 
 const TOP_LEVEL_DECLARATIONS = new Set([
   'StructDeclaration',
@@ -16,8 +16,10 @@ export class ModuleGraph {
   }
 
   link() {
+    this.diagnostics = []
     for (const module of this.modules) this.collectDeclarations(module)
     for (const module of this.modules) this.collectImports(module)
+    throwDiagnostics(this.diagnostics)
     for (const module of this.modules) this.rewriteModule(module)
 
     const body = this.modules.flatMap(module => {
@@ -66,37 +68,46 @@ export class ModuleGraph {
   collectImports(module) {
     module.importNames = new Map()
     module.importTypeNames = new Map()
+    module.importLocations = new Map()
 
     for (const edge of module.imports) {
       if (!edge.target) continue
 
       for (const imported of edge.declaration.names) {
         if (edge.allowedExports && !edge.allowedExports.has(imported.name)) {
-          throw new Diagnostic(
+          this.diagnostics.push(new Diagnostic(
             `Module "${edge.declaration.source}" has no export "${imported.name}"`,
             imported.location,
             'module'
-          )
+          ).addNote('Import target is here', edge.target.ast.location, edge.target.source))
+          continue
         }
 
         const declaration = edge.target.declarations.get(imported.name)
         if (!declaration) {
-          throw new Diagnostic(
+          this.diagnostics.push(new Diagnostic(
             `Module "${edge.declaration.source}" has no export "${imported.name}"`,
             imported.location,
             'module'
-          )
+          ).addNote('Import target is here', edge.target.ast.location, edge.target.source))
+          continue
         }
 
         if (module.names.has(imported.name) || module.importNames.has(imported.name)) {
-          throw new Diagnostic(
+          const diagnostic = new Diagnostic(
             `Duplicate imported symbol "${imported.name}"`,
             imported.location,
             'module'
           )
+          const previous = module.importLocations.get(imported.name) ??
+            module.declarations.get(imported.name)?.location
+          if (previous) diagnostic.addNote('First definition is here', previous, module.source)
+          this.diagnostics.push(diagnostic)
+          continue
         }
 
         module.importNames.set(imported.name, edge.target.names.get(imported.name))
+        module.importLocations.set(imported.name, imported.location)
         if (declaration.kind === 'StructDeclaration' || declaration.kind === 'EnumDeclaration') {
           module.importTypeNames.set(imported.name, edge.target.typeNames.get(imported.name))
         }
@@ -104,13 +115,19 @@ export class ModuleGraph {
         if (declaration.kind === 'EnumDeclaration') {
           for (const variant of declaration.variants) {
             if (module.names.has(variant.name) || module.importNames.has(variant.name)) {
-              throw new Diagnostic(
+              const diagnostic = new Diagnostic(
                 `Duplicate imported symbol "${variant.name}"`,
                 imported.location,
                 'module'
               )
+              const previous = module.importLocations.get(variant.name) ??
+                module.declarations.get(variant.name)?.location
+              if (previous) diagnostic.addNote('First definition is here', previous, module.source)
+              this.diagnostics.push(diagnostic)
+              continue
             }
             module.importNames.set(variant.name, edge.target.names.get(variant.name))
+            module.importLocations.set(variant.name, imported.location)
           }
         }
       }

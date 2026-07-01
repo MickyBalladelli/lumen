@@ -9,7 +9,12 @@ import { TypeChecker } from '../semantics/TypeChecker.js'
 import { TypeSystem } from '../semantics/TypeSystem.js'
 import { IRBuilder } from '../ir/IRBuilder.js'
 import { LLVMEmitter } from '../backend/LLVMEmitter.js'
-import { Diagnostic } from '../diagnostics/Diagnostic.js'
+import {
+  Diagnostic,
+  DiagnosticCollection,
+  diagnosticsFrom,
+  throwDiagnostics
+} from '../diagnostics/Diagnostic.js'
 import { ModuleLoader } from '../modules/ModuleLoader.js'
 import { ModuleRegistry } from '../semantics/ModuleRegistry.js'
 
@@ -39,7 +44,9 @@ export class Compiler {
   compileSource(source, { sourcePath = null, semanticAnalyzer = null } = {}) {
     try {
       const tokens = new this.tokenizer(source, { sourcePath }).tokenize()
-      const ast = new this.parser(tokens).parseProgram()
+      const diagnostics = []
+      const ast = new this.parser(tokens).parseProgram({ diagnostics })
+      throwDiagnostics(diagnostics)
       return this.compileProgram(ast, {
         tokens,
         sourcePath,
@@ -47,6 +54,20 @@ export class Compiler {
       })
     } catch (error) {
       if (error instanceof Diagnostic) throw error.withSource(source)
+      if (error instanceof DiagnosticCollection) {
+        throw error.withSources(new Map(sourcePath ? [[sourcePath, source]] : []), source)
+      }
+      throw error
+    }
+  }
+
+  diagnoseSource(source, options = {}) {
+    try {
+      this.compileSource(source, options)
+      return []
+    } catch (error) {
+      const diagnostics = diagnosticsFrom(error)
+      if (diagnostics.length > 0) return diagnostics
       throw error
     }
   }
@@ -61,9 +82,11 @@ export class Compiler {
     const typeChecker = this.typeCheckerFactory(typeSystem)
     const irBuilder = this.irBuilderFactory()
     const backend = this.backendFactory(typeSystem)
+    const diagnostics = []
 
-    analyzer.analyze(ast)
-    typeChecker.check(ast)
+    analyzer.analyze(ast, { diagnostics })
+    typeChecker.check(ast, { diagnostics })
+    throwDiagnostics(uniqueDiagnostics(diagnostics))
 
     const ir = irBuilder.build(ast)
     const llvm = backend.emit(ir, { sourcePath })
@@ -72,7 +95,8 @@ export class Compiler {
       tokens,
       ast,
       ir,
-      llvm
+      llvm,
+      diagnostics: []
     }
   }
 
@@ -102,6 +126,9 @@ export class Compiler {
       if (error instanceof Diagnostic) {
         const source = graph.sources.get(error.location?.sourcePath) ?? graph.entry.source
         throw error.withSource(source)
+      }
+      if (error instanceof DiagnosticCollection) {
+        throw error.withSources(graph.sources, graph.entry.source)
       }
       throw error
     }
@@ -168,6 +195,23 @@ export class Compiler {
       })
     })
   }
+}
+
+function uniqueDiagnostics(diagnostics) {
+  const seen = new Set()
+  return diagnostics.filter(diagnostic => {
+    const key = [
+      diagnostic.phase,
+      diagnostic.rawMessage,
+      diagnostic.location?.sourcePath,
+      diagnostic.location?.offset,
+      diagnostic.location?.line,
+      diagnostic.location?.column
+    ].join(':')
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 function createCompilerImageSource(llvm) {

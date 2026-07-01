@@ -44,6 +44,7 @@ class DebugLowering {
     context.debugInfoVersion = this.addDebugMetadata(context, '!{i32 2, !"Debug Info Version", i32 3}')
     context.expression = this.addDebugMetadata(context, '!DIExpression()')
     context.types = new Map()
+    context.files = new Map([[sourcePath, context.file]])
 
     return context
   }
@@ -58,10 +59,24 @@ class DebugLowering {
     if (!this.debug) return null
 
     const line = func.location?.line ?? func.blocks[0]?.location?.line ?? 1
+    const file = this.debugFile(func.location?.sourcePath)
+    this.currentDebugFile = file
     return this.addDebugMetadata(
       this.debug,
-      `distinct !DISubprogram(name: "${this.escapeDebugString(func.name)}", linkageName: "${this.escapeDebugString(func.name)}", scope: ${this.debug.file}, file: ${this.debug.file}, line: ${line}, type: ${this.debug.subroutineType}, scopeLine: ${line}, spFlags: DISPFlagDefinition, unit: ${this.debug.unit}, retainedNodes: ${this.debug.empty})`
+      `distinct !DISubprogram(name: "${this.escapeDebugString(func.name)}", linkageName: "${this.escapeDebugString(func.name)}", scope: ${file}, file: ${file}, line: ${line}, type: ${this.debug.subroutineType}, scopeLine: ${line}, spFlags: DISPFlagDefinition, unit: ${this.debug.unit}, retainedNodes: ${this.debug.empty})`
     )
+  }
+
+  debugFile(sourcePath) {
+    if (!this.debug || !sourcePath) return this.debug?.file ?? null
+    if (this.debug.files.has(sourcePath)) return this.debug.files.get(sourcePath)
+
+    const file = this.addDebugMetadata(
+      this.debug,
+      `!DIFile(filename: "${this.escapeDebugString(basename(sourcePath))}", directory: "${this.escapeDebugString(dirname(sourcePath))}")`
+    )
+    this.debug.files.set(sourcePath, file)
+    return file
   }
 
   createDebugLocation(node) {
@@ -83,7 +98,7 @@ class DebugLowering {
     const argument = isParameter ? `arg: ${argumentIndex}, ` : ''
     return this.addDebugMetadata(
       this.debug,
-      `!DILocalVariable(name: "${this.escapeDebugString(name)}", ${argument}scope: ${this.currentDebugScope}, file: ${this.debug.file}, line: ${line}, type: ${typeMetadata})`
+      `!DILocalVariable(name: "${this.escapeDebugString(name)}", ${argument}scope: ${this.currentDebugScope}, file: ${this.currentDebugFile ?? this.debug.file}, line: ${line}, type: ${typeMetadata})`
     )
   }
 
