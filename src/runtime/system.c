@@ -2,6 +2,7 @@
 #ifdef __APPLE__
 #include <crt_externs.h>
 #endif
+#include <spawn.h>
 #include "lumen_system.h"
 
 typedef struct LumenAllocation {
@@ -273,11 +274,41 @@ void *lumen_arg_count(void) {
 }
 
 
-void *lumen_exec(const char *command) {
-  int status = system(command);
-  if (status == -1) return lumen_runtime_error("process", errno, "cannot start command");
+void *lumen_exec(const char *command, const char **arguments, int argument_count) {
+  if (!command || command[0] == '\0' || argument_count < 0 ||
+    (argument_count > 0 && !arguments)) {
+    return lumen_runtime_error("process", EINVAL, "invalid process arguments");
+  }
+
+  char **argv = malloc(sizeof(char *) * (size_t)(argument_count + 2));
+  if (!argv) return lumen_runtime_error("process", ENOMEM, "cannot allocate process arguments");
+
+  argv[0] = (char *)command;
+  for (int index = 0; index < argument_count; index += 1) {
+    argv[index + 1] = (char *)arguments[index];
+  }
+  argv[argument_count + 1] = NULL;
+
+#ifdef __APPLE__
+  char **environment = *_NSGetEnviron();
+#else
+  extern char **environ;
+  char **environment = environ;
+#endif
+
+  pid_t child = 0;
+  int code = posix_spawnp(&child, command, NULL, NULL, argv, environment);
+  free(argv);
+  if (code != 0) return lumen_runtime_error("process", code, "cannot start process");
+
+  int status = 0;
+  do {
+    code = waitpid(child, &status, 0) < 0 ? errno : 0;
+  } while (code == EINTR);
+
+  if (code != 0) return lumen_runtime_error("process", code, "cannot wait for process");
   if (WIFEXITED(status)) return lumen_ok_i32(WEXITSTATUS(status));
-  return lumen_runtime_error("process", status, "command terminated abnormally");
+  return lumen_runtime_error("process", status, "process terminated abnormally");
 }
 
 __attribute__((weak)) const char *lumen_compiler_image(void) {

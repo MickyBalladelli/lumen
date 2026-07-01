@@ -549,10 +549,12 @@ file is an error. `writeFile(...)` returns `Result<i32>`.
 writeFile("build/out.ll", content)
 ```
 
-`exec(command)` returns `Result<i32>` containing the process exit code.
+`exec(program, arguments)` launches a program directly and returns its exit code
+as `Result<i32>`. Arguments are never parsed by a shell.
 
 ```lumen
-let code = exec("clang build/out.ll -o build/app")
+let arguments: string[] = ["build/out.ll", "-o", "build/app"]
+let code = exec("clang", arguments)
 ```
 
 `tokenizeSource(source)` and `parseSummary(source)` are Lumen-callable compiler

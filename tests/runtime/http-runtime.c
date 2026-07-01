@@ -215,9 +215,14 @@ static void test_typed_errors(void) {
   assert(!lumen_is_ok(lumen_json("not json")));
 
   assert(!lumen_is_ok(lumen_arg(-1)));
-  void *exit_status = lumen_exec("exit 1");
+  void *exit_status = lumen_exec("/usr/bin/false", NULL, 0);
   assert(lumen_is_ok(exit_status));
   assert(atoi(lumen_result_value(exit_status)) == 1);
+  const char *literal_arguments[] = {"a b;$(false)", "=", "a b;$(false)"};
+  void *literal_status = lumen_exec("/bin/test", literal_arguments, 3);
+  assert(lumen_is_ok(literal_status));
+  assert(atoi(lumen_result_value(literal_status)) == 0);
+  assert(!lumen_is_ok(lumen_exec("lumen-command-does-not-exist", NULL, 0)));
   assert(!lumen_is_ok(lumen_semaphore_create(-1)));
   assert(!lumen_is_ok(lumen_thread_join(NULL)));
   assert(!lumen_is_ok(lumen_http_serve_files(0, "/tmp/lumen-missing-http-root")));

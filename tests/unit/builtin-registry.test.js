@@ -102,4 +102,18 @@ test('fallible built-ins return typed results', () => {
   for (const [name, returnType] of Object.entries(expected)) {
     assert.equal(builtinSignature(name).returnType, returnType)
   }
+
+  assert.deepEqual(builtinSignature('exec').parameters, ['string', 'string[]'])
+})
+
+test('process execution never invokes a shell', async () => {
+  const [runtimeSource, compilerSource] = await Promise.all([
+    readFile('src/runtime/system.c', 'utf8'),
+    readFile('src/compiler/Compiler.js', 'utf8')
+  ])
+
+  assert.doesNotMatch(runtimeSource, /\bsystem\s*\(/)
+  assert.match(runtimeSource, /\bposix_spawnp\s*\(/)
+  assert.match(compilerSource, /spawn\(command, args,/)
+  assert.doesNotMatch(compilerSource, /shell:\s*true/)
 })

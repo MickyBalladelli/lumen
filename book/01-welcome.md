@@ -147,7 +147,8 @@ successful encrypted values are prefixed with `lumen:v1:`.
   Process environment wins over `.env` values.
 - `arg(index)`: returns `Result<string>` (`arg(0)` is the program name).
 - `argCount()`: returns `Result<i32>`.
-- `exec(command)`: returns `Result<i32>` containing the exit code.
+- `exec(program, arguments)`: launches with an argument array and returns
+  `Result<i32>`. No shell parses the arguments.
 
 ### Error Handling
 

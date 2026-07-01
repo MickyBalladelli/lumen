@@ -1,4 +1,4 @@
-import { readdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { spawn } from 'node:child_process'
 import { Compiler } from '../compiler/Compiler.js'
@@ -332,6 +332,23 @@ if (lmsh.stdout !== '1\n3\n' || lmsh.code !== 0) {
   console.log(green('ok lmsh executable runner'))
 }
 
+const hostileDirectory = join(outputDir, 'path with spaces;$(not-run)')
+const hostileSource = join(hostileDirectory, "basic source 'quoted'.lm")
+const hostileLLVM = join(hostileDirectory, 'basic output;safe.ll')
+const hostileExecutable = join(hostileDirectory, 'basic app;safe')
+await mkdir(hostileDirectory, { recursive: true })
+await writeFile(hostileSource, await readFile(join(examplesDir, 'basic.lm'), 'utf8'))
+await compiler.writeLLVMFile(hostileSource, hostileLLVM)
+await compiler.buildExecutable(hostileLLVM, hostileExecutable)
+const hostileResult = await runExecutable(hostileExecutable)
+
+if (hostileResult.stdout !== 'hello\n3\n' || hostileResult.code !== 3) {
+  failures += 1
+  console.error('failed argv-safe compiler paths')
+} else {
+  console.log(green('ok argv-safe compiler paths'))
+}
+
 await compiler.writeLLVMFile('compiler/main.lm', join(outputDir, 'lumen-compiler.ll'))
 await compiler.buildExecutable(join(outputDir, 'lumen-compiler.ll'), join(outputDir, 'lumen-compiler'))
 if (await hasSelfFallbackSymbols(join(outputDir, 'lumen-compiler'))) {
@@ -653,11 +670,11 @@ if (bootstrapCompile.code !== 0) {
     } finally {
       await rename(hiddenStageOneCompilerPath, stageOneCompilerPath)
     }
-    const renamedBasicPath = join(outputDir, 'renamed-bootstrap-source.lm')
+    const renamedBasicPath = join(outputDir, "renamed bootstrap;source 'safe'.lm")
     await writeFile(renamedBasicPath, await readFile(join(examplesDir, 'basic.lm'), 'utf8'))
     const selfRenamedBasicCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
       renamedBasicPath,
-      join(outputDir, 'renamed-basic-self2.ll')
+      join(outputDir, 'renamed basic;self2.ll')
     ])
     const selfControlCompile = await runExecutable(join(outputDir, 'lumen-compiler-self'), [
       join(examplesDir, 'control-flow.lm'),
@@ -755,7 +772,7 @@ if (bootstrapCompile.code !== 0) {
       const equalStageOutputs = [
         ['tiny', 'tiny-self.ll', 'tiny-self2.ll'],
         ['basic', 'basic-self.ll', 'basic-self2.ll'],
-        ['renamed basic', 'basic-self.ll', 'renamed-basic-self2.ll'],
+        ['renamed basic', 'basic-self.ll', 'renamed basic;self2.ll'],
         ['control-flow', 'control-flow-self.ll', 'control-flow-self2.ll'],
         ['for-loop', 'for-loop-self.ll', 'for-loop-self2.ll'],
         ['native-main', 'native-main-self.ll', 'native-main-self2.ll'],

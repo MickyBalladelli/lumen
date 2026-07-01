@@ -232,6 +232,7 @@ class ValueLowering {
     if (this.isCall(expression.tokens, SystemFunctions.ArrayFirst)) return this.emitArrayEdge(expression.tokens, 'first')
     if (this.isCall(expression.tokens, SystemFunctions.ArrayLast)) return this.emitArrayEdge(expression.tokens, 'last')
     if (this.isCall(expression.tokens, SystemFunctions.ArrayJoin)) return this.emitArrayJoin(expression.tokens)
+    if (this.isCall(expression.tokens, SystemFunctions.Exec)) return this.emitExec(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.SourceSnippet)) return this.emitSourceSnippet(expression.tokens)
     if (this.isCall(expression.tokens, SystemFunctions.Repeat)) return this.emitStringCountCall(expression.tokens, 'lumen_string_repeat', 'repeat')
     if (this.isCall(expression.tokens, SystemFunctions.PadStart)) return this.emitStringPadCall(expression.tokens, 'lumen_string_pad_start', 'padStart')

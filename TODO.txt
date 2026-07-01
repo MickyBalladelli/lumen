@@ -90,9 +90,9 @@ Project audit: 2026-06-30
   File, environment, crypto, JSON, process, thread, and HTTP operations return
   `Result<T>`, preserving valid empty strings and zero values.
 
-- [ ] Remove shell-command execution from compiler internals.
-  Pass argument arrays to child processes. Never build compiler commands by string
-  concatenation; paths with spaces and shell characters must work safely.
+- [x] Remove shell-command execution from compiler internals.
+  Compiler and runtime process launches pass argument arrays directly. Paths with
+  spaces and shell characters are covered by native and self-host tests.
 
 - [ ] Decide and implement the async model.
   `async` and `await` currently lower synchronously. Specify tasks, scheduling,

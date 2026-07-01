@@ -141,22 +141,28 @@ world
 ## Process Execution
 
 ```lumen
-let code = exec("clang build/out.ll -o build/app")
+let arguments: string[] = ["build/out.ll", "-o", "build/app"]
+let code = exec("clang", arguments)
 ```
 
-`exec(command)` runs a shell command and returns its exit code. This is the
-hook used by the self-host compiler to invoke `clang` for linking.
+`exec(program, arguments)` launches a child process directly and returns
+`Result<i32>`. No shell parses the program or arguments.
 
 ### How It's Used
 
-The bootstrap compiler uses `exec` to:
-
-1. Emit LLVM IR to a `.ll` file
-2. Call `exec("clang file.ll -o output")` to link
-3. Check the return code to verify linking succeeded
+The JavaScript compiler driver invokes `clang` with an argument array. The
+self-host compiler reads and writes exact paths without constructing commands.
 
 ```lumen
-let code = exec("clang build/out.ll src/runtime/system.c src/runtime/fs.c -pthread -o build/app")
+let arguments: string[] = [
+  "build/out.ll",
+  "src/runtime/system.c",
+  "src/runtime/fs.c",
+  "-pthread",
+  "-o",
+  "build/app"
+]
+let code = exec("clang", arguments)
 if !isOk(code) || resultValue(code) != 0 {
   println("link failed")
   return 1
@@ -165,8 +171,6 @@ if !isOk(code) || resultValue(code) != 0 {
 
 ### Limitations
 
-- The command is passed as a single string to the shell — no argument array
-  support. Paths with spaces or special characters may not work correctly.
 - There is no timeout, no output capture, and no signal handling.
 - The process blocks until the command completes.
 
@@ -275,8 +279,7 @@ semaphoreSignal(semaphore) // unlock
 - **Binary I/O** — all file operations are text-only.
 - **CLI parsing** — no built-in flag or subcommand parser. The `cli` package
   exists but is basic.
-- **Process spawn** — `exec` uses shell string concatenation. No argument
-  arrays, no output capture, no timeout.
+- **Process spawn** — no output capture or timeout.
 - **Thread lifecycle** — no thread detach, no cancellation, no error recovery.
 - **Path portability** — no path manipulation helpers beyond the `path` package
   (which is experimental).

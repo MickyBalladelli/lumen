@@ -956,6 +956,34 @@ class BuiltinLowering {
     }
   }
 
+  emitExec(tokens) {
+    this.usesProcess = true
+    const args = this.callArguments(tokens)
+
+    if (args.length !== 2) {
+      throw new Diagnostic('exec expects program and argument array', tokens[0].location, 'backend')
+    }
+
+    const command = this.emitExpression({
+      tokens: args[0],
+      location: tokens[0].location
+    })
+    if (command.type !== LumenTypes.String) {
+      throw new Diagnostic('exec program must be string', tokens[0].location, 'backend')
+    }
+
+    const argumentsValue = this.arrayPointerArgument(args[1], tokens[0].location, {
+      allowEmpty: true
+    })
+    const result = this.nextTemp()
+    this.lines.push(`  ${result} = call ptr @lumen_exec(ptr ${command.value}, ptr ${argumentsValue.pointer}, i32 ${argumentsValue.length})`)
+
+    return {
+      type: 'Result<i32>',
+      value: result
+    }
+  }
+
   emitWriteFile(tokens) {
     this.usesFileIO = true
     const args = this.callArguments(tokens)
@@ -1356,15 +1384,23 @@ class BuiltinLowering {
     }
   }
 
-  arrayPointerArgument(tokens, location) {
+  arrayPointerArgument(tokens, location, { allowEmpty = false } = {}) {
     const name = this.singleIdentifierName({
       tokens,
       location
     })
     const symbol = this.resolve(name)
 
-    if (!this.typeSystem.isArray(symbol.type) || symbol.length === null || symbol.length === 0) {
+    if (!this.typeSystem.isArray(symbol.type) || symbol.length === null ||
+      (!allowEmpty && symbol.length === 0)) {
       throw new Diagnostic('serveHttp expects non-empty array variables', location, 'backend')
+    }
+
+    if (symbol.length === 0) {
+      return {
+        pointer: 'null',
+        length: 0
+      }
     }
 
     const pointer = this.nextTemp()

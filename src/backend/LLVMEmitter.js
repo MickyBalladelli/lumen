@@ -34,6 +34,7 @@ export class LLVMEmitter {
     this.usesEnv = false
     this.usesCrypto = false
     this.usesArgs = false
+    this.usesProcess = false
     this.usesMaps = false
     this.usesResults = false
     this.usesOptions = false

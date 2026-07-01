@@ -1,5 +1,6 @@
 function main(): i32 {
-  let codeResult = exec("true")
+  let arguments: string[] = []
+  let codeResult = exec("true", arguments)
   if !isOk(codeResult) {
     println(errorMessage(codeResult))
     return 1

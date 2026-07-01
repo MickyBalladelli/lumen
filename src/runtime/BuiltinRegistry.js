@@ -78,7 +78,7 @@ export const RuntimeSignatures = Object.freeze([
   runtime('usesErrorRuntime', 'lumen_error_code', 'i32', ['ptr']),
   runtime('usesErrorRuntime', 'lumen_error_text', 'ptr', ['ptr']),
   runtime('usesArrayRuntime', 'lumen_array_join', 'ptr', ['i32', 'ptr', 'ptr']),
-  runtime('usesStringRuntime', 'lumen_exec', 'ptr', ['ptr']),
+  runtime('usesProcess', 'lumen_exec', 'ptr', ['ptr', 'ptr', 'i32']),
   runtime('usesStringRuntime', 'lumen_source_snippet', 'ptr', ['ptr', 'i32', 'i32']),
   runtime('usesStringRuntime', 'lumen_string_builder', 'ptr'),
   runtime('usesStringRuntime', 'lumen_string_builder_append', 'ptr', ['ptr', 'ptr']),
@@ -202,7 +202,9 @@ export const BuiltinSignatures = Object.freeze([
   builtin('ArrayFirst', 'system', 'arrayFirst', ['T[]'], 'T'),
   builtin('ArrayLast', 'system', 'arrayLast', ['T[]'], 'T'),
   builtin('ArrayJoin', 'system', 'arrayJoin', ['string[]', 'string'], 'string', { runtime: 'lumen_array_join' }),
-  direct('Exec', 'system', 'exec', ['string'], 'Result<i32>', 'lumen_exec'),
+  builtin('Exec', 'system', 'exec', ['string', 'string[]'], 'Result<i32>', {
+    runtime: 'lumen_exec'
+  }),
   builtin('SourceSnippet', 'system', 'sourceSnippet', ['string', 'i32', 'i32'], 'string', { runtime: 'lumen_source_snippet' }),
   direct('StringBuilder', 'system', 'stringBuilder', [], 'string', 'lumen_string_builder'),
   direct('StringBuilderAppend', 'system', 'stringBuilderAppend', ['string', 'string'], 'string', 'lumen_string_builder_append'),

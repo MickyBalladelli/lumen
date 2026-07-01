@@ -184,11 +184,9 @@ successful values.
 
 ### Remove Shell Command Execution From Compiler Internals
 
-Currently `exec` and the compiler bootstrap pass commands as single strings to
-the shell. This breaks on paths with spaces and shell special characters.
-
-- Pass argument arrays to child processes
-- Never build compiler commands by string concatenation
+Completed. The compiler driver and runtime process API launch programs with
+argument arrays. Native and self-host tests cover spaces, quotes, semicolons,
+and `$()` in paths and arguments.
 
 ### Decide And Implement The Async Model
 
