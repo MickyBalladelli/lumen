@@ -34,7 +34,7 @@ class ValueLowering {
   emitExpressionNode(node) {
     if (!node) return { type: LumenTypes.Void, value: '' }
 
-    if (node.op === 'await') return this.emitExpression(node.argument)
+    if (node.op === 'await') return this.emitAwaitNode(node)
     if (node.op === 'call') {
       return this.emitCallExpressionNode(node)
     }
@@ -173,15 +173,16 @@ class ValueLowering {
     }
 
     const values = node.arguments.map(argument => this.emitExpression(argument))
-    const result = signature.returnType === LumenTypes.Void ? null : this.nextTemp()
+    const returnType = signature.isAsync ? `Task<${signature.returnType}>` : signature.returnType
+    const result = returnType === LumenTypes.Void ? null : this.nextTemp()
     const callArgs = values.map((value, index) => {
       const paramType = signature.params[index].type
       return `${this.llvmType(paramType)} ${this.cast(value, paramType)}`
     }).join(', ')
     const prefix = result ? `${result} = ` : ''
-    this.lines.push(`  ${prefix}call ${this.llvmType(signature.returnType)} @${name}(${callArgs})`)
+    this.lines.push(`  ${prefix}call ${this.llvmType(returnType)} @${name}(${callArgs})`)
     return {
-      type: signature.returnType,
+      type: returnType,
       value: result ?? ''
     }
   }
@@ -340,17 +341,18 @@ class ValueLowering {
       tokens: arg,
       location: tokens[0].location
     }))
-    const result = signature.returnType === LumenTypes.Void ? null : this.nextTemp()
+    const returnType = signature.isAsync ? `Task<${signature.returnType}>` : signature.returnType
+    const result = returnType === LumenTypes.Void ? null : this.nextTemp()
     const callArgs = values.map((value, index) => {
       const paramType = signature.params[index].type
       return `${this.llvmType(paramType)} ${this.cast(value, paramType)}`
     }).join(', ')
     const prefix = result ? `${result} = ` : ''
 
-    this.lines.push(`  ${prefix}call ${this.llvmType(signature.returnType)} @${tokens[0].lexeme}(${callArgs})`)
+    this.lines.push(`  ${prefix}call ${this.llvmType(returnType)} @${tokens[0].lexeme}(${callArgs})`)
 
     return {
-      type: signature.returnType,
+      type: returnType,
       value: result ?? ''
     }
   }

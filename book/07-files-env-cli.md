@@ -267,7 +267,9 @@ semaphoreSignal(semaphore) // unlock
 
 ### Limitations
 
-- Threads run native OS threads — there is no green thread or async runtime.
+- Threads and async tasks run native OS threads; there are no green threads.
+- Each async call creates one eager task thread. `await` blocks its caller.
+- Task cancellation is cooperative once task code has started.
 - Functions passed to `startThread` must match the parameter types exactly.
 - There is no thread-local storage or thread naming.
 - Threads are created with default OS scheduling — no priority control.
@@ -280,6 +282,7 @@ semaphoreSignal(semaphore) // unlock
 - **CLI parsing** — no built-in flag or subcommand parser. The `cli` package
   exists but is basic.
 - **Process spawn** — no output capture or timeout.
-- **Thread lifecycle** — no thread detach, no cancellation, no error recovery.
+- **Thread lifecycle** — explicit `thread` handles have no detach or
+  cancellation; `Task<T>` has cooperative cancellation and await errors.
 - **Path portability** — no path manipulation helpers beyond the `path` package
   (which is experimental).

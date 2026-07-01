@@ -75,16 +75,23 @@ function main(): i32 {
 }
 ```
 
-`async function` and `await` are accepted as source-level markers. Today they
-lower synchronously; the syntax is reserved for the future async runtime.
+Calling an `async function` starts an eager native task and returns `Task<T>`.
+`await` blocks the calling thread until the task produces `T`.
 
 ```lumen
-async function value(): i32 {
-  return 4
+async function value(input: i32): i32 {
+  return input + 1
 }
 
-let answer = await value()
+let task: Task<i32> = value(3)
+let answer = await task
 ```
+
+Each task uses one OS thread. `taskCancel(task)` requests cancellation and
+`taskCancelled()` lets running task code observe that request. Uncaught throws,
+startup failures, and cancellation errors are raised at `await` and can be
+handled with `try/catch`. Uncaught task errors terminate the process.
+`Result<T>` values returned by a task remain ordinary values.
 
 ### Imports
 
@@ -128,7 +135,7 @@ Current built-in types:
 - `json`: runtime JSON text with helper accessors
 - `error`: typed runtime error payload
 - `T?`: nullable option-shaped value, currently used with string helpers
-- `Result<T>` and `Map<K,V>`: generic runtime-backed helper types
+- `Result<T>`, `Task<T>`, and `Map<K,V>`: generic runtime-backed helper types
 - `void`: no value
 
 ```lumen
@@ -998,7 +1005,9 @@ console.log(ast)
 - `examples/bootstrap-io.lm`: write and read file
 - `examples/advanced-foundation.lm`: field assignment, array assignment, string concat, interpolation, generic helper type
 - `examples/array-helpers.lm`: array helper functions
-- `examples/async-foundation.lm`: async/await syntax markers
+- `examples/async-cancellation.lm`: cooperative task cancellation
+- `examples/async-error.lm`: async throw propagation through await
+- `examples/async-foundation.lm`: native task creation and await
 - `examples/cli-args.lm`: CLI arguments
 - `examples/control-flow.lm`: `if`, `else`, `break`, `continue`, user function calls, interpolation, imports
 - `examples/crypto.lm`: `encrypt` and `decrypt`
@@ -1063,7 +1072,7 @@ src/
     IRBuilder.js         typed AST to compiler IR
   backend/
     LLVMEmitter.js       IR-to-LLVM coordinator
-    *Lowering.js         focused control, value, aggregate, built-in, and debug lowering
+    *Lowering.js         focused control, value, aggregate, async, built-in, and debug lowering
     RuntimeABI.js        conditional runtime declarations
   compiler/
     Compiler.js          end-to-end pipeline and clang driver
@@ -1075,6 +1084,7 @@ src/
     collections.c        list, map, JSON, and array helpers
     string.c             string helpers
     thread.c             thread and semaphore helpers
+    task.c               async task scheduling, await, errors, and cancellation
     crypto.c             encryption helpers
     http.c               HTTP, WebSocket, and Socket.IO helpers
     lumen_*.h            public unit headers

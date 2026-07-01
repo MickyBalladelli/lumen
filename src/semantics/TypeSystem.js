@@ -48,7 +48,7 @@ export class TypeSystem {
     if (this.isGeneric(normalized)) {
       const base = this.genericBase(normalized)
       const args = this.genericArgs(normalized)
-      const arity = base === 'Result' ? 1 : base === 'Map' ? 2 : null
+      const arity = base === 'Result' || base === 'Task' ? 1 : base === 'Map' ? 2 : null
 
       return arity !== null &&
         args.length === arity &&
@@ -211,7 +211,7 @@ export class TypeSystem {
       return fromArgs.every((arg, index) => this.sameType(arg, toArgs[index]))
     }
 
-    if (base !== 'Result') return false
+    if (base !== 'Result' && base !== 'Task') return false
 
     return fromArgs.every((arg, index) => {
       return arg === LumenTypes.Unknown ||

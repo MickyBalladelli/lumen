@@ -190,12 +190,13 @@ and `$()` in paths and arguments.
 
 ### Decide And Implement The Async Model
 
-`async function` and `await` are accepted as source-level markers but lower
-synchronously — an async function runs exactly like a normal function today.
-
-- Specify the async task model: tasks, scheduling, cancellation, errors
-- Define thread interaction rules
-- Implement the runtime before expanding the syntax
+Completed. An async call eagerly creates a native-thread `Task<T>`. Awaiting a
+task blocks the caller. Pending cancellation prevents the body from starting;
+running cancellation is observed with `taskCancelled()` and never kills an OS
+thread. Uncaught task throws, startup failures, and cancellation flow through
+`await` into `try/catch`, while returned `Result<T>` values remain values.
+Arguments are copied into the task context, pointer-backed data remains shared,
+and shutdown joins unawaited task threads.
 
 ## P1 — CLI, Editor, And Distribution
 

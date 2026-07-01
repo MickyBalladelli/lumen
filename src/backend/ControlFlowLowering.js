@@ -42,6 +42,13 @@ class ControlFlowLowering {
     const active = this.tryStack.at(-1)
 
     if (!active) {
+      if (this.isAsyncBody) {
+        const value = this.emitExpression(node.value)
+        this.usesTask = true
+        this.lines.push(`  call void @lumen_task_fail(ptr ${value.value})`)
+        this.lines.push(this.defaultReturn(this.returnType))
+        return
+      }
       throw new Diagnostic('throw needs active try/catch', node.location, 'backend')
     }
 

@@ -22,10 +22,11 @@ export class TypeChecker {
         this.attempt(() => this.registerEnum(node))
       }
       if (node.kind === 'FunctionDeclaration') {
+        const returnType = node.returnType?.name ?? LumenTypes.I32
         scope.define(node.name.name, {
           kind: 'function',
           node,
-          type: node.returnType?.name ?? LumenTypes.I32
+          type: node.isAsync ? `Task<${returnType}>` : returnType
         })
       }
       if (node.kind === 'ExternFunctionDeclaration') {
@@ -111,6 +112,10 @@ export class TypeChecker {
   checkFunction(node, parentScope) {
     const returnType = this.resolveType(node.returnType, LumenTypes.I32)
     const scope = new Scope(parentScope)
+
+    if (node.isAsync && node.name.name === 'main') {
+      throw new Diagnostic('main cannot be async', node.location, 'type')
+    }
 
     node.inferredType = returnType
 

@@ -1,0 +1,15 @@
+async function fail(): i32 {
+  throw "boom"
+}
+
+function main(): i32 {
+  let task = fail()
+
+  try {
+    return await task
+  } catch error {
+    println(error)
+  }
+
+  return 0
+}

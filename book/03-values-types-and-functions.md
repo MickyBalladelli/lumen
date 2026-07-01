@@ -255,18 +255,34 @@ error. The native linker expects this signature.
 
 ### Async Functions
 
-Lumen accepts `async function` and `await` as source-level syntax markers.
-Today they lower synchronously — an `async function` runs exactly like a normal
-function, and `await` is a no-op. The syntax is reserved for the future async
-runtime.
+Calling an `async function` starts it eagerly on a native OS thread. The call
+returns `Task<T>`, where `T` is the function's declared return type. `await`
+blocks the calling thread and unwraps the task value.
 
 ```lumen
-async function value(): i32 {
-  return 4
+async function value(input: i32): i32 {
+  return input + 1
 }
 
-let answer = await value()   // today: just calls value() synchronously
+let task: Task<i32> = value(3)
+let answer = await task
 ```
+
+Tasks use these rules:
+
+- Scheduling is eager and one native thread is created for each async call.
+- `await` may be used in normal or async functions. It blocks that OS thread.
+- `taskCancel(task)` marks a task cancelled. A pending task does not begin.
+  Running native work is not forcibly killed; it can poll `taskCancelled()`
+  and return early. Its eventual result is ignored.
+- An uncaught throw in the task body, cancellation, or startup failure raises
+  an error at `await`. `try/catch` handles it. Without a catch, the process
+  exits.
+- A returned `Result<T>` is a normal task value, not an implicit task failure.
+- Parameters are copied by value into the task context. Pointer-backed values
+  still share storage, so programs must synchronize shared mutation.
+- Async functions cannot be `main` or be passed to `startThread`. Unawaited
+  task threads are joined during process shutdown.
 
 ### Extern Functions
 
@@ -401,14 +417,12 @@ line.
 - **More type inference** — today type annotations are needed in many places
   where they could be inferred.
 - **User-defined generic types** — generics are currently only available on the
-  built-in `Result<T>` and `Map<K,V>`.
+  built-in `Result<T>`, `Task<T>`, and `Map<K,V>`.
 - **Stronger numeric conversion rules** — implicit conversions between `i32`,
   `i64`, and `f32` are not fully defined.
 - **Full expression AST** — the compiler still uses token-shape heuristics in
   `RawExpression.parsed`, which is created but ignored by semantic analysis,
   type checking, and code generation.
-- **Async runtime** — `async`/`await` syntax is reserved but lowers
-  synchronously.
 - **Stronger type checker** — boolean conditions aren't enforced; functions
   aren't checked for return-on-all-paths; use-before-initialization isn't
   detected.

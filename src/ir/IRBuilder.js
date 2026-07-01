@@ -65,7 +65,8 @@ export class IRBuilder {
       node.inferredType,
       [entry],
       entry.name,
-      cloneLocation(node.location)
+      cloneLocation(node.location),
+      node.isAsync
     )
   }
 

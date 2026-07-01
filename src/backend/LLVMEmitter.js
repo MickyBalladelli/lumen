@@ -1,4 +1,5 @@
 import { aggregateLowering } from './AggregateLowering.js'
+import { asyncLowering } from './AsyncLowering.js'
 import { builtinLowering } from './BuiltinLowering.js'
 import { controlFlowLowering } from './ControlFlowLowering.js'
 import { debugLowering } from './DebugLowering.js'
@@ -43,6 +44,7 @@ export class LLVMEmitter {
     this.usesErrorRuntime = false
     this.usesArrayRuntime = false
     this.usesThread = false
+    this.usesTask = false
     this.irCallArguments = []
     this.functionSignatures = new Map([
       ...irModule.functions.map(func => [func.name, func]),
@@ -58,6 +60,9 @@ export class LLVMEmitter {
       }
     }
     const typeDefinitions = irModule.structs.map(struct => this.emitStructType(struct))
+    const asyncContextTypes = irModule.functions
+      .filter(func => func.isAsync)
+      .map(func => this.emitAsyncContextType(func))
     const externs = (irModule.externs ?? []).map(func => this.emitExtern(func))
     const functions = irModule.functions.flatMap(func => this.emitFunction(func))
 
@@ -65,6 +70,7 @@ export class LLVMEmitter {
       '; Lumen LLVM IR',
       this.debug ? `source_filename = "${this.escapeDebugString(this.debug.filename)}"` : '',
       ...typeDefinitions,
+      ...asyncContextTypes,
       ...this.globals,
       ...emitRuntimeABI(this, externs),
       '',
@@ -85,6 +91,11 @@ export class LLVMEmitter {
   }
 
   emitFunction(func) {
+    if (func.isAsync) return this.emitAsyncFunction(func)
+    return this.emitFunctionBody(func, func.name)
+  }
+
+  emitFunctionBody(func, name, linkage = '') {
     this.temp = 0
     this.label = 0
     this.lines = this.createLineBuffer()
@@ -94,15 +105,16 @@ export class LLVMEmitter {
     this.breakStack = []
     this.deferStack = []
     this.returnType = func.returnType
+    this.isAsyncBody = func.isAsync
 
     const params = func.params
       .map(param => `${this.llvmType(param.type)} %${param.name}`)
       .join(', ')
 
-    const subprogram = this.createDebugSubprogram(func)
+    const subprogram = this.createDebugSubprogram(func, name)
     this.currentDebugScope = subprogram
 
-    this.lines.push(`define ${this.llvmType(func.returnType)} @${func.name}(${params})${subprogram ? ` !dbg ${subprogram}` : ''} {`)
+    this.lines.push(`define ${linkage}${this.llvmType(func.returnType)} @${name}(${params})${subprogram ? ` !dbg ${subprogram}` : ''} {`)
     this.lines.push('entry:')
 
     for (const param of func.params) {
@@ -128,6 +140,7 @@ export class LLVMEmitter {
     this.lines.push('}')
     this.currentDebugScope = null
     this.currentDebugFile = null
+    this.isAsyncBody = false
     return this.lines
   }
 
@@ -295,6 +308,7 @@ export class LLVMEmitter {
 
 Object.defineProperties(LLVMEmitter.prototype, {
   ...aggregateLowering,
+  ...asyncLowering,
   ...builtinLowering,
   ...controlFlowLowering,
   ...debugLowering,

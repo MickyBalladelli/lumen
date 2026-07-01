@@ -55,7 +55,7 @@ class DebugLowering {
     return id
   }
 
-  createDebugSubprogram(func) {
+  createDebugSubprogram(func, linkageName = func.name) {
     if (!this.debug) return null
 
     const line = func.location?.line ?? func.blocks[0]?.location?.line ?? 1
@@ -63,7 +63,7 @@ class DebugLowering {
     this.currentDebugFile = file
     return this.addDebugMetadata(
       this.debug,
-      `distinct !DISubprogram(name: "${this.escapeDebugString(func.name)}", linkageName: "${this.escapeDebugString(func.name)}", scope: ${file}, file: ${file}, line: ${line}, type: ${this.debug.subroutineType}, scopeLine: ${line}, spFlags: DISPFlagDefinition, unit: ${this.debug.unit}, retainedNodes: ${this.debug.empty})`
+      `distinct !DISubprogram(name: "${this.escapeDebugString(func.name)}", linkageName: "${this.escapeDebugString(linkageName)}", scope: ${file}, file: ${file}, line: ${line}, type: ${this.debug.subroutineType}, scopeLine: ${line}, spFlags: DISPFlagDefinition, unit: ${this.debug.unit}, retainedNodes: ${this.debug.empty})`
     )
   }
 

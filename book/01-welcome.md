@@ -35,10 +35,9 @@ integer.
 ### Core Language
 
 - **Functions** with typed parameters and return values. User-defined functions
-  can call other user-defined functions. `async function` and `await` are
-  accepted as source markers (lowered synchronously for now, reserved for the
-  future async runtime). `extern` declarations reserve native symbols for
-  runtime linking.
+  can call other user-defined functions. Async functions eagerly return
+  native-thread `Task<T>` values, and `await` blocks for their result. `extern`
+  declarations reserve native symbols for runtime linking.
 
 - **Variables** with `let` (mutable) and `const` (immutable). Type annotations
   are optional in simple cases. Variables, struct fields, and array elements

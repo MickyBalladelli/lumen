@@ -44,7 +44,14 @@ export class ExpressionInspector {
 
     if (node.kind === 'LiteralExpression') return this.literalType(node)
     if (node.kind === 'IdentifierExpression') return this.identifierType(node)
-    if (node.kind === 'AwaitExpression') return this.inferNode(node.argument)
+    if (node.kind === 'AwaitExpression') {
+      const taskType = this.inferNode(node.argument)
+      if (!this.typeSystem.isGeneric(taskType) ||
+        this.typeSystem.genericBase(taskType) !== 'Task') {
+        throw new Diagnostic(`await expects Task<T>, got ${taskType}`, node.location, 'type')
+      }
+      return this.typeSystem.genericArgs(taskType)[0] ?? LumenTypes.Unknown
+    }
     if (node.kind === 'UnaryExpression') {
       const argument = this.inferNode(node.argument)
       if (node.operator === '!') {
@@ -330,6 +337,12 @@ export class ExpressionInspector {
       }
       return this.typeSystem.elementType(collection)
     }
+    if (name === 'startThread' &&
+      node.arguments[0]?.kind === 'IdentifierExpression' &&
+      this.scope.resolve(node.arguments[0].name)?.node?.isAsync) {
+      throw new Diagnostic('startThread cannot take an async function', node.arguments[0].location, 'type')
+    }
+
     const builtin = builtinSignature(name)
     if (builtin) {
       this.validateBuiltinCall(node, builtin)
@@ -353,6 +366,7 @@ export class ExpressionInspector {
         throw new Diagnostic(`Cannot pass ${displayType} to ${expected}`, node.location, 'semantic')
       }
     }
+
     return symbol.type ?? LumenTypes.Unknown
   }
 
@@ -380,6 +394,10 @@ export class ExpressionInspector {
   }
 
   builtinTypeAccepts(actual, expected) {
+    if (expected.startsWith('Task<')) {
+      return this.typeSystem.isGeneric(actual) &&
+        this.typeSystem.genericBase(actual) === 'Task'
+    }
     if (expected === 'any' || expected.includes('T') || expected.includes('->')) return true
     if (expected === 'number') return this.typeSystem.isNumeric(actual)
     if (expected === 'number[]') {

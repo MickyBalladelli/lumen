@@ -123,7 +123,16 @@ export const RuntimeSignatures = Object.freeze([
   runtime('usesThread', 'lumen_semaphore_signal', 'ptr', ['ptr']),
   runtime('usesThread', 'lumen_thread_start', 'ptr', ['ptr', 'ptr', 'ptr', 'ptr']),
   runtime('usesThread', 'lumen_thread_join', 'ptr', ['ptr']),
-  runtime('usesThread', 'lumen_append_file', 'ptr', ['ptr', 'ptr'])
+  runtime('usesThread', 'lumen_append_file', 'ptr', ['ptr', 'ptr']),
+  runtime('usesTask', 'lumen_task_context_alloc', 'ptr', ['i64']),
+  runtime('usesTask', 'lumen_task_result_alloc', 'ptr', ['i64']),
+  runtime('usesTask', 'lumen_task_start', 'ptr', ['ptr', 'ptr']),
+  runtime('usesTask', 'lumen_task_await', 'ptr', ['ptr']),
+  runtime('usesTask', 'lumen_task_error', 'ptr', ['ptr']),
+  runtime('usesTask', 'lumen_task_fail', 'void', ['ptr']),
+  runtime('usesTask', 'lumen_task_panic', 'void', ['ptr']),
+  runtime('usesTask', 'lumen_task_cancel', 'i1', ['ptr']),
+  runtime('usesTask', 'lumen_task_cancelled', 'i1')
 ])
 
 const runtimeBySymbol = new Map(RuntimeSignatures.map(signature => [signature.symbol, signature]))
@@ -252,7 +261,9 @@ export const BuiltinSignatures = Object.freeze([
   builtin('SemaphoreSignal', 'thread', 'semaphoreSignal', ['semaphore'], 'Result<i32>', { runtime: 'lumen_semaphore_signal' }),
   builtin('StartThread', 'thread', 'startThread', ['function', 'string', 'string', 'semaphore'], 'Result<thread>', { runtime: 'lumen_thread_start' }),
   builtin('JoinThread', 'thread', 'joinThread', ['thread'], 'Result<i32>', { runtime: 'lumen_thread_join' }),
-  builtin('AppendFile', 'thread', 'appendFile', ['string', 'string'], 'Result<i32>', { runtime: 'lumen_append_file' })
+  builtin('AppendFile', 'thread', 'appendFile', ['string', 'string'], 'Result<i32>', { runtime: 'lumen_append_file' }),
+  direct('TaskCancel', 'system', 'taskCancel', ['Task<T>'], 'bool', 'lumen_task_cancel'),
+  direct('TaskCancelled', 'system', 'taskCancelled', [], 'bool', 'lumen_task_cancelled')
 ])
 
 const builtinsByName = new Map(BuiltinSignatures.map(signature => [signature.name, signature]))

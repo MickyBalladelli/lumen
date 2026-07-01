@@ -94,9 +94,10 @@ Project audit: 2026-06-30
   Compiler and runtime process launches pass argument arrays directly. Paths with
   spaces and shell characters are covered by native and self-host tests.
 
-- [ ] Decide and implement the async model.
-  `async` and `await` currently lower synchronously. Specify tasks, scheduling,
-  cancellation, errors, and thread interaction before expanding the syntax.
+- [x] Decide and implement the async model.
+  Async calls eagerly create native-thread `Task<T>` values. Await blocks,
+  cancellation is cooperative for running work, task errors use try/catch, and
+  task arguments are copied while pointer-backed storage remains shared.
 
 ## P1 - CLI, editor, and distribution
 

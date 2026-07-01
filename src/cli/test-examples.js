@@ -34,6 +34,14 @@ const expectations = new Map([
     stdout: '4\n',
     code: 4
   }],
+  ['async-cancellation', {
+    stdout: 'task cancelled\n',
+    code: 0
+  }],
+  ['async-error', {
+    stdout: 'boom\n',
+    code: 0
+  }],
   ['basic', {
     stdout: 'hello\n3\n',
     code: 3

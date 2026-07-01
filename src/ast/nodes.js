@@ -81,12 +81,13 @@ export class VariableDeclaratorNode extends AstNode {
 }
 
 export class FunctionDeclarationNode extends AstNode {
-  constructor(name, params, body, location = null, returnType = null) {
+  constructor(name, params, body, location = null, returnType = null, isAsync = false) {
     super('FunctionDeclaration', location)
     this.name = name
     this.params = params
     this.body = body
     this.returnType = returnType
+    this.isAsync = isAsync
   }
 }
 

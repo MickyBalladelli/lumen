@@ -99,6 +99,17 @@ export const RuntimeUnits = Object.freeze([
     'lumen_thread_join',
     'lumen_thread_start'
   ]),
+  unit('task', [
+    'lumen_task_await',
+    'lumen_task_cancel',
+    'lumen_task_cancelled',
+    'lumen_task_context_alloc',
+    'lumen_task_error',
+    'lumen_task_fail',
+    'lumen_task_panic',
+    'lumen_task_result_alloc',
+    'lumen_task_start'
+  ]),
   unit('http', [
     'lumen_http_request',
     'lumen_http_response',
