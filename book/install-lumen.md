@@ -27,6 +27,7 @@ npm install -g .
 
 This installs:
 
+- `lumen`
 - `lmsh`
 - `photon`
 - `lumen-format`
@@ -35,6 +36,8 @@ This installs:
 Check the commands:
 
 ```bash
+lumen --version
+lumen run examples/basic.lm
 lmsh examples/basic.lm
 photon list
 lumen-format --check examples/basic.lm
@@ -54,6 +57,7 @@ npm link
 Check the linked commands:
 
 ```bash
+lumen emit examples/basic.lm -o build/basic.ll
 lmsh examples/cli-args.lm first second
 photon list
 lumen-format --check examples/basic.lm

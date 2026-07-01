@@ -200,7 +200,8 @@ external packages from local paths or Git URLs into `.photon/packages`.
 
 ### Tooling
 
-- **`lmsh`**: compile, link, and run a Lumen file in one command.
+- **`lumen`**: build, emit LLVM, or run a Lumen program.
+- **`lmsh`**: legacy compile-link-run shortcut.
 - **`lumen-format`**: format Lumen source files (`--check` for validation).
 - **`lumen-lsp`**: language server for editor diagnostics and formatting.
 - **VS Code extension**: syntax highlighting, snippets, formatting, diagnostics,

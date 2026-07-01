@@ -340,6 +340,46 @@ if (lmsh.stdout !== '1\n3\n' || lmsh.code !== 0) {
   console.log(green('ok lmsh executable runner'))
 }
 
+const lumenRun = await runCommand('node', [
+  join('src', 'cli', 'lumen.js'),
+  'run',
+  join(examplesDir, 'cli-args.lm'),
+  '-o',
+  join(outputDir, 'lumen-command-cli-args'),
+  '--',
+  'first',
+  'second'
+], {
+  LUMEN_DOTENV_PATH: join(examplesDir, '.env.test'),
+  LUMEN_TEST_ENV: 'from-env'
+})
+
+if (lumenRun.stdout !== '1\n3\n' || lumenRun.code !== 0) {
+  failures += 1
+  console.error('failed lumen run workflow')
+} else {
+  console.log(green('ok lumen run workflow'))
+}
+
+const lumenEmitPath = join(outputDir, 'lumen-command-basic.ll')
+const lumenEmit = await runCommand('node', [
+  join('src', 'cli', 'lumen.js'),
+  'emit',
+  join(examplesDir, 'basic.lm'),
+  '-o',
+  lumenEmitPath
+])
+const lumenLLVM = lumenEmit.code === 0
+  ? await readFile(lumenEmitPath, 'utf8')
+  : ''
+
+if (lumenEmit.code !== 0 || !lumenLLVM.includes('define i32 @main')) {
+  failures += 1
+  console.error('failed lumen emit workflow')
+} else {
+  console.log(green('ok lumen emit workflow'))
+}
+
 const hostileDirectory = join(outputDir, 'path with spaces;$(not-run)')
 const hostileSource = join(hostileDirectory, "basic source 'quoted'.lm")
 const hostileLLVM = join(hostileDirectory, 'basic output;safe.ll')

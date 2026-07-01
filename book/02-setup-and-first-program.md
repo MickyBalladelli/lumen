@@ -27,10 +27,11 @@ cd lumen
 npm install -g .
 ```
 
-This installs four commands on your PATH:
+This installs five commands on your PATH:
 
 | Command | Purpose |
 | --- | --- |
+| `lumen` | Build, emit LLVM, or run a Lumen program |
 | `lmsh` | Compile, link, and run a Lumen file in one command |
 | `photon` | Manage Lumen packages (init, add, install, search, list) |
 | `lumen-format` | Format Lumen source files (`--check` for CI validation) |
@@ -39,6 +40,8 @@ This installs four commands on your PATH:
 Verify the installation:
 
 ```bash
+lumen --version
+lumen run examples/basic.lm
 lmsh examples/basic.lm
 photon list
 lumen-format --check examples/basic.lm
@@ -54,8 +57,8 @@ point at your working checkout:
 npm link
 ```
 
-Now any source changes take effect immediately when you run `lmsh`, `photon`,
-`lumen-format`, or `lumen-lsp`.
+Now any source changes take effect immediately when you run `lumen`, `lmsh`,
+`photon`, `lumen-format`, or `lumen-lsp`.
 
 Remove the link when you're done:
 
@@ -111,10 +114,10 @@ success.
 ## Run Like A Script
 
 ```bash
-lmsh hello.lm
+lumen run hello.lm
 ```
 
-`lmsh` performs three steps automatically:
+`lumen run` performs three steps automatically:
 
 1. **Compile** — the Lumen compiler reads `hello.lm` and emits LLVM IR
 2. **Link** — `clang` links the LLVM IR with the C runtime into a native
@@ -175,11 +178,10 @@ Prints `hello` and `3` (from the example), then exits with code `3`.
 If you want to inspect the LLVM IR without linking:
 
 ```bash
-npm run compile -- examples/basic.lm --emit-llvm -o build/basic.ll
+lumen emit examples/basic.lm -o build/basic.ll
 ```
 
-The `--emit-llvm` flag tells the compiler to stop after LLVM emission. Open
-`build/basic.ll` to see the generated IR.
+Open `build/basic.ll` to see the generated IR.
 
 ## Parse And Print AST
 
@@ -204,11 +206,11 @@ Create a `lumen.json` in your project root:
 Then run the compiler without arguments:
 
 ```bash
-npm run compile
+lumen build
 ```
 
-The self-host compiler reads `lumen.json`, compiles `main.lm`, and writes the
-native executable to `build/app`.
+The compiler reads `lumen.json`, compiles `main.lm`, and writes the native
+executable to `build/app`. `lumen emit` and `lumen run` use the same config.
 
 ## Run All Tests
 
@@ -290,6 +292,7 @@ my-project/
 
 | Script | Purpose |
 | --- | --- |
+| `npm run lumen -- <command>` | Run the packaged build/emit/run command |
 | `npm run bootstrap` | Build the self-host compiler |
 | `npm run compile -- <in> <out.ll>` | Compile a Lumen file with the self-host compiler |
 | `npm run lmsh -- <file.lm> [args...]` | Compile, link, and run a Lumen file |
@@ -306,8 +309,6 @@ my-project/
 
 ## Missing
 
-- A packaged `lumen` binary command — today `compile.js` has no packaged npm
-  binary. Workflows go through `lmsh` or `npm run compile`.
 - Better CLI help output with subcommand descriptions and examples.
 - Cross-platform setup notes for Linux.
 - An installed-package smoke test that verifies the complete npm global install

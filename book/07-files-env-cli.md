@@ -188,16 +188,15 @@ Create a `lumen.json` config file in your project root:
 Then compile without any arguments:
 
 ```bash
-npm run compile
+lumen build
 ```
 
 The compiler reads `lumen.json`, compiles the entry file, and writes the native
 executable. This is the simplest way to configure a project that should compile
 the same way every time.
 
-The self-host compiler currently supports `entry` and `output` keys. Other
-config keys exist in the JS compiler options but are not yet exposed through
-the self-host path.
+`lumen emit` emits LLVM and `lumen run` builds and runs the configured entry.
+The supported config keys are `entry` and `output`.
 
 ## Native Threads
 

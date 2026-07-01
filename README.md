@@ -764,11 +764,24 @@ This prints the AST JSON.
 
 ## Compile
 
-There are a few npm commands:
+The installed `lumen` command owns normal compiler workflows:
+
+```bash
+lumen build examples/basic.lm -o build/basic
+lumen emit examples/basic.lm -o build/basic.ll
+lumen run examples/cli-args.lm -- first second
+```
+
+Use `--release` for an optimized native build, `--clang <path>` to select
+Clang, and `lumen --help` for the complete interface. Omitting the input reads
+`lumen.json`.
+
+Repository npm commands remain available:
 
 - `npm run test`: compile, link, and run the full test suite
 - `npm run bootstrap`: build `build/lumen-compiler`
 - `npm run compile -- <input.lm> <output.ll>`: use the Lumen-built compiler
+- `npm run lumen -- <command>`: run the packaged compiler command from checkout
 - `npm run lmsh -- <input.lm> [args...]`: compile, link, and run a Lumen file
 - `npm run parse -- <input.lm>`: print AST JSON
 - `npm run http`: run the HTTP example
@@ -812,14 +825,15 @@ Or link them while developing:
 
 ```bash
 npm link
+lumen run examples/cli-args.lm -- first second
 lmsh examples/cli-args.lm first second
 photon list
 lumen-format --check examples/basic.lm
 lumen-lsp
 ```
 
-The package exposes `lmsh`, `photon`, `lumen-format`, and `lumen-lsp` for
-linked or global installs.
+The package exposes `lumen`, `lmsh`, `photon`, `lumen-format`, and `lumen-lsp`
+for linked or global installs.
 
 Full install docs: [Install Lumen](book/install-lumen.md).
 
@@ -881,10 +895,11 @@ checks bootstrap stages, and runs negative compile tests.
 Compile from `lumen.json`:
 
 ```bash
-npm run compile
+lumen build
 ```
 
-Current config keys are `entry` and `output`.
+Current config keys are `entry` and `output`. `lumen emit` and `lumen run` also
+use the config when no input is given.
 
 Format Lumen files:
 

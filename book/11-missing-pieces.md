@@ -202,12 +202,9 @@ and shutdown joins unawaited task threads.
 
 ### Ship A Normal Compiler Command
 
-The npm package exposes `lmsh`, `photon`, `lumen-format`, and `lumen-lsp` but
-there is no packaged `lumen` binary for build/emit/run workflows. `compile.js`
-is script-level only.
-
-- Add a supported `lumen` binary for: compile a file, emit LLVM only, compile
-  from `lumen.json`, run a compiled program
+Completed. The npm package exposes `lumen build`, `lumen emit`, and
+`lumen run`, with explicit output, config, Clang, release, help, version, and
+program-argument handling.
 
 ### Add An Installed-Package Smoke Test
 

@@ -101,10 +101,9 @@ Project audit: 2026-06-30
 
 ## P1 - CLI, editor, and distribution
 
-- [ ] Ship a normal compiler command.
-  Add a supported `lumen` binary for build/emit/run workflows. The npm package only
-  exposes `lmsh`, `photon`, formatter, and LSP, while `compile.js` has no packaged
-  command.
+- [x] Ship a normal compiler command.
+  The packaged `lumen` binary supports build, LLVM emit, run, `lumen.json`,
+  output selection, optimized builds, Clang selection, help, and version.
 
 - [ ] Add an installed-package smoke test.
   Pack to a clean temporary directory, install the tarball, compile and run a

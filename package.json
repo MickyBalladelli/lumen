@@ -17,12 +17,14 @@
     ".": "./src/index.js"
   },
   "bin": {
+    "lumen": "./src/cli/lumen.js",
     "lmsh": "./src/cli/lmsh.js",
     "photon": "./src/cli/photon.js",
     "lumen-format": "./src/cli/format.js",
     "lumen-lsp": "./src/cli/lsp.js"
   },
   "scripts": {
+    "lumen": "node ./src/cli/lumen.js",
     "parse": "node ./src/cli/parse.js",
     "format": "node ./src/cli/format.js",
     "lsp": "node ./src/cli/lsp.js",

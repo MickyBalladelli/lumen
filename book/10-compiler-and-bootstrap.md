@@ -519,8 +519,7 @@ LLVM output. Completion is computed from the run and written to
   cases.
 - **LSP** — local imports show `Unknown module`. No debounce, no `didClose`,
   state not isolated per document.
-- **No `lumen` command** — the npm package only exposes `lmsh`, `photon`,
-  `lumen-format`, and `lumen-lsp`. There is no packaged `lumen` binary for
-  compilation workflows.
+- **Compiler command** — `lumen build`, `lumen emit`, and `lumen run` provide
+  packaged native, LLVM-only, config-driven, and compile-and-run workflows.
 - **CompilerOptions** — ownership, GC, target, and safety settings are
   placeholders with no effect on behavior.
