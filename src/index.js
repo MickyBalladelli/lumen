@@ -32,6 +32,12 @@ export {
   diagnosticsFrom,
   formatDiagnostic
 } from './diagnostics/Diagnostic.js'
+export { FeatureParityMatrix, ParityDimensions } from './parity/FeatureMatrix.js'
+export {
+  matrixSummary,
+  runParityMatrix,
+  writeParityReport
+} from './parity/ParityRunner.js'
 export {
   BuiltinSignatures,
   RuntimeSignatures,

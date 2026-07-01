@@ -283,7 +283,7 @@ export class TypeChecker {
     if (name === 'break' && this.switchDepth > 0) return LumenTypes.Void
 
     if (this.loopDepth === 0) {
-      throw new Diagnostic(`${name} can only be used inside a loop`, node.location, 'type')
+      throw new Diagnostic(`${name} outside loop`, node.location, 'type')
     }
 
     return LumenTypes.Void

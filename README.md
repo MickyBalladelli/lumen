@@ -591,6 +591,12 @@ clang -Wno-override-module build/basic-self.ll src/runtime/http.c -pthread -o bu
 
 That prints `hello` and `3`, then exits with code `3`.
 
+`npm run test:parity` runs the data-driven JS/self-host feature matrix. Every
+row compares acceptance or diagnostics, verifies both LLVM modules link, and
+compares stdout, stderr, and exit code. Results are written to
+`build/parity/matrix-report.json`; a row is complete only when every applicable
+check passes.
+
 The second-stage delegate compiler is also linked and tested by `npm run test`.
 Invalid bootstrap input is rejected with a nonzero exit code.
 The C source-to-LLVM fallback has been removed from the runtime. The stage-1

@@ -228,7 +228,7 @@ export class Tokenizer {
     ].includes(token.type)) return true
 
     if (token.type === TokenType.Keyword) {
-      return ['true', 'false', 'null', 'return'].includes(token.lexeme)
+      return ['true', 'false', 'null', 'return', 'break', 'continue'].includes(token.lexeme)
     }
 
     if (token.type === TokenType.Operator) {

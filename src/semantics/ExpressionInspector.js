@@ -349,7 +349,8 @@ export class ExpressionInspector {
         params[index].typeAnnotation?.name ??
         LumenTypes.I32
       if (!this.typeSystem.canAssign(actual, expected)) {
-        throw new Diagnostic(`Cannot pass ${actual} to ${expected}`, node.location, 'semantic')
+        const displayType = this.isNoneCall(argument) ? 'none' : actual
+        throw new Diagnostic(`Cannot pass ${displayType} to ${expected}`, node.location, 'semantic')
       }
     }
     return symbol.type ?? LumenTypes.Unknown
@@ -553,6 +554,12 @@ export class ExpressionInspector {
     return node.callee.kind === 'IdentifierExpression'
       ? node.callee.name
       : null
+  }
+
+  isNoneCall(node) {
+    return node?.kind === 'CallExpression' &&
+      node.callee.kind === 'IdentifierExpression' &&
+      node.callee.name === SystemFunctions.None
   }
 
   isKnownCall(name) {

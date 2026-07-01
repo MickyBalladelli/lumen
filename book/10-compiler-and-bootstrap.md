@@ -497,9 +497,12 @@ and UBSan (UndefinedBehaviorSanitizer) to verify memory safety.
 
 ### Parity
 
-- **JS/self-host matrix** — no differential testing that compiles every
-  supported feature with both compilers and compares diagnostics, LLVM
-  behavior, and executable output
+`npm run test:parity` differentially compiles the supported feature matrix with
+the JS and self-host compilers. Positive rows require both LLVM modules to
+link and both executables to produce the expected stdout, stderr, and exit
+code. Negative rows require matching diagnostic messages and lines, with no
+LLVM output. Completion is computed from the run and written to
+`build/parity/matrix-report.json`.
 
 ### Platform Support
 

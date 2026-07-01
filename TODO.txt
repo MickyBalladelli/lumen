@@ -71,7 +71,7 @@ Project audit: 2026-06-30
   Preserve file/range data through parsing, module loading, IR, and LLVM emission.
   Report multiple diagnostics per run with snippets, notes, and imported-file paths.
 
-- [ ] Create a JS/self-host parity matrix.
+- [x] Create a JS/self-host parity matrix.
   Differentially compile every supported feature with both compilers and compare
   diagnostics, LLVM behavior, and executable output. Do not mark a feature complete
   until both paths pass.
