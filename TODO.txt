@@ -164,7 +164,7 @@ Project audit: 2026-06-30
   Move language reference, package catalog, benchmarks, compiler internals, and
   roadmap into maintained book pages. Test code snippets and internal links.
 
-- [ ] Add contributor and security documents.
+- [x] Add contributor and security documents.
   Document toolchain setup, architecture, test layers, release process, supported
   platforms, vulnerability reporting, and the security status of network/crypto
   APIs.

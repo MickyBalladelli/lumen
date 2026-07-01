@@ -10,6 +10,11 @@ Use the official install page for global CLI, developer link, tarball, and VS Co
 
 [Install Lumen](book/install-lumen.md)
 
+Project work and security:
+
+- [Contributing](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
+
 ## What exists now
 
 - Standalone tokenizer

@@ -8,6 +8,8 @@
     "compiler",
     "packages",
     "README.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
     "lumen.json",
     "photon.json"
   ],

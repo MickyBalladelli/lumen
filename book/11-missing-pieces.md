@@ -328,7 +328,7 @@ currently change nothing.
 
 ### Add Contributor And Security Documents
 
-- `CONTRIBUTING.md`: toolchain setup, architecture overview, test layers,
-  release process
-- `SECURITY.md`: supported platforms, vulnerability reporting, security status
-  of network and crypto APIs
+Completed. `CONTRIBUTING.md` covers setup, architecture, test layers, pull
+requests, and the current manual release process. `SECURITY.md` defines
+best-effort version/platform support, private vulnerability reporting, and the
+current trust limits of compiler, package, network, and crypto APIs.
