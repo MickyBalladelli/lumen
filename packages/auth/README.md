@@ -1,5 +1,7 @@
 # Photon Auth
 
+**Status: experimental.**
+
 OIDC login-start helpers for Lumen apps.
 
 This package does not finish authentication yet. Real Google, Apple, and Active

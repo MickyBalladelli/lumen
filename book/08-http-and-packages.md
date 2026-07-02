@@ -1,7 +1,7 @@
 # HTTP And Packages
 
 This chapter covers HTTP serving (static files, API routes, combined servers),
-Socket.IO-style chat, the Photon package manager, and all 30 bundled packages.
+Socket.IO-style chat, the Photon package manager, and all 32 bundled packages.
 
 ## HTTP Server Functions
 
@@ -214,46 +214,18 @@ Socket.IO-**shaped**, not the full Socket.IO wire protocol. This means:
 
 ## Packages
 
-Lumen ships with 30 bundled packages under `packages/`. Each package provides
+Lumen ships with 32 bundled packages under `packages/`. Each package provides
 focused helper functions that you import into your program.
 
 ### Bundled Package Catalog
 
-| Package | Description | Key Exports |
-| --- | --- | --- |
-| `assert` | Assertion helpers | Extended assertion functions |
-| `auth` | Authentication | Auth primitives (experimental) |
-| `cache` | Caching | In-memory cache helpers |
-| `cli` | CLI argument parsing | Flag and argument parsers |
-| `collections` | Collection utilities | Map/list helpers |
-| `config` | Configuration helpers | `envOr`, config loading |
-| `crypto-extra` | Extended crypto | Additional encryption utilities |
-| `csv` | CSV parsing | CSV reader/writer |
-| `date-extra` | Date utilities | Date formatting and parsing |
-| `dotenv` | .env file loading | Load and parse .env files |
-| `env-extra` | Environment utilities | Environment helpers |
-| `fs-extra` | Extended file system | Directory listing, file metadata |
-| `html` | HTML generation | HTML builder helpers |
-| `http-client` | HTTP client | Outbound HTTP requests (experimental) |
-| `http-kit` | HTTP toolkit | HTTP utility functions |
-| `json-extra` | Extended JSON helpers | JSON manipulation utilities |
-| `jwt-lite` | JWT tokens | JWT encode/decode (experimental) |
-| `logger` | Logging | Log level and formatting helpers |
-| `math-extra` | Extended math | Additional math functions |
-| `middleware` | Middleware patterns | HTTP middleware composition |
-| `option` | Option type helpers | Option/Maybe utilities |
-| `path` | Path manipulation | Path join, normalize, extension |
-| `process` | Process management | Process spawning helpers |
-| `result` | Result type helpers | Result/Either utilities |
-| `router` | HTTP routing | Route matching and dispatch |
-| `slug` | Slug generation | URL-safe slug from text |
-| `string-extra` | Extended string helpers | Additional string utilities |
-| `template` | Template engine | String template rendering |
-| `testing` | Test helpers | Test assertion and runner |
-| `time` | Time utilities | Time formatting and manipulation |
-| `url` | URL parsing | URL parse and build (experimental) |
-| `uuid` | UUID generation | UUID v4 generation |
-| `validation` | Input validation | String/number validation rules |
+The generated [package support matrix](support-matrix.md#bundled-package-support)
+lists every package manifest and its current maturity. It is generated from the
+repository, so this chapter does not keep a second hand-written status table.
+
+The `auth`, `http-client`, `jwt-lite`, and `url` packages are experimental.
+They do not yet provide completed authentication, outbound HTTPS transport,
+JWT verification, or complete URL parsing/encoding.
 
 ### Using A Package
 
@@ -266,19 +238,6 @@ function main(): i32 {
   return 0
 }
 ```
-
-### Package Status
-
-Many packages are early-stage. Packages marked "experimental" have placeholder
-implementations or limited functionality. The core packages (`assert`, `cli`,
-`collections`, `config`, `dotenv`, `fs-extra`, `json-extra`, `logger`,
-`math-extra`, `option`, `path`, `process`, `result`, `router`, `slug`,
-`string-extra`, `template`, `testing`, `time`, `uuid`, `validation`) have
-working implementations.
-
-**Experimental** (auth, http-client, jwt-lite, url) — these packages exist in
-the directory structure with skeleton code. They are reserved for future
-implementation.
 
 ## Photon Package Manager
 
@@ -304,7 +263,7 @@ photon init my-app
 
 ### Photon.json Manifest
 
-```json
+```json check
 {
   "name": "my-app",
   "version": "1.0.0",

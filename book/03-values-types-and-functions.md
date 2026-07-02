@@ -8,7 +8,7 @@ Lumen has two kinds of variable bindings.
 
 **`const`** creates an immutable binding. Once set, it cannot be reassigned.
 
-```lumen
+```lumen check
 function main(): i32 {
   let total: i32 = 0         // mutable, can change
   const limit: i32 = 10      // immutable, cannot change
@@ -420,11 +420,8 @@ line.
   built-in `Result<T>`, `Task<T>`, and `Map<K,V>`.
 - **Stronger numeric conversion rules** — implicit conversions between `i32`,
   `i64`, and `f32` are not fully defined.
-- **Full expression AST** — the compiler still uses token-shape heuristics in
-  `RawExpression.parsed`, which is created but ignored by semantic analysis,
-  type checking, and code generation.
-- **Stronger type checker** — boolean conditions aren't enforced; functions
-  aren't checked for return-on-all-paths; use-before-initialization isn't
-  detected.
+- **Expression wrapper cleanup** — semantic analysis, type checking, IR, and
+  code generation consume parsed expression nodes, but statement fields still
+  carry a `RawExpression` wrapper around those nodes.
 - **Function overloading** — no mechanism for multiple functions with the same
   name and different parameter types.

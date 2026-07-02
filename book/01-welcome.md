@@ -6,7 +6,7 @@ many benchmarks.
 
 Tiny program:
 
-```lumen
+```lumen check
 function main(): i32 {
   println("hello lumen")
   return 0
@@ -14,9 +14,13 @@ function main(): i32 {
 ```
 
 The goal is simple: write readable programs, compile them to native code, and
-grow the language until it can own more of its compiler. The self-host compiler
-is now genuinely self-hosting — it reproduces its own LLVM image without an
-external compiler or seed file, proven through a three-stage bootstrap.
+grow the language until it can own more of its compiler. Today, the primary
+compiler is JavaScript. The Lumen-written bootstrap compiler handles a tested
+subset and reproduces an embedded LLVM checkpoint; it is not fully
+self-hosting from source.
+
+The [generated feature and support matrix](support-matrix.md) is the source of
+truth for compiler parity, package maturity, and platform support.
 
 ## Language Philosophy
 
@@ -184,19 +188,23 @@ HTTP operations return `Result<T>`.
 - `tokenizeSource(source)`: Lumen-callable tokenizer.
 - `parseSummary(source)`: Lumen-callable parser summary.
 - `sourceSnippet(source, line, column)`: diagnostic line plus caret.
-- `compilerImage()`: returns the self-host compiler's LLVM image.
+- `compilerImage()`: returns the embedded stage-1 LLVM checkpoint.
 - `stringBuilder()`, `stringBuilderAppend(...)`: text emission helpers.
 
 ### Packages
 
-30 bundled packages under `packages/` cover assertions, authentication, caching,
-CLI parsing, collections, configuration, crypto, CSV, dates, dotenv, environment,
+32 bundled packages under `packages/` cover assertions, authentication, caching,
+CLI parsing, collections, configuration, crypto, CSV, dates, environment,
 filesystem extensions, HTML, HTTP, JSON, JWT, logging, math, middleware, options,
 path manipulation, process management, results, routing, slugs, strings,
 templates, testing, time, URLs, UUIDs, and validation.
 
 Photon (`photon init`, `photon add`, `photon install`, `photon search`) installs
 external packages from local paths or Git URLs into `.photon/packages`.
+
+Authentication, outbound HTTPS, JWT, and URL packages are experimental and
+incomplete. Their exact limits are listed in the
+[generated support matrix](support-matrix.md#bundled-package-support).
 
 ### Tooling
 
@@ -207,26 +215,19 @@ external packages from local paths or Git URLs into `.photon/packages`.
 - **VS Code extension**: syntax highlighting, snippets, formatting, diagnostics,
   compile command, and native debug launch support.
 
-## Self-Host Compiler
+## Bootstrap Compiler
 
 The compiler in `compiler/` is written in Lumen. It tokenizes, parses, runs
-semantic analysis, type checks, builds IR, and emits LLVM. The bootstrap is
-proven through three stages:
-1. Stage-1 compiles `compiler/main.lm` to native.
-2. Stage-2 delegates compilation requests to the stage-1 compiler.
-3. Stage-3 is built by stage-2, compared byte-for-byte, and runs independently.
-
-The stage-1 LLVM seed file is hidden; the C source-to-LLVM fallback has been
-removed; the source-shape example dispatcher has been replaced with a delegate
-path.
+semantic analysis, type checks, builds a partial IR summary, and emits LLVM for
+the parity-tested subset. Stage-1 is built by the JavaScript compiler. When
+compiling its own entry point, it returns the embedded stage-1 LLVM checkpoint.
+Stage-2 and stage-3 reproduce that checkpoint byte-for-byte and run parity
+fixtures independently. This is deterministic checkpoint bootstrapping, not
+full source self-hosting.
 
 ## Missing
 
-- Full expression AST (currently uses token-shape heuristics in
-  `RawExpression.parsed`, which is created but ignored by semantic analysis,
-  type checking, and code generation)
-- Stronger type checker (boolean conditions not enforced, no return-on-all-paths
-  analysis, no use-before-initialization rejection)
-- Async runtime (syntax reserved, lowers synchronously today)
+- Full source self-hosting and parity with the primary compiler
+- Removal of the bootstrap compiler's program-map/statement bridge
 - Better HTTP routing and production-ready runtime hardening
-- A packaged `lumen` compiler binary command
+- Windows runtime and toolchain support

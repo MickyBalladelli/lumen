@@ -325,8 +325,8 @@ let summary = parseSummary(source)
 // summary is a string representation of the parsed AST
 ```
 
-These are intentionally small foundations. The full compiler is being rewritten
-in Lumen rather than exposed through JS helpers.
+These are intentionally small foundations. The Lumen-written bootstrap
+compiler remains a subset of the primary JavaScript compiler.
 
 ### Source Snippet
 
@@ -335,18 +335,18 @@ let diagnostic = sourceSnippet(source, line, column)
 // produces a line of source with a caret pointing at the error location
 ```
 
-Used by the self-host compiler for error reporting.
+Used by the bootstrap compiler for error reporting.
 
 ### Compiler Image
 
 ```lumen
 let image = compilerImage()
-// returns the self-host compiler's own LLVM image as a string
+// returns the embedded stage-1 LLVM checkpoint as a string
 ```
 
-This is the mechanism for genuine self-hosting. The native compiler carries its
-deterministic LLVM image and can reproduce itself without an external compiler
-or seed file.
+This is the mechanism for deterministic checkpoint bootstrapping. The
+JavaScript compiler embeds the stage-1 image; later stages reproduce it rather
+than rebuilding the compiler from Lumen source.
 
 ## Missing
 

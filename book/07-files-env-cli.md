@@ -151,7 +151,7 @@ let code = exec("clang", arguments)
 ### How It's Used
 
 The JavaScript compiler driver invokes `clang` with an argument array. The
-self-host compiler reads and writes exact paths without constructing commands.
+bootstrap compiler reads and writes exact paths without constructing commands.
 
 ```lumen
 let arguments: string[] = [
@@ -283,5 +283,5 @@ semaphoreSignal(semaphore) // unlock
 - **Process spawn** — no output capture or timeout.
 - **Thread lifecycle** — explicit `thread` handles have no detach or
   cancellation; `Task<T>` has cooperative cancellation and await errors.
-- **Path portability** — no path manipulation helpers beyond the `path` package
-  (which is experimental).
+- **Path portability** — the basic `path` package joins with `/`; it does not
+  normalize paths or model platform-specific separators.

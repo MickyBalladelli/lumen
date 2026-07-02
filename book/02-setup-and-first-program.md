@@ -68,7 +68,7 @@ npm unlink -g lumen
 
 ### Install From A Tarball
 
-Build a portable `.tgz` package and install it:
+Build an npm `.tgz` package and install it:
 
 ```bash
 npm pack
@@ -99,7 +99,7 @@ The extension provides:
 
 Create a file named `hello.lm`:
 
-```lumen
+```lumen check
 function main(): i32 {
   println("hello")
   return 0
@@ -130,7 +130,7 @@ This is the fastest way to iterate. No manual build steps needed.
 
 For more control, break the process into explicit steps:
 
-### Step 1: Build The Self-Host Compiler
+### Step 1: Build The Bootstrap Compiler
 
 ```bash
 npm run bootstrap
@@ -146,7 +146,7 @@ the compiler itself changes.
 npm run compile -- examples/basic.lm build/basic.ll
 ```
 
-This runs the self-host compiler on your Lumen source and writes LLVM IR to
+This runs the Lumen-written bootstrap compiler on your Lumen source and writes LLVM IR to
 `build/basic.ll`. The `--` separates npm arguments from the arguments passed to
 the compile script.
 
@@ -224,8 +224,8 @@ This comprehensive test suite runs:
    analyzer, type checker, module graph, formatter, and compiler
 2. **Example tests** — compiles every example in `examples/`, links the
    binaries, runs them, and checks expected output
-3. **Bootstrap tests** — builds the stage-1 compiler, verifies stage-2 and
-   stage-3 byte-for-byte equality, runs the stage-3 compiler independently
+3. **Bootstrap tests** — builds stage-1 with the JavaScript compiler, verifies
+   stage-2 and stage-3 checkpoint equality, and runs stage-3 independently
 4. **Negative tests** — verifies that invalid programs produce compiler errors
    with nonzero exit codes
 5. **Sanitizer tests** — runs compiled programs under ASan and UBSan to verify
@@ -246,6 +246,8 @@ green, section headings are cyan, and unavailable or invalid rows are yellow.
 
 Missing toolchain entries (no `rustc`, `python3`, or `node`) are noted as
 missing rather than failing the test.
+
+See [Benchmarks](benchmarks.md) for methodology and example local results.
 
 ## Format Source Files
 
@@ -294,8 +296,8 @@ my-project/
 | Script | Purpose |
 | --- | --- |
 | `npm run lumen -- <command>` | Run the packaged build/emit/run command |
-| `npm run bootstrap` | Build the self-host compiler |
-| `npm run compile -- <in> <out.ll>` | Compile a Lumen file with the self-host compiler |
+| `npm run bootstrap` | Build the Lumen-written bootstrap compiler |
+| `npm run compile -- <in> <out.ll>` | Compile a supported Lumen file with the bootstrap compiler |
 | `npm run lmsh -- <file.lm> [args...]` | Compile, link, and run a Lumen file |
 | `npm run parse -- <file.lm>` | Print the AST as JSON |
 | `npm run format -- <file.lm>` | Format a Lumen file |

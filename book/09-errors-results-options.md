@@ -68,7 +68,7 @@ throw "validation failed: ${reason}"
 ```
 
 You can throw any string — error messages, codes, or descriptive text. The
-self-host compiler supports `throw` of strings in its try/catch lowering.
+bootstrap compiler supports `throw` of strings in its try/catch lowering.
 
 ### Nested Try/Catch
 

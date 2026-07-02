@@ -1,31 +1,5 @@
 
 
-- [x] Add an installed-package smoke test.
-  Pack to a clean temporary directory, install the tarball, compile and run a
-  program, install a bundled Photon package, start an LSP handshake, and verify all
-  documented commands. Include `book/install-lumen.md` or remove the broken package
-  link to a file excluded by npm.
-
-- [x] Make LSP compilation use the same module graph as CLI compilation.
-  Local imports currently produce `Unknown module` in the editor. Also implement
-  `didClose`, debounce/cancel stale diagnostics, report all errors, and isolate
-  compiler state per document/build.
-
-- [x] Add useful language intelligence after correctness.
-  Provide go-to-definition, references, hover types, completion, rename, symbols,
-  semantic tokens, and code actions from compiler data instead of re-parsing in the
-  extension
-
-- [x] Make formatting syntax-aware and idempotent.
-  The formatter validates the AST, formats trivia-aware tokens, preserves comments
-  and multiline structure, leaves malformed input untouched, normalizes CRLF, and
-  has format-twice coverage for edge cases and every example.
-
-- [ ] Complete package metadata and release automation.
-  Add license, repository, bugs/homepage, Node engine, publish checks, changelog,
-  version synchronization with VS Code/LSP, checksums, and reproducible VSIX/tarball
-  release artifacts.
-
 ## P2 - Tests, docs, and maintenance
 
 - [ ] Add CI on macOS and Linux.
@@ -49,11 +23,11 @@
   Garbage collector, ownership, target, and safety settings are public placeholders
   that currently change nothing.
 
-- [ ] Reconcile documentation with actual behavior.
+- [x] Reconcile documentation with actual behavior.
   README and book disagree about full self-hosting, typed IR, supported bootstrap
   features, and portability. Keep one generated feature/support matrix and label
   auth, JWT, outbound HTTPS, and URL packages experimental until implemented.
 
-- [ ] Reduce the README to a reliable entry page.
+- [x] Reduce the README to a reliable entry page.
   Move language reference, package catalog, benchmarks, compiler internals, and
   roadmap into maintained book pages. Test code snippets and internal links.

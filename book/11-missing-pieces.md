@@ -6,10 +6,10 @@ Finished" section so the project's progress is visible.
 
 ## Recently Finished
 
-- **Genuinely self-hosting compiler** (stage-3 proven) — the native compiler
-  carries its deterministic LLVM image and reproduces it without an external
-  compiler or seed file. Stage-2 builds stage-3; the two are compared byte for
-  byte; the stage-3 compiler runs independently.
+- **Deterministic bootstrap checkpoint** — the JavaScript compiler embeds the
+  stage-1 LLVM image. Stage-2 and stage-3 reproduce it byte-for-byte, and
+  stage-3 runs independently against parity fixtures. Full source self-hosting
+  remains unfinished.
 
 - **Fresh mutable state per compilation** — `Compiler` creates fresh semantic,
   type, IR, and backend components through factories for every call. Regression
@@ -40,9 +40,9 @@ Finished" section so the project's progress is visible.
   variable initializers plus first-argument function calls, including `none()`
   and `ok(...)` helper shapes.
 
-- **Self-host IR builder** — `IrModule` that lowers AST/statement bridge into
-  module facts, instruction counts, return values, print counts, and
-  call/binary/loop flags before emission.
+- **Bootstrap IR summary** — typed `IrModule` structures hold module facts,
+  instruction counts, return values, print counts, and call/binary/loop flags.
+  The program-map and statement bridge remain part of emission.
 
 - **Self-host LLVM emitter** — `emitIr(...)` entry point with the compiler
   calling that IR-based path. Internals still delegate through the legacy
@@ -52,8 +52,9 @@ Finished" section so the project's progress is visible.
   imports and bare package `main.lm` files, skips duplicate loads, removes
   handled import declarations, and feeds flattened source into the parser.
 
-- **Stage-1 self-host delegate path** — the old C fallback has been completely
-  removed. Stage-2 bootstrap equality against stage-1 output.
+- **Stage-1 compiler checkpoint path** — the old C fallback has been removed.
+  Compiler-mode emission returns the LLVM image embedded by the JavaScript
+  compiler.
 
 - **Structs, arrays, enums, match, switch, try/catch, async, loops, and source
   diagnostics** in the self-host path.
@@ -101,60 +102,43 @@ lacks production-ready safety measures:
 
 ### Finish The Expression AST
 
-`RawExpression.parsed` fields are created by the parser but completely ignored
-by semantic analysis, type checking, and code generation. Those stages inspect
-raw token shapes instead. This is the single largest architectural gap in the
-compiler.
+Parsed nodes now represent calls, members, assignments, unary/binary
+operators, arrays, structs, matches, slices, arrows, and await. Semantic
+analysis, type checking, IR, and code generation consume those nodes.
 
-- Represent function calls as real AST nodes (not token-shape heuristics)
-- Represent field access (`point.x`) as real AST nodes
-- Represent assignment as real AST nodes
-- Represent unary operators as real AST nodes
-- Represent binary operators with precedence as real AST nodes
-- Represent array literals, struct literals, match expressions, and await as
-  real AST nodes
-- Make semantic analysis, type checking, and code generation consume parsed
-  expressions instead of inspecting token shapes directly
+Remaining work is to remove the `RawExpression` statement-field wrapper and
+make parsed expression nodes the direct AST representation everywhere.
 
-### Strengthen The Type Checker
+### Extend The Type System
 
-- Require boolean expressions in `if` and loop conditions
-- Prove non-void functions return on every control flow path
-- Reject use of variables before they are initialized
-- Fully validate match arms for exhaustiveness and type consistency
-- Define generic type variance rules for `Result<T>`, `Map<K,V>`, and `T?`
-- Define nullable type rules
-- Validate collection element types
+Boolean conditions, return-on-all-paths, use-before-initialization, match
+coverage, generic variance, nullable rules, and collection element types are
+checked today. Remaining work includes user-defined generics, function
+overloading, and fully specified numeric conversions.
 
 ### Define A Built-in/Runtime ABI Registry
 
-Function names and signatures are currently duplicated across five places:
-`ModuleRegistry.js`, `ExpressionInspector.js`, `TypeChecker.js`,
-`LLVMEmitter.js`, and the C runtime. This drift-prone.
-
-- Define one typed table of all built-in functions with their signatures
-- Generate or consume this table from all five locations
-- Fail at build time when implementations drift from the registry
+Completed. `BuiltinRegistry.js` is the canonical typed table. Compiler
+consumers share it, runtime units are selected from it, and ABI tests reject
+drift from C declarations and implementations.
 
 ### Make Diagnostics Module-Aware And Recoverable
 
-- Preserve file path and source range through all pipeline stages (parsing,
-  module loading, IR building, LLVM emission)
-- Report multiple diagnostics per compilation instead of stopping at the first
-  error
-- Include source snippets, carets, and notes pointing to related locations
-- Include imported-file paths in error traces
+Completed in the primary compiler. Diagnostics preserve files and ranges,
+collect independent failures, render snippets and notes, and retain imported
+file paths. The bootstrap compiler still reports only its smaller diagnostic
+subset.
 
-### Create A JS/Self-Host Parity Matrix
+### JS/Bootstrap Parity Matrix
 
-- Differentially compile every supported language feature with both the JS
-  compiler and the self-host compiler
-- Compare diagnostics, LLVM IR output, and executable behavior
-- Do not mark a feature as complete until both compilers produce
-  indistinguishable results
+Completed for the currently claimed subset. `npm run test:parity` compares
+diagnostics, LLVM requirements, and executable behavior. Claimed rows are
+generated into [the support matrix](support-matrix.md).
 
-### Self-Host Compiler Expansion
+### Bootstrap Compiler Expansion
 
+- Replace the `compilerImage()` checkpoint with source-derived compiler output
+- Prove the compiler can regenerate itself from `compiler/*.lm`
 - Remove the AST-to-map compatibility bridge from the emitter internals —
   emit directly from IR
 - Grow the parser to cover all JS compiler features
@@ -167,8 +151,9 @@ Function names and signatures are currently duplicated across five places:
 
 ### Linux Support
 
-Completed. Linux process arguments, encryption/decryption, and WebSocket
-handshakes have portable providers. Runtime tests force these paths on macOS.
+Linux process arguments, encryption/decryption, and WebSocket handshakes have
+Linux-capable providers. Automated Linux CI is still required before treating
+Linux as continuously verified.
 
 ### Split The Runtime C Code
 
@@ -296,22 +281,19 @@ currently change nothing.
 - Or remove the options and document the current memory management model as
   intentional
 
-### Reconcile Documentation With Actual Behavior
+### Generated Feature And Support Matrix
 
-- The README claims features that differ from the book's description
-- There is no single source of truth for what features exist
-- Create one generated feature/support matrix
-- Label experimental packages (auth, JWT, outbound HTTPS, URL) clearly until
-  implemented
+Completed. `book/support-matrix.md` is generated from parity data, support
+metadata, and package manifests. README and book pages link to it instead of
+maintaining separate support claims. Auth, JWT, outbound HTTPS, and URL
+packages are marked experimental.
 
 ### Reduce The README To A Reliable Entry Page
 
-- Move language reference into maintained book pages
-- Move package catalog into the packages chapter
-- Move benchmark results into a dedicated page
-- Move compiler internals into the compiler chapter
-- Move roadmap into this chapter
-- Test all code snippets and internal links
+Completed. README is a short install/status/quick-start page. Language,
+packages, benchmarks, compiler internals, and roadmap content live in the book.
+`npm run check:docs` verifies local links and anchors, compiles marked Lumen
+snippets, and keeps README below the size limit.
 
 ### Add Contributor And Security Documents
 

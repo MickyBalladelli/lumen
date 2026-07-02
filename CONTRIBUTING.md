@@ -66,7 +66,7 @@ Main areas:
 | `src/runtime` | Native C11/POSIX runtime units selected by referenced symbols |
 | `src/modules` | Local and Photon module graph |
 | `src/compiler` | Pipeline orchestration and `clang` driver |
-| `compiler` | Lumen-written self-host compiler |
+| `compiler` | Lumen-written bootstrap compiler |
 | `src/cli`, `src/lsp` | Commands, package manager, formatter, and language server |
 | `vscode-lumen` | VS Code extension |
 
@@ -74,7 +74,7 @@ Built-in names, types, LLVM declarations, and C symbols meet in
 `src/runtime/BuiltinRegistry.js`. Any runtime ABI change must update that
 registry, its C implementation, runtime-unit ownership, and tests together.
 
-The self-host compiler supports a deliberate subset. Changes to shared language
+The bootstrap compiler supports a deliberate subset. Changes to shared language
 behavior should preserve the feature matrix in `src/parity/FeatureMatrix.js`.
 
 ## Code Style
@@ -101,7 +101,7 @@ generated IR first.
 | `npm run test:integration` | All integration suites; continues after a suite fails |
 | `npm run test:examples`, `test:cli`, `test:negative`, `test:lsp` | Focused native workflow suites |
 | `npm run test:bootstrap` | Three-stage bootstrap behavior and output equality |
-| `npm run test:parity` | JS/self-host diagnostics, LLVM behavior, and executable parity |
+| `npm run test:parity` | JavaScript/bootstrap diagnostics, LLVM behavior, and executable parity |
 | `npm run test:sanitizers` | Native ASan and UBSan runtime checks |
 | `npm run fuzz:http` | HTTP-request and WebSocket parser fuzzing |
 | `npm test` | All standard layers except the separate fuzz run |

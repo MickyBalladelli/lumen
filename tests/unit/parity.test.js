@@ -6,7 +6,7 @@ import {
 } from '../../src/parity/FeatureMatrix.js'
 import { matrixSummary } from '../../src/parity/ParityRunner.js'
 
-test('parity matrix covers documented self-host code generation', () => {
+test('parity matrix covers documented bootstrap code generation', () => {
   const ids = new Set(FeatureParityMatrix.map(entry => entry.id))
   const required = [
     'functions-return',

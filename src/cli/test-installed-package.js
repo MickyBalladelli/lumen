@@ -91,7 +91,9 @@ try {
   await suite.test('installed README links to shipped install guide', async () => {
     const readme = await readFile(join(installedPackage, 'README.md'), 'utf8')
     assert.match(readme, /\[Install Lumen\]\(book\/install-lumen\.md\)/)
+    assert.match(readme, /\[generated feature and support matrix\]\(book\/support-matrix\.md\)/)
     await access(join(installedPackage, 'book', 'install-lumen.md'))
+    await access(join(installedPackage, 'book', 'support-matrix.md'))
   })
 
   await suite.test('lumen version, help, emit, build, and run', async () => {

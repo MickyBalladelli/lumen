@@ -20,3 +20,8 @@ so docs can guide the roadmap.
 9. [Errors, Results, And Options](09-errors-results-options.md)
 10. [Compiler And Bootstrap](10-compiler-and-bootstrap.md)
 11. [Missing Pieces](11-missing-pieces.md)
+
+Reference pages:
+
+- [Generated Feature And Support Matrix](support-matrix.md)
+- [Benchmarks](benchmarks.md)

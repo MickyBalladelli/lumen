@@ -220,7 +220,7 @@ Output:
 - When `i == 5`, `break` exits the loop entirely
 
 `break` and `continue` work inside all loop forms: classic `for`, `for-of`,
-range loops, `while-do`, and `do-until`. The self-host compiler's semantic
+range loops, `while-do`, and `do-until`. The bootstrap compiler's semantic
 analyzer checks that `break` and `continue` only appear inside valid
 control-flow regions.
 
@@ -375,9 +375,7 @@ performance is close to what you'd get writing the equivalent C code.
 
 - **Loop labels** — no way to `break` or `continue` an outer loop from a nested
   loop.
-- **Type checker enforcement** — `if` and loop conditions should be validated
-  as `bool` by the type checker.
-- **Self-host compiler limitations** — the self-host compiler currently only
+- **Bootstrap compiler limitations** — the bootstrap compiler currently only
   supports a narrow `while` shape.
 - **Pattern matching** — `match` matches enum variants and literals, but not
   struct fields, nested patterns, or guards (`if` clauses on arms).

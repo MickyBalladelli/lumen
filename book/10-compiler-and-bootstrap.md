@@ -1,7 +1,7 @@
 # Compiler And Bootstrap
 
 This chapter covers the full compiler architecture: the JavaScript compiler in
-`src/`, the self-host compiler in `compiler/`, the module graph, the bootstrap
+`src/`, the bootstrap compiler in `compiler/`, the module graph, the bootstrap
 process, the formatter, the language server, and using the compiler as a
 JavaScript library.
 
@@ -67,10 +67,10 @@ The semantic analyzer checks scope, symbols, and semantic rules.
 | --- | --- |
 | `SemanticAnalyzer.js` | Checks `main` existence, duplicate symbols, break/continue validity, return type compatibility |
 | `Scope.js` | Scope tracking (block scopes, function scopes) |
-| `TypeChecker.js` | Simple type checking for i32, bool, string, void |
+| `TypeChecker.js` | Type checking, control-flow returns, initialization, matches, and collections |
 | `TypeSystem.js` | Type definitions and compatibility rules |
 | `ModuleRegistry.js` | Registers known module names and their exported functions |
-| `ExpressionInspector.js` | Inspects expression shapes for built-in function call detection |
+| `ExpressionInspector.js` | Infers and validates parsed expression nodes |
 
 The semantic analyzer:
 - Verifies `main` function exists for executable programs
@@ -86,10 +86,13 @@ The semantic analyzer:
 | `IRBuilder.js` | Converts AST statements into an intermediate representation |
 | `IR.js` | IR data structure definitions |
 
-The IR is currently a simplified representation. `IRFunction.body` still
-contains AST statements rather than fully typed instructions with basic blocks.
-This is a known architectural gap — the goal is to lower expressions and
-control flow into typed instructions before the backend consumes them.
+The primary compiler lowers into `IRModule`, `IRFunction`, `IRBasicBlock`,
+`IRInstruction`, `IRTerminator`, and typed `IRValue` objects. IR validation
+runs before LLVM lowering, and AST statements do not form function bodies in
+this pipeline.
+
+This primary IR is separate from the smaller Lumen bootstrap compiler's
+`IrModule` summary and compatibility bridge.
 
 ### 6. LLVM Emitter — `src/backend/`
 
@@ -201,10 +204,11 @@ The self-host module loader (`compiler/modules.lm`) recursively loads:
 - **Import removal** — handled import declarations are stripped from the source
   before feeding the flattened program to the parser
 
-## Self-Host Compiler
+## Bootstrap Compiler
 
 The bootstrap compiler in `compiler/` is written in Lumen. It compiles a
-growing subset of the language and is verified through a three-stage bootstrap.
+growing subset of the language. The exact tested subset lives in the
+[generated support matrix](support-matrix.md).
 
 ### Source Files
 
@@ -222,45 +226,27 @@ growing subset of the language and is verified through a three-stage bootstrap.
 
 ### Parser Coverage
 
-The self-host parser recognizes:
-- Imports, extern declarations
-- Structs, enums
-- Async functions
-- `let`/`const` variable declarations
-- `if`/`else` branching
-- Classic `for`, for-of, range loops
-- `while`, do-until
-- `switch` with cases and default
-- `defer`, `break`, `continue`
-- `try`/`catch`, `throw`
-- `return` statements
-- Match expression initializers
+The bootstrap parser recognizes more syntax than the emitter can compile.
+Syntax recognition alone is not a support claim. Only rows in the
+[JavaScript/bootstrap parity tables](support-matrix.md#javascriptbootstrap-parity-features)
+are treated as supported bootstrap features.
 
 ### Code Generation Coverage
 
-The stage compiler can emit LLVM for:
-- The tiny bootstrap self-compilation input
-- Simple `let`/`println`/`return` programs
-- Helper function calls
-- `if` branching
-- Classic loop smoke cases
-- While-loop smoke cases
-- Struct literals with named integer fields and field access
-- Integer array literals and indexing
-- Enum-backed match expressions
-- Numeric switch cases
-- Throw/catch recovery
-- Awaiting simple async functions
+Code-generation coverage is generated from `FeatureParityMatrix`, including its
+test fixture for every claimed feature. See the
+[generated parity table](support-matrix.md#javascriptbootstrap-parity-features).
 
 ### Emitter Architecture
 
-The emitter accepts an `IRModule` and dispatches typed IR instructions, values,
-basic blocks, and terminators directly. AST statements do not cross the backend
-boundary.
+The primary JavaScript compiler uses typed IR instructions, values, basic
+blocks, and terminators. The Lumen bootstrap compiler does not use that same
+IR. Its `IrModule` is a typed summary structure, while emission still reads a
+program map and uses a statement compatibility bridge.
 
 ### Diagnostic Format
 
-The command-line self-host compiler reports errors with:
+The command-line bootstrap compiler reports errors with:
 
 ```
 Error: <message>
@@ -274,36 +260,29 @@ type errors (mismatched variable initializer types) are both reported this way.
 
 ## Bootstrap Process
 
-The bootstrap is verified by `npm run test`. It proves the compiler is
-genuinely self-hosting through three stages:
+The bootstrap is verified by `npm run test`. It proves deterministic checkpoint
+reproduction and executable behavior for the parity-tested subset. It does not
+prove full source self-hosting.
 
 ### Stage 1
 
 The JavaScript compiler compiles `compiler/main.lm` into a native executable
-(`build/lumen-compiler`). This is the first self-host compiler. The LLVM seed
-file is **hidden** during testing to prove the compiler does not depend on a
-pre-existing binary or seed IR.
+(`build/lumen-compiler`). While linking it, the JavaScript compiler embeds the
+stage-1 LLVM image used by `compilerImage()`.
 
 ### Stage 2
 
-The stage-1 compiler compiles `compiler/main.lm` again, producing a **second**
-native executable. This second compiler delegates all compilation requests to
-the stage-1 compiler. It explicitly **rejects** compiler self-compilation
-requests, proving it is not using the same code path as stage 1.
-
-The stage-2 compiler no longer contains the source-shape example dispatcher
-that was present in earlier versions. The C source-to-LLVM fallback has been
-completely removed from the runtime.
+The stage-1 compiler is asked to compile `compiler/main.lm`. That input selects
+compiler mode, and the emitter returns the embedded stage-1 LLVM checkpoint.
+The result is linked as stage-2.
 
 ### Stage 3
 
-The stage-2 compiler compiles a renamed copy of `compiler/main.lm`, producing
-a **third** native executable. This stage-3 compiler is compared **byte for
-byte** with the stage-2 compiler. If they match, the bootstrap is proven — the
-compiler can reproduce itself deterministically.
-
-The stage-3 compiler is then run independently to verify it can compile
-example programs correctly.
+Stage-2 repeats the checkpoint operation to produce stage-3. Stage-2 and
+stage-3 LLVM are compared byte-for-byte. Stage-3 then runs independently
+against parity fixtures. Equality proves the embedded checkpoint is stable; it
+does not show that the bootstrap compiler parsed and regenerated its own
+source.
 
 ### Manual Bootstrap
 
@@ -313,7 +292,7 @@ You can run the bootstrap manually:
 # Build stage 1
 npm run bootstrap
 
-# Use the self-host compiler
+# Use the bootstrap compiler
 npm run compile -- examples/basic.lm build/basic.ll
 
 # Link and run
@@ -470,7 +449,7 @@ and UBSan (UndefinedBehaviorSanitizer) to verify memory safety.
 - **Snippets** — errors include source line and caret but no notes or related
   file paths
 
-### Self-Host Compiler
+### Bootstrap Compiler
 
 - **Emitter bridge** — the self-host emitter still uses the AST-to-map
   compatibility bridge internally
@@ -486,20 +465,27 @@ and UBSan (UndefinedBehaviorSanitizer) to verify memory safety.
 ### Parity
 
 `npm run test:parity` differentially compiles the supported feature matrix with
-the JS and self-host compilers. Positive rows require both LLVM modules to
+the JavaScript and bootstrap compilers. Positive rows require both LLVM modules to
 link and both executables to produce the expected stdout, stderr, and exit
 code. Negative rows require matching diagnostic messages and lines, with no
 LLVM output. Completion is computed from the run and written to
 `build/parity/matrix-report.json`.
 
+The claimed rows are generated into the
+[support matrix](support-matrix.md#javascriptbootstrap-parity-features).
+
 ### Platform Support
 
-- **Linux** — `arg` and `argCount` read `/proc/self/cmdline`. Crypto uses the
-  same PBKDF2-HMAC-SHA256/AES-256-CTR wire format as macOS through a
-  dependency-free provider. WebSocket handshakes use portable SHA-1/base64.
+- **macOS and Linux** — current development targets. Linux has dedicated
+  process-argument, crypto, and WebSocket providers, but automated Linux CI is
+  not present yet.
+- **Windows** — unsupported because the runtime and build flow require POSIX
+  APIs and pthreads.
 - **Runtime units** — system, fs, collections, string, crypto, thread, and HTTP
   compile separately. Generated programs link only referenced units and their
   dependencies.
+
+See the [generated platform matrix](support-matrix.md#platform-support).
 
 ### Tooling
 

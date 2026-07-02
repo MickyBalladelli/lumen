@@ -229,7 +229,7 @@ println(mapHas(symbols, "total"))   // "false"
 - `mapKeys(map)` returns a string of comma-separated keys
 
 Maps are currently string-backed: keys and values are both strings. They are
-used by the self-host compiler for symbol tables and by programs for header
+used by the bootstrap compiler for symbol tables and by programs for header
 collections.
 
 ## Lists
@@ -252,7 +252,7 @@ println(listLen(tokens))      // 3
 - `listGet(list, index)` returns the element at an index
 - `listLen(list)` returns the number of elements
 
-Like maps, lists are string-backed. They are used by the self-host compiler for
+Like maps, lists are string-backed. They are used by the bootstrap compiler for
 token collections and similar sequences.
 
 ## Channels
@@ -294,10 +294,9 @@ output line by line.
 
 ## Compiler Image
 
-`compilerImage()` returns the self-host compiler's own LLVM image as a string.
-This is the mechanism that enables genuine self-hosting: the native compiler
-carries its deterministic LLVM image and reproduces it without an external
-compiler or seed file.
+`compilerImage()` returns the stage-1 compiler's embedded LLVM checkpoint as a
+string. Later bootstrap stages reproduce that checkpoint. This does not
+regenerate the compiler from its Lumen source.
 
 ```lumen
 let image = compilerImage()
@@ -306,7 +305,7 @@ let image = compilerImage()
 
 ## Missing
 
-- **Self-host struct support** — the self-host compiler still rejects `struct`
+- **Bootstrap struct support** — the bootstrap compiler still rejects `struct`
   in some compilation paths.
 - **Typed generic collections** — maps and lists are string-backed. `Map<K,V>`
   and `Result<T>` syntax exists but the underlying implementation doesn't yet
@@ -316,6 +315,6 @@ let image = compilerImage()
 - **Map and list type safety** — values are strings. There's no compile-time
   type checking for what you put in a map or list.
 - **Channel type checking** — channels currently only support string values.
-- **Struct literal type checking in self-host** — the self-host compiler
+- **Struct literal type checking in bootstrap** — the bootstrap compiler
   resolves struct field values rather than lowering to real storage in some
   paths.
