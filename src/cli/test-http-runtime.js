@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { green } from './TerminalStyle.js'
+import { pass } from '../testing/TestReporter.js'
 
 const outputDirectory = await mkdtemp(join(tmpdir(), 'lumen-http-runtime-'))
 const executable = join(outputDirectory, 'http-runtime')
@@ -51,7 +51,7 @@ try {
   await run(linuxExecutable, ['ignored'], {
     LUMEN_PROC_SELF_CMDLINE: linuxArguments
   })
-  console.log(green('HTTP runtime tests passed'))
+  console.log(pass('HTTP runtime tests passed'))
 } finally {
   await rm(outputDirectory, { recursive: true, force: true })
 }

@@ -3,6 +3,7 @@
 import { readFile } from 'node:fs/promises'
 import { validateBuiltinRegistry } from '../runtime/BuiltinRegistry.js'
 import { RuntimeUnits } from '../runtime/RuntimeUnits.js'
+import { pass } from '../testing/TestReporter.js'
 
 const runtimeSources = await Promise.all(
   RuntimeUnits.map(runtimeUnit => readFile(runtimeUnit.source, 'utf8'))
@@ -19,4 +20,4 @@ if (errors.length > 0) {
   throw new Error(`Built-in/runtime ABI drift:\n${errors.join('\n')}`)
 }
 
-console.log('ok built-in/runtime ABI registry')
+console.log(pass('Built-in/runtime ABI registry'))

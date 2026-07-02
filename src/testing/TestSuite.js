@@ -1,4 +1,4 @@
-import { green } from '../cli/TerminalStyle.js'
+import { fail, pass } from './TestReporter.js'
 
 export class TestSuite {
   constructor(name) {
@@ -12,21 +12,21 @@ export class TestSuite {
 
     try {
       await callback()
-      console.log(green(`ok ${name}`))
+      console.log(pass(name))
     } catch (error) {
       this.failures += 1
-      console.error(`failed ${name}`)
+      console.error(fail(name))
       console.error(error?.stack ?? error)
     }
   }
 
   finish() {
     if (this.failures > 0) {
-      console.error(`${this.failures} ${this.name} test failed`)
+      console.error(fail(`${this.failures}/${this.tests} ${this.name} tests failed`))
       process.exitCode = 1
       return
     }
 
-    console.log(`${this.tests} ${this.name} tests passed`)
+    console.log(pass(`${this.tests}/${this.tests} ${this.name} tests passed`))
   }
 }

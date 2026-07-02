@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { spawn } from 'node:child_process'
 import { Compiler } from '../compiler/Compiler.js'
-import { green } from './TerminalStyle.js'
+import { pass } from '../testing/TestReporter.js'
 
 const compiler = new Compiler()
 const outputRoot = await mkdtemp(join(tmpdir(), 'lumen-sanitizers-'))
@@ -59,8 +59,10 @@ for (const testCase of cases) {
   if (testCase.stdout) assert.equal(result.stdout, testCase.stdout)
   if (testCase.error) assert.match(result.stderr, new RegExp(escapeRegExp(testCase.error)))
 
-  console.log(green(`ok sanitizer ${testCase.name}`))
+  console.log(pass(testCase.name))
 }
+
+console.log(pass(`${cases.length}/${cases.length} sanitizer tests passed`))
 
 function run(path) {
   return new Promise((resolve, reject) => {
