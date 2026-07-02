@@ -3,15 +3,82 @@ const path = require('path')
 const fs = require('fs/promises')
 const { spawn } = require('child_process')
 
+const semanticTokenTypes = [
+  'namespace',
+  'type',
+  'class',
+  'enum',
+  'interface',
+  'struct',
+  'typeParameter',
+  'parameter',
+  'variable',
+  'property',
+  'enumMember',
+  'event',
+  'function',
+  'method',
+  'macro',
+  'keyword',
+  'modifier',
+  'comment',
+  'string',
+  'number',
+  'regexp',
+  'operator',
+  'decorator'
+]
+
 async function activate(context) {
   const debugProvider = new LumenDebugConfigurationProvider(context)
   const languageClient = new LumenLanguageClient(context)
+  const semanticLegend = new vscode.SemanticTokensLegend(semanticTokenTypes, [])
 
   context.subscriptions.push(
     languageClient,
     vscode.debug.registerDebugConfigurationProvider('lumen', debugProvider),
     vscode.languages.registerDocumentFormattingEditProvider('lumen', {
       provideDocumentFormattingEdits: document => languageClient.format(document)
+    }),
+    vscode.languages.registerDefinitionProvider('lumen', {
+      provideDefinition: (document, position) => languageClient.definition(document, position)
+    }),
+    vscode.languages.registerReferenceProvider('lumen', {
+      provideReferences: (document, position, context) => {
+        return languageClient.references(document, position, context)
+      }
+    }),
+    vscode.languages.registerHoverProvider('lumen', {
+      provideHover: (document, position) => languageClient.hover(document, position)
+    }),
+    vscode.languages.registerCompletionItemProvider('lumen', {
+      provideCompletionItems: (document, position) => {
+        return languageClient.completion(document, position)
+      }
+    }, '.'),
+    vscode.languages.registerRenameProvider('lumen', {
+      provideRenameEdits: (document, position, newName) => {
+        return languageClient.rename(document, position, newName)
+      }
+    }),
+    vscode.languages.registerDocumentSymbolProvider('lumen', {
+      provideDocumentSymbols: document => languageClient.documentSymbols(document)
+    }),
+    vscode.languages.registerWorkspaceSymbolProvider({
+      provideWorkspaceSymbols: query => languageClient.workspaceSymbols(query)
+    }),
+    vscode.languages.registerDocumentSemanticTokensProvider('lumen', {
+      provideDocumentSemanticTokens: document => languageClient.semanticTokens(document)
+    }, semanticLegend),
+    vscode.languages.registerCodeActionsProvider('lumen', {
+      provideCodeActions: (document, range, context) => {
+        return languageClient.codeActions(document, range, context)
+      }
+    }, {
+      providedCodeActionKinds: [
+        vscode.CodeActionKind.QuickFix,
+        new vscode.CodeActionKind('source.fixAll.lumen')
+      ]
     }),
     vscode.commands.registerCommand('lumen.compileCurrentFile', () => compileCurrentFile(context)),
     vscode.commands.registerCommand('lumen.debugCurrentFile', () => debugCurrentFile(context))
@@ -325,6 +392,121 @@ class LumenLanguageClient {
     ))
   }
 
+  async definition(document, position) {
+    const result = await this.documentRequest(document, 'textDocument/definition', position)
+    return result ? toLocation(result) : null
+  }
+
+  async references(document, position, context) {
+    const result = await this.documentRequest(document, 'textDocument/references', position, {
+      context: {
+        includeDeclaration: context.includeDeclaration
+      }
+    })
+    return result.map(toLocation)
+  }
+
+  async hover(document, position) {
+    const result = await this.documentRequest(document, 'textDocument/hover', position)
+    if (!result) return null
+
+    const contents = typeof result.contents === 'string'
+      ? result.contents
+      : result.contents.value
+    return new vscode.Hover(
+      new vscode.MarkdownString(contents),
+      toRange(result.range)
+    )
+  }
+
+  async completion(document, position) {
+    const result = await this.documentRequest(document, 'textDocument/completion', position)
+    return result.map(item => {
+      const completion = new vscode.CompletionItem(item.label, item.kind)
+      completion.detail = item.detail
+      if (item.insertText) completion.insertText = item.insertText
+      return completion
+    })
+  }
+
+  async rename(document, position, newName) {
+    const result = await this.documentRequest(document, 'textDocument/rename', position, {
+      newName
+    })
+    return result ? toWorkspaceEdit(result) : null
+  }
+
+  async documentSymbols(document) {
+    this.open(document)
+    const result = await this.request('textDocument/documentSymbol', {
+      textDocument: {
+        uri: document.uri.toString()
+      }
+    })
+    return result.map(symbol => new vscode.SymbolInformation(
+      symbol.name,
+      symbol.kind,
+      symbol.containerName || '',
+      toLocation(symbol.location)
+    ))
+  }
+
+  async workspaceSymbols(query) {
+    const result = await this.request('workspace/symbol', { query })
+    return result.map(symbol => new vscode.SymbolInformation(
+      symbol.name,
+      symbol.kind,
+      symbol.containerName || '',
+      toLocation(symbol.location)
+    ))
+  }
+
+  async semanticTokens(document) {
+    this.open(document)
+    const result = await this.request('textDocument/semanticTokens/full', {
+      textDocument: {
+        uri: document.uri.toString()
+      }
+    })
+    return new vscode.SemanticTokens(new Uint32Array(result.data))
+  }
+
+  async codeActions(document, range, context) {
+    this.open(document)
+    const result = await this.request('textDocument/codeAction', {
+      textDocument: {
+        uri: document.uri.toString()
+      },
+      range: fromRange(range),
+      context: {
+        diagnostics: context.diagnostics.map(fromDiagnostic)
+      }
+    })
+    return result.map(item => {
+      const action = new vscode.CodeAction(
+        item.title,
+        new vscode.CodeActionKind(item.kind)
+      )
+      action.edit = item.edit ? toWorkspaceEdit(item.edit) : undefined
+      action.isPreferred = item.isPreferred
+      return action
+    })
+  }
+
+  async documentRequest(document, method, position, extra = {}) {
+    this.open(document)
+    return this.request(method, {
+      textDocument: {
+        uri: document.uri.toString()
+      },
+      position: {
+        line: position.line,
+        character: position.character
+      },
+      ...extra
+    })
+  }
+
   open(document) {
     if (document.languageId !== 'lumen' || !this.child) return
     const uri = document.uri.toString()
@@ -367,7 +549,8 @@ class LumenLanguageClient {
     this.notify('textDocument/didSave', {
       textDocument: {
         uri: document.uri.toString()
-      }
+      },
+      text: document.getText()
     })
   }
 
@@ -376,6 +559,11 @@ class LumenLanguageClient {
     const uri = document.uri.toString()
     this.documents.delete(uri)
     this.diagnostics.delete(document.uri)
+    if (this.child) {
+      this.notify('textDocument/didClose', {
+        textDocument: { uri }
+      })
+    }
   }
 
   request(method, params) {
@@ -473,6 +661,58 @@ class LumenLanguageClient {
       this.child.kill()
     }
   }
+}
+
+function toLocation(location) {
+  return new vscode.Location(
+    vscode.Uri.parse(location.uri),
+    toRange(location.range)
+  )
+}
+
+function toRange(range) {
+  return new vscode.Range(
+    range.start.line,
+    range.start.character,
+    range.end.line,
+    range.end.character
+  )
+}
+
+function fromRange(range) {
+  return {
+    start: {
+      line: range.start.line,
+      character: range.start.character
+    },
+    end: {
+      line: range.end.line,
+      character: range.end.character
+    }
+  }
+}
+
+function fromDiagnostic(diagnostic) {
+  return {
+    range: fromRange(diagnostic.range),
+    severity: diagnostic.severity,
+    message: diagnostic.message,
+    source: diagnostic.source
+  }
+}
+
+function toWorkspaceEdit(edit) {
+  const workspaceEdit = new vscode.WorkspaceEdit()
+  for (const [uri, edits] of Object.entries(edit.changes ?? {})) {
+    for (const item of edits) {
+      workspaceEdit.replace(
+        vscode.Uri.parse(uri),
+        toRange(item.range),
+        item.newText
+      )
+    }
+  }
+  return workspaceEdit
 }
 
 function deactivate() {}

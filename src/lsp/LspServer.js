@@ -2,6 +2,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { Compiler } from '../compiler/Compiler.js'
 import { formatSource } from '../formatter/Formatter.js'
 import { diagnosticsFrom } from '../diagnostics/Diagnostic.js'
+import {
+  LanguageIndex,
+  SemanticTokenTypes
+} from './LanguageIndex.js'
 
 export class LspServer {
   constructor({
@@ -19,6 +23,7 @@ export class LspServer {
     this.pendingDiagnostics = new Map()
     this.dependenciesByRoot = new Map()
     this.diagnosticsByRoot = new Map()
+    this.intelligenceByRoot = new Map()
   }
 
   handleMessage(message) {
@@ -34,7 +39,29 @@ export class LspServer {
               includeText: true
             }
           },
-          documentFormattingProvider: true
+          documentFormattingProvider: true,
+          definitionProvider: true,
+          referencesProvider: true,
+          hoverProvider: true,
+          completionProvider: {
+            triggerCharacters: ['.']
+          },
+          renameProvider: true,
+          documentSymbolProvider: true,
+          workspaceSymbolProvider: true,
+          semanticTokensProvider: {
+            legend: {
+              tokenTypes: SemanticTokenTypes,
+              tokenModifiers: []
+            },
+            full: true
+          },
+          codeActionProvider: {
+            codeActionKinds: [
+              'quickfix',
+              'source.fixAll.lumen'
+            ]
+          }
         },
         serverInfo: {
           name: 'lumen-lsp',
@@ -88,6 +115,74 @@ export class LspServer {
         },
         newText: formatted
       }])
+    }
+
+    if (method === 'textDocument/definition') {
+      return this.intelligenceRequest(id, () => {
+        return this.indexForUri(params.textDocument.uri)
+          ?.definition(params.textDocument.uri, params.position) ?? null
+      })
+    }
+
+    if (method === 'textDocument/references') {
+      return this.intelligenceRequest(id, () => {
+        return this.workspaceReferences(
+          params.textDocument.uri,
+          params.position,
+          params.context?.includeDeclaration !== false
+        )
+      })
+    }
+
+    if (method === 'textDocument/hover') {
+      return this.intelligenceRequest(id, () => {
+        return this.indexForUri(params.textDocument.uri)
+          ?.hover(params.textDocument.uri, params.position) ?? null
+      })
+    }
+
+    if (method === 'textDocument/completion') {
+      return this.intelligenceRequest(id, () => {
+        return this.indexForUri(params.textDocument.uri)
+          ?.completion(params.textDocument.uri) ?? []
+      })
+    }
+
+    if (method === 'textDocument/rename') {
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(params.newName)) {
+        return this.respondError(id, -32602, 'Rename needs a valid Lumen identifier')
+      }
+      return this.intelligenceRequest(id, () => {
+        return this.workspaceRename(
+          params.textDocument.uri,
+          params.position,
+          params.newName
+        )
+      })
+    }
+
+    if (method === 'textDocument/documentSymbol') {
+      return this.intelligenceRequest(id, () => {
+        return this.indexForUri(params.textDocument.uri)
+          ?.documentSymbols(params.textDocument.uri) ?? []
+      })
+    }
+
+    if (method === 'workspace/symbol') {
+      return this.intelligenceRequest(id, () => {
+        return this.workspaceSymbols(params.query ?? '')
+      })
+    }
+
+    if (method === 'textDocument/semanticTokens/full') {
+      return this.intelligenceRequest(id, () => {
+        return this.indexForUri(params.textDocument.uri)
+          ?.semanticTokens(params.textDocument.uri) ?? { data: [] }
+      })
+    }
+
+    if (method === 'textDocument/codeAction') {
+      return this.intelligenceRequest(id, () => this.codeActions(params))
     }
 
     if (id !== undefined) return this.respond(id, null)
@@ -153,6 +248,7 @@ export class LspServer {
 
     const diagnostics = []
     let dependencies = null
+    let intelligence = null
 
     try {
       const compiler = this.compilerFactory()
@@ -160,19 +256,26 @@ export class LspServer {
         const result = await compiler.compileFile(fileURLToPath(uri), {
           sourceOverrides: this.sourceOverrides()
         })
+        if (result) {
+          intelligence = LanguageIndex.fromCompilation(result, { uri, source })
+        }
         dependencies = new Set(
           result.moduleGraph.modules.map(module => pathToFileURL(module.path).href)
         )
       } else {
-        await compiler.compileSource(source, {
+        const result = await compiler.compileSource(source, {
           sourcePath: uri
         })
+        if (result) {
+          intelligence = LanguageIndex.fromCompilation(result, { uri, source })
+        }
         dependencies = new Set([uri])
       }
     } catch (error) {
       const errors = diagnosticsFrom(error)
       diagnostics.push(...(errors.length > 0 ? errors : [error]))
       if (error?.moduleGraph) {
+        intelligence = LanguageIndex.fromModuleGraph(error.moduleGraph)
         dependencies = new Set(
           error.moduleGraph.modules.map(module => pathToFileURL(module.path).href)
         )
@@ -181,6 +284,7 @@ export class LspServer {
 
     if (this.generations.get(uri) !== generation || !this.documents.has(uri)) return
     if (dependencies) this.dependenciesByRoot.set(uri, dependencies)
+    if (intelligence) this.intelligenceByRoot.set(uri, intelligence)
 
     const previous = this.diagnosticsByRoot.get(uri) ?? new Map()
     const next = new Map([[uri, []]])
@@ -219,6 +323,7 @@ export class LspServer {
     this.documents.delete(uri)
     this.dependenciesByRoot.delete(uri)
     this.diagnosticsByRoot.delete(uri)
+    this.intelligenceByRoot.delete(uri)
 
     for (const target of previousTargets) this.publishCombinedDiagnostics(target)
     this.notify('textDocument/publishDiagnostics', {
@@ -252,11 +357,171 @@ export class LspServer {
     })
   }
 
+  intelligenceRequest(id, callback) {
+    if (this.pendingDiagnostics.size === 0) {
+      try {
+        return this.respond(id, callback())
+      } catch (error) {
+        return this.respondError(id, -32603, error.message)
+      }
+    }
+
+    this.waitForDiagnostics()
+      .then(() => this.respond(id, callback()))
+      .catch(error => this.respondError(id, -32603, error.message))
+    return null
+  }
+
+  indexForUri(uri) {
+    return [...this.intelligenceByRoot.values()]
+      .filter(index => index.hasUri(uri))
+      .sort((left, right) => right.modules.length - left.modules.length)[0] ??
+      null
+  }
+
+  workspaceReferences(uri, position, includeDeclaration) {
+    const index = this.indexForUri(uri)
+    const definition = index?.definition(uri, position)
+    if (!definition) return []
+
+    const references = []
+    const seen = new Set()
+    for (const candidate of this.intelligenceByRoot.values()) {
+      if (!candidate.hasUri(definition.uri)) continue
+      for (const reference of candidate.references(
+        definition.uri,
+        definition.range.start,
+        includeDeclaration
+      )) {
+        const key = locationKey(reference)
+        if (seen.has(key)) continue
+        seen.add(key)
+        references.push(reference)
+      }
+    }
+    return references
+  }
+
+  workspaceRename(uri, position, newName) {
+    const index = this.indexForUri(uri)
+    const definition = index?.definition(uri, position)
+    if (!definition) return null
+
+    const changes = {}
+    const seen = new Set()
+    for (const candidate of this.intelligenceByRoot.values()) {
+      if (!candidate.hasUri(definition.uri)) continue
+      const edit = candidate.rename(
+        definition.uri,
+        definition.range.start,
+        newName
+      )
+      for (const [targetUri, items] of Object.entries(edit?.changes ?? {})) {
+        changes[targetUri] ??= []
+        for (const item of items) {
+          const key = `${targetUri}:${rangeKey(item.range)}`
+          if (seen.has(key)) continue
+          seen.add(key)
+          changes[targetUri].push(item)
+        }
+      }
+    }
+    return { changes }
+  }
+
+  workspaceSymbols(query) {
+    const symbols = []
+    const seen = new Set()
+
+    for (const index of this.intelligenceByRoot.values()) {
+      for (const symbol of index.workspaceSymbols(query)) {
+        const key = `${symbol.location.uri}:${symbol.location.range.start.line}:${symbol.location.range.start.character}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        symbols.push(symbol)
+      }
+    }
+
+    return symbols
+  }
+
+  codeActions(params) {
+    const uri = params.textDocument.uri
+    const source = this.documents.get(uri) ?? ''
+    const actions = []
+
+    for (const diagnostic of params.context?.diagnostics ?? []) {
+      const match = /Unknown symbol "([A-Za-z_][A-Za-z0-9_]*)"/.exec(diagnostic.message)
+      if (!match) continue
+
+      const line = source.split(/\r?\n/)[diagnostic.range.start.line] ?? ''
+      const indent = /^\s*/.exec(line)?.[0] ?? ''
+      actions.push({
+        title: `Declare "${match[1]}" as i32`,
+        kind: 'quickfix',
+        diagnostics: [diagnostic],
+        isPreferred: true,
+        edit: {
+          changes: {
+            [uri]: [{
+              range: {
+                start: {
+                  line: diagnostic.range.start.line,
+                  character: 0
+                },
+                end: {
+                  line: diagnostic.range.start.line,
+                  character: 0
+                }
+              },
+              newText: `${indent}let ${match[1]}: i32 = 0\n`
+            }]
+          }
+        }
+      })
+    }
+
+    const formatted = formatSource(source)
+    if (formatted !== source) {
+      actions.push({
+        title: 'Format Lumen document',
+        kind: 'source.fixAll.lumen',
+        edit: {
+          changes: {
+            [uri]: [{
+              range: {
+                start: { line: 0, character: 0 },
+                end: {
+                  line: source.split(/\r?\n/).length + 1,
+                  character: 0
+                }
+              },
+              newText: formatted
+            }]
+          }
+        }
+      })
+    }
+
+    return actions
+  }
+
   respond(id, result) {
     return this.write({
       jsonrpc: '2.0',
       id,
       result
+    })
+  }
+
+  respondError(id, code, message) {
+    return this.write({
+      jsonrpc: '2.0',
+      id,
+      error: {
+        code,
+        message
+      }
     })
   }
 
@@ -316,4 +581,17 @@ function diagnosticRange(location) {
       character: Math.max((location.endColumn ?? location.column + 1) - 1, character + 1)
     }
   }
+}
+
+function locationKey(location) {
+  return `${location.uri}:${rangeKey(location.range)}`
+}
+
+function rangeKey(range) {
+  return [
+    range.start.line,
+    range.start.character,
+    range.end.line,
+    range.end.character
+  ].join(':')
 }

@@ -366,6 +366,8 @@ Language Server Protocol over stdio.
 - **Modules** — uses the CLI module graph with unsaved buffers overlaid on disk
 - **Document lifecycle** — debounces changes, drops stale builds, and clears on close
 - **Formatting** — formats documents via the formatter
+- **Language intelligence** — definition, references, hover, completion, rename,
+  document/workspace symbols, semantic tokens, and code actions
 - **Compile** — VS Code extension provides a compile command
 
 ### Usage
@@ -382,13 +384,6 @@ The server listens on stdio for LSP messages. Configure your editor to launch
 `lumen-lsp` for `.lm` files, or install the VS Code extension which does this
 automatically.
 
-### Known Gaps
-
-- **No language intelligence** — go-to-definition, references, hover types,
-  completion, rename, symbols, semantic tokens, and code actions are not
-  implemented. The current extension re-parses files rather than using compiler
-  data.
-
 ## VS Code Extension
 
 The VS Code extension in `vscode-lumen/` provides:
@@ -400,6 +395,7 @@ The VS Code extension in `vscode-lumen/` provides:
 | **Language configuration** | Auto-closing braces, brackets, quotes; comment toggling |
 | **Formatting** | Format on save via `lumen-lsp` |
 | **Diagnostics** | Error squiggles with source snippets and carets via `lumen-lsp` |
+| **Intelligence** | Definition, references, hover, completion, rename, symbols, semantic tokens, code actions |
 | **Compile** | Command palette action to compile the current file |
 | **Debug** | Native debug launch configuration for CodeLLDB |
 

@@ -224,17 +224,12 @@ diagnostic collection.
 
 ### Add Language Intelligence
 
-After correctness is solid:
-- Go-to-definition for functions, variables, types
-- Find references
-- Hover types
-- Completion suggestions
-- Rename refactoring
-- Document symbols
-- Semantic token coloring
-- Code actions (quick fixes)
-
-All should use compiler data rather than re-parsing in the VS Code extension.
+Completed. The language server builds a symbol index from compiler AST, linked
+module, scope-resolution, inferred-type, diagnostic, and token metadata. It
+provides go-to-definition, cross-file references and rename, hover types,
+completion, document and workspace symbols, semantic tokens, and diagnostic or
+formatting code actions. The VS Code extension is a thin LSP adapter and does
+not re-parse source.
 
 ### Make Formatting Syntax-Aware And Idempotent
 

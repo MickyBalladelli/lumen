@@ -1,7 +1,7 @@
 {
   "name": "lumen-language",
   "displayName": "Lumen",
-  "description": "Lumen language support, build command, and native debug launcher",
+  "description": "Lumen language intelligence, build command, and native debug launcher",
   "version": "0.1.0",
   "publisher": "lumen",
   "icon": "images/lumen-logo-small.png",

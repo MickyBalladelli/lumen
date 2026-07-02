@@ -103,7 +103,10 @@ code --install-extension lumen-language-0.1.0.vsix
 
 If the version changes, use the VSIX name printed by `npm run package`.
 
-The extension includes syntax highlighting, snippets, formatting, diagnostics through `lumen-lsp`, compile command, and native debug launch support.
+The extension includes syntax highlighting, snippets, formatting, diagnostics,
+definition, references, hover, completion, rename, symbols, semantic tokens,
+code actions through `lumen-lsp`, compile command, and native debug launch
+support.
 
 ## Update
 

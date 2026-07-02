@@ -2,6 +2,7 @@ import { Diagnostic } from '../diagnostics/Diagnostic.js'
 import { Scope } from './Scope.js'
 import { ExpressionInspector } from './ExpressionInspector.js'
 import { LumenTypes, TypeSystem } from './TypeSystem.js'
+import { setCompilerMetadata } from './CompilerMetadata.js'
 
 export class TypeChecker {
   constructor({ typeSystem = new TypeSystem() } = {}) {
@@ -23,18 +24,22 @@ export class TypeChecker {
       }
       if (node.kind === 'FunctionDeclaration') {
         const returnType = node.returnType?.name ?? LumenTypes.I32
-        scope.define(node.name.name, {
+        const symbol = {
           kind: 'function',
           node,
           type: node.isAsync ? `Task<${returnType}>` : returnType
-        })
+        }
+        scope.define(node.name.name, symbol)
+        setCompilerMetadata(node, 'symbol', symbol)
       }
       if (node.kind === 'ExternFunctionDeclaration') {
-        scope.define(node.name.name, {
+        const symbol = {
           kind: 'function',
           node,
           type: node.returnType?.name ?? LumenTypes.I32
-        })
+        }
+        scope.define(node.name.name, symbol)
+        setCompilerMetadata(node, 'symbol', symbol)
       }
     }
 
@@ -67,18 +72,20 @@ export class TypeChecker {
       return {
         name: field.name,
         type: this.resolveType(field.typeAnnotation, null),
-        location: field.location
+        location: field.location,
+        node: field
       }
     })
 
-    this.typeSystem.registerStruct(node.name.name, fields)
+    this.typeSystem.registerStruct(node.name.name, fields, node)
   }
 
   registerEnum(node) {
     this.typeSystem.registerEnum(node.name.name, node.variants.map(variant => ({
       name: variant.name,
-      location: variant.location
-    })))
+      location: variant.location,
+      declaration: variant
+    })), node)
   }
 
   checkNode(node, scope, currentFunction) {
@@ -122,13 +129,15 @@ export class TypeChecker {
     for (const param of node.params) {
       const paramType = this.resolveType(param.typeAnnotation, LumenTypes.I32)
       param.inferredType = paramType
-      scope.define(param.name, {
+      const symbol = {
         kind: 'param',
         node: param,
         type: paramType,
         mutable: false,
         initialized: true
-      })
+      }
+      scope.define(param.name, symbol)
+      setCompilerMetadata(param, 'symbol', symbol)
     }
 
     this.checkNode(node.body, scope, node)
@@ -184,13 +193,15 @@ export class TypeChecker {
       }
 
       declaration.inferredType = finalType
-      scope.define(declaration.id.name, {
+      const symbol = {
         kind: 'variable',
         node: declaration,
         type: finalType,
         mutable: node.declarationKind === 'let',
         initialized: Boolean(declaration.initializer)
-      })
+      }
+      scope.define(declaration.id.name, symbol)
+      setCompilerMetadata(declaration, 'symbol', symbol)
     }
 
     return LumenTypes.Void
@@ -226,13 +237,15 @@ export class TypeChecker {
     node.item.inferredType = itemType
     node.iterable.inferredType = iterableType
 
-    scope.define(node.item.name, {
+    const symbol = {
       kind: 'variable',
       node: node.item,
       type: itemType,
       mutable: false,
       initialized: true
-    })
+    }
+    scope.define(node.item.name, symbol)
+    setCompilerMetadata(node.item, 'symbol', symbol)
 
     const beforeLoop = this.captureInitialization(parentScope)
     this.withLoop(() => this.checkNode(node.body, scope, currentFunction))
@@ -248,13 +261,15 @@ export class TypeChecker {
     }
     const scope = new Scope(parentScope)
     node.item.inferredType = LumenTypes.I32
-    scope.define(node.item.name, {
+    const symbol = {
       kind: 'variable',
       node: node.item,
       type: LumenTypes.I32,
       mutable: false,
       initialized: true
-    })
+    }
+    scope.define(node.item.name, symbol)
+    setCompilerMetadata(node.item, 'symbol', symbol)
     const beforeLoop = this.captureInitialization(parentScope)
     this.withLoop(() => this.checkNode(node.body, scope, currentFunction))
     this.restoreInitialization(beforeLoop)
@@ -403,13 +418,15 @@ export class TypeChecker {
 
     const catchScope = new Scope(parentScope)
     node.catchParam.inferredType = LumenTypes.String
-    catchScope.define(node.catchParam.name, {
+    const symbol = {
       kind: 'variable',
       node: node.catchParam,
       type: LumenTypes.String,
       mutable: false,
       initialized: true
-    })
+    }
+    catchScope.define(node.catchParam.name, symbol)
+    setCompilerMetadata(node.catchParam, 'symbol', symbol)
 
     this.checkNode(node.catchBlock, catchScope, currentFunction)
     const catchState = this.captureInitialization(parentScope)
@@ -546,6 +563,9 @@ export class TypeChecker {
     if (!struct) return
 
     const node = expression.kind === 'RawExpression' ? expression.parsed : expression
+    if (struct.declaration) {
+      setCompilerMetadata(node, 'resolvedDeclaration', struct.declaration)
+    }
     const seen = new Set()
 
     for (const property of node.fields) {
@@ -554,6 +574,9 @@ export class TypeChecker {
         throw new Diagnostic(`Unknown field "${property.key}"`, property.location, 'type')
       }
 
+      if (field.node) {
+        setCompilerMetadata(property, 'resolvedDeclaration', field.node)
+      }
       seen.add(property.key)
       const valueType = new ExpressionInspector(scope, this.typeSystem).infer(property.value)
 
@@ -599,6 +622,19 @@ export class TypeChecker {
     const normalized = this.typeSystem.normalize(typeAnnotation.name)
     if (!this.typeSystem.assertKnown(normalized)) {
       throw new Diagnostic(`Unknown type "${typeAnnotation.name}"`, typeAnnotation.location, 'type')
+    }
+
+    let declarationType = normalized
+    while (this.typeSystem.isArray(declarationType) ||
+      this.typeSystem.isNullable(declarationType)) {
+      declarationType = this.typeSystem.isArray(declarationType)
+        ? this.typeSystem.elementType(declarationType)
+        : this.typeSystem.nonNullable(declarationType)
+    }
+    const declaration = this.typeSystem.getStruct(declarationType)?.declaration ??
+      this.typeSystem.getEnum(declarationType)?.declaration
+    if (declaration) {
+      setCompilerMetadata(typeAnnotation, 'resolvedDeclaration', declaration)
     }
 
     return normalized

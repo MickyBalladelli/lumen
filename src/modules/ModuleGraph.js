@@ -1,5 +1,6 @@
 import { ProgramNode } from '../ast/nodes.js'
 import { Diagnostic, throwDiagnostics } from '../diagnostics/Diagnostic.js'
+import { setCompilerMetadata } from '../semantics/CompilerMetadata.js'
 
 const TOP_LEVEL_DECLARATIONS = new Set([
   'StructDeclaration',
@@ -92,6 +93,8 @@ export class ModuleGraph {
           ).addNote('Import target is here', edge.target.ast.location, edge.target.source))
           continue
         }
+
+        setCompilerMetadata(imported, 'resolvedDeclaration', declaration)
 
         if (module.names.has(imported.name) || module.importNames.has(imported.name)) {
           const diagnostic = new Diagnostic(

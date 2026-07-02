@@ -7,6 +7,7 @@ import { FsLibrary } from '../fs/FsLibrary.js'
 import { HttpLibrary } from '../http/HttpLibrary.js'
 import { ThreadLibrary } from '../thread/ThreadLibrary.js'
 import { builtinSignature } from '../runtime/BuiltinRegistry.js'
+import { setCompilerMetadata } from './CompilerMetadata.js'
 
 export class ExpressionInspector {
   constructor(
@@ -91,19 +92,26 @@ export class ExpressionInspector {
 
     if (node.kind === 'IdentifierExpression') {
       const symbol = this.scope.resolve(node.name)
+      if (symbol) setCompilerMetadata(node, 'resolvedSymbol', symbol)
       if (symbol?.initialized === false) {
         throw new Diagnostic(`Variable "${node.name}" is used before initialization`, node.location, 'type')
       }
-      if (locals.has(node.name) || symbol || this.typeSystem.enumVariant(node.name)) return
+      const variant = this.typeSystem.enumVariant(node.name)
+      if (variant?.declaration) {
+        setCompilerMetadata(node, 'resolvedDeclaration', variant.declaration)
+      }
+      if (locals.has(node.name) || symbol || variant) return
       throw new Diagnostic(`Unknown symbol "${node.name}"`, node.location, 'semantic')
     }
 
     if (node.kind === 'AssignmentExpression') {
       this.validateNode(node.right, locals)
       if (node.left.kind === 'IdentifierExpression') {
-        if (!this.scope.resolve(node.left.name)) {
+        const symbol = this.scope.resolve(node.left.name)
+        if (!symbol) {
           throw new Diagnostic(`Unknown symbol "${node.left.name}"`, node.left.location, 'semantic')
         }
+        setCompilerMetadata(node.left, 'resolvedSymbol', symbol)
       } else {
         this.validateNode(node.left, locals)
       }
@@ -161,8 +169,14 @@ export class ExpressionInspector {
   }
 
   identifierType(node) {
-    return this.scope.resolve(node.name)?.type ??
-      this.typeSystem.enumVariant(node.name)?.enumName ??
+    const symbol = this.scope.resolve(node.name)
+    if (symbol) setCompilerMetadata(node, 'resolvedSymbol', symbol)
+    const variant = this.typeSystem.enumVariant(node.name)
+    if (variant?.declaration) {
+      setCompilerMetadata(node, 'resolvedDeclaration', variant.declaration)
+    }
+    return symbol?.type ??
+      variant?.enumName ??
       LumenTypes.Unknown
   }
 
@@ -222,12 +236,14 @@ export class ExpressionInspector {
       const parameterType = this.typeSystem.elementType(collectionType) ?? LumenTypes.Unknown
       const predicateScope = new Scope(this.scope)
       predicate.params[0].inferredType = parameterType
-      predicateScope.define(predicate.params[0].name, {
+      const symbol = {
         kind: 'param',
         node: predicate.params[0],
         type: parameterType,
         mutable: false
-      })
+      }
+      predicateScope.define(predicate.params[0].name, symbol)
+      setCompilerMetadata(predicate.params[0], 'symbol', symbol)
       const predicateInspector = new ExpressionInspector(
         predicateScope,
         this.typeSystem,
@@ -350,6 +366,9 @@ export class ExpressionInspector {
     }
 
     const symbol = this.scope.resolve(name)
+    if (symbol && node.callee.kind === 'IdentifierExpression') {
+      setCompilerMetadata(node.callee, 'resolvedSymbol', symbol)
+    }
     if (symbol?.kind !== 'function') return LumenTypes.Unknown
     const params = symbol.node?.params ?? []
     if (node.arguments.length !== params.length) {
@@ -457,6 +476,9 @@ export class ExpressionInspector {
     const field = this.typeSystem.getField(objectType, node.property.name)
     if (!field) {
       throw new Diagnostic(`Unknown field "${node.property.name}"`, node.property.location, 'semantic')
+    }
+    if (field.node) {
+      setCompilerMetadata(node.property, 'resolvedDeclaration', field.node)
     }
     return field.type
   }

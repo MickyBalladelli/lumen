@@ -11,7 +11,7 @@
   `didClose`, debounce/cancel stale diagnostics, report all errors, and isolate
   compiler state per document/build.
 
-- [ ] Add useful language intelligence after correctness.
+- [x] Add useful language intelligence after correctness.
   Provide go-to-definition, references, hover types, completion, rename, symbols,
   semantic tokens, and code actions from compiler data instead of re-parsing in the
   extension

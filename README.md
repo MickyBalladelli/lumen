@@ -921,6 +921,11 @@ Editor tooling can also use the language server:
 npm run lsp
 ```
 
+The compiler-backed language server provides diagnostics, formatting,
+go-to-definition, references, hover types, completion, rename, document and
+workspace symbols, semantic tokens, and quick-fix code actions across linked
+modules and unsaved files.
+
 ## Photon packages
 
 Photon installs external Lumen packages into `.photon/packages`.

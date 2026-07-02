@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -126,6 +126,200 @@ test('lsp returns full document formatting edit', async () => {
 
   const response = messages.find(message => message.id === 1)
   assert.equal(response.result[0].newText, 'function main() {\n  println("hi")\n}\n')
+})
+
+test('lsp provides compiler-backed intelligence for a document', async () => {
+  const messages = []
+  const server = testServer(messages)
+  const uri = 'untitled://intelligence.lm'
+  const source = [
+    'struct Point {',
+    '  x: i32',
+    '}',
+    'function add(value: i32): i32 {',
+    '  let total: i32 = value',
+    '  return total',
+    '}',
+    'function main(): i32 {',
+    '  let point = Point { x: 1 }',
+    '  return add(point.x)',
+    '}'
+  ].join('\n')
+
+  await openDocument(server, uri, source)
+
+  const definition = request(server, messages, 10, 'textDocument/definition', {
+    textDocument: { uri },
+    position: { line: 9, character: 10 }
+  })
+  assert.equal(definition.uri, uri)
+  assert.deepEqual(definition.range.start, { line: 3, character: 9 })
+
+  const typeDefinition = request(server, messages, 101, 'textDocument/definition', {
+    textDocument: { uri },
+    position: { line: 8, character: 15 }
+  })
+  assert.deepEqual(typeDefinition.range.start, { line: 0, character: 7 })
+
+  const fieldDefinition = request(server, messages, 102, 'textDocument/definition', {
+    textDocument: { uri },
+    position: { line: 9, character: 19 }
+  })
+  assert.deepEqual(fieldDefinition.range.start, { line: 1, character: 2 })
+
+  const references = request(server, messages, 11, 'textDocument/references', {
+    textDocument: { uri },
+    position: { line: 3, character: 10 },
+    context: { includeDeclaration: true }
+  })
+  assert.equal(references.length, 2)
+
+  const hover = request(server, messages, 12, 'textDocument/hover', {
+    textDocument: { uri },
+    position: { line: 5, character: 10 }
+  })
+  assert.match(hover.contents.value, /let total: i32/)
+
+  const completions = request(server, messages, 13, 'textDocument/completion', {
+    textDocument: { uri },
+    position: { line: 9, character: 2 }
+  })
+  assert.ok(completions.some(item => item.label === 'add'))
+  assert.ok(completions.some(item => item.label === 'Point'))
+  assert.ok(completions.some(item => item.label === 'println'))
+  assert.ok(completions.some(item => item.label === 'return'))
+
+  const rename = request(server, messages, 14, 'textDocument/rename', {
+    textDocument: { uri },
+    position: { line: 9, character: 10 },
+    newName: 'sum'
+  })
+  assert.equal(rename.changes[uri].length, 2)
+  assert.ok(rename.changes[uri].every(edit => edit.newText === 'sum'))
+
+  const symbols = request(server, messages, 15, 'textDocument/documentSymbol', {
+    textDocument: { uri }
+  })
+  assert.ok(symbols.some(symbol => symbol.name === 'Point'))
+  assert.ok(symbols.some(symbol => symbol.name === 'add'))
+  assert.ok(symbols.some(symbol => symbol.name === 'total'))
+
+  const workspaceSymbols = request(server, messages, 16, 'workspace/symbol', {
+    query: 'add'
+  })
+  assert.equal(workspaceSymbols.length, 1)
+  assert.equal(workspaceSymbols[0].name, 'add')
+
+  const semanticTokens = request(server, messages, 17, 'textDocument/semanticTokens/full', {
+    textDocument: { uri }
+  })
+  assert.ok(semanticTokens.data.length > 0)
+  assert.equal(semanticTokens.data.length % 5, 0)
+  assert.ok(tokenTypes(semanticTokens.data).has(12))
+})
+
+test('lsp resolves references and rename across imported modules', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'lumen-lsp-intelligence-modules-'))
+  const libraryPath = join(root, 'library.lm')
+  const mainPath = join(root, 'main.lm')
+  const mainUri = pathToFileURL(mainPath).href
+  const messages = []
+  const server = testServer(messages)
+
+  await writeFile(libraryPath, [
+    'function value(): i32 {',
+    '  return 7',
+    '}'
+  ].join('\n'))
+  const libraryUri = pathToFileURL(await realpath(libraryPath)).href
+  const source = [
+    'import { value } from "./library.lm"',
+    'function main(): i32 {',
+    '  return value()',
+    '}'
+  ].join('\n')
+  await writeFile(mainPath, source)
+  await openDocument(server, mainUri, source)
+
+  const definition = request(server, messages, 20, 'textDocument/definition', {
+    textDocument: { uri: mainUri },
+    position: { line: 2, character: 10 }
+  })
+  assert.equal(definition.uri, libraryUri)
+  assert.deepEqual(definition.range.start, { line: 0, character: 9 })
+
+  const references = request(server, messages, 21, 'textDocument/references', {
+    textDocument: { uri: mainUri },
+    position: { line: 2, character: 10 },
+    context: { includeDeclaration: true }
+  })
+  assert.equal(references.length, 3)
+
+  const rename = request(server, messages, 22, 'textDocument/rename', {
+    textDocument: { uri: mainUri },
+    position: { line: 2, character: 10 },
+    newName: 'answer'
+  })
+  assert.equal(rename.changes[mainUri].length, 2)
+  assert.equal(rename.changes[libraryUri].length, 1)
+
+  await openDocument(server, libraryUri, await readFile(libraryPath, 'utf8'))
+  const libraryReferences = request(server, messages, 23, 'textDocument/references', {
+    textDocument: { uri: libraryUri },
+    position: { line: 0, character: 10 },
+    context: { includeDeclaration: true }
+  })
+  assert.equal(libraryReferences.length, 3)
+})
+
+test('lsp references respect compiler scope and shadowing', async () => {
+  const messages = []
+  const server = testServer(messages)
+  const uri = 'untitled://scopes.lm'
+  const source = [
+    'function first(): i32 {',
+    '  let value: i32 = 1',
+    '  return value',
+    '}',
+    'function second(): i32 {',
+    '  let value: i32 = 2',
+    '  return value',
+    '}'
+  ].join('\n')
+
+  await openDocument(server, uri, source)
+  const references = request(server, messages, 25, 'textDocument/references', {
+    textDocument: { uri },
+    position: { line: 2, character: 10 },
+    context: { includeDeclaration: true }
+  })
+
+  assert.equal(references.length, 2)
+  assert.ok(references.every(location => location.range.start.line < 4))
+})
+
+test('lsp offers compiler-diagnostic and formatting code actions', async () => {
+  const messages = []
+  const server = testServer(messages)
+  const uri = 'untitled://actions.lm'
+  const source = [
+    'function main(): i32 {',
+    'return missing',
+    '}'
+  ].join('\n')
+
+  await openDocument(server, uri, source)
+  const diagnostic = latestDiagnostics(messages, uri)[0]
+  const actions = request(server, messages, 30, 'textDocument/codeAction', {
+    textDocument: { uri },
+    range: diagnostic.range,
+    context: {
+      diagnostics: [diagnostic]
+    }
+  })
+
+  assert.ok(actions.some(action => action.title === 'Declare "missing" as i32'))
+  assert.ok(actions.some(action => action.title === 'Format Lumen document'))
 })
 
 test('lsp didClose cancels work and clears document diagnostics', async () => {
@@ -300,6 +494,27 @@ function latestDiagnostics(messages, uri) {
         message.params.uri === uri
     })
     .at(-1)?.params.diagnostics ?? null
+}
+
+function request(server, messages, id, method, params) {
+  server.handleMessage({
+    jsonrpc: '2.0',
+    id,
+    method,
+    params
+  })
+  const response = messages.find(message => message.id === id)
+  assert.ok(response, `missing response for ${method}`)
+  assert.equal(response.error, undefined)
+  return response.result
+}
+
+function tokenTypes(data) {
+  const types = new Set()
+  for (let index = 3; index < data.length; index += 5) {
+    types.add(data[index])
+  }
+  return types
 }
 
 function delay(milliseconds) {

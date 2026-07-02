@@ -19,19 +19,21 @@ export class TypeSystem {
     this.enums = new Map()
   }
 
-  registerStruct(name, fields) {
+  registerStruct(name, fields, declaration = null) {
     this.known.add(name)
     this.structs.set(name, {
       name,
-      fields
+      fields,
+      declaration
     })
   }
 
-  registerEnum(name, variants) {
+  registerEnum(name, variants, declaration = null) {
     this.known.add(name)
     this.enums.set(name, {
       name,
-      variants
+      variants,
+      declaration
     })
   }
 
@@ -156,7 +158,8 @@ export class TypeSystem {
       const index = enumType.variants.findIndex(variant => variant.name === name)
       if (index >= 0) return {
         enumName: enumType.name,
-        index
+        index,
+        declaration: enumType.variants[index].declaration
       }
     }
 

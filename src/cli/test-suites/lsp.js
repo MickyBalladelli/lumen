@@ -15,11 +15,18 @@ await suite.test('diagnostics and formatting over stdio', async () => {
 
   try {
     await client.start()
-    await client.request('initialize', {
+    const initialized = await client.request('initialize', {
       processId: process.pid,
       rootUri: null,
       capabilities: {}
     })
+    assert.equal(initialized.capabilities.definitionProvider, true)
+    assert.equal(initialized.capabilities.referencesProvider, true)
+    assert.equal(initialized.capabilities.hoverProvider, true)
+    assert.equal(initialized.capabilities.renameProvider, true)
+    assert.equal(initialized.capabilities.documentSymbolProvider, true)
+    assert.equal(initialized.capabilities.workspaceSymbolProvider, true)
+    assert.equal(initialized.capabilities.semanticTokensProvider.full, true)
 
     const goodUri = 'file:///good.lm'
     client.notify('textDocument/didOpen', {
@@ -99,6 +106,19 @@ await suite.test('local imports compile over stdio', async () => {
       }
     })
     assert.deepEqual(await client.waitForDiagnostics(uri), [])
+
+    const definition = await client.request('textDocument/definition', {
+      textDocument: { uri },
+      position: {
+        line: 2,
+        character: 10
+      }
+    })
+    assert.match(definition.uri, /library\.lm$/)
+    assert.deepEqual(definition.range.start, {
+      line: 0,
+      character: 9
+    })
   } finally {
     client.stop()
     await rm(root, { recursive: true, force: true })
