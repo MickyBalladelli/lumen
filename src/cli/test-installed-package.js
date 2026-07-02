@@ -222,6 +222,7 @@ try {
         capabilities: {}
       })
       assert.equal(initialized.serverInfo.name, 'lumen-lsp')
+      assert.equal(initialized.serverInfo.version, packageManifest.version)
       assert.equal(initialized.capabilities.documentFormattingProvider, true)
       assert.equal(await client.shutdown(), 0)
     } finally {

@@ -6,6 +6,21 @@ import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 import { Diagnostic } from '../../src/diagnostics/Diagnostic.js'
 import { LspServer, toDiagnostic } from '../../src/lsp/LspServer.js'
+import { lumenVersion } from '../../src/version.js'
+
+test('lsp reports the package version', () => {
+  const messages = []
+  const server = testServer(messages)
+
+  server.handleMessage({
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'initialize',
+    params: {}
+  })
+
+  assert.equal(messages[0].result.serverInfo.version, lumenVersion)
+})
 
 test('lsp publishes diagnostics for invalid document', async () => {
   const messages = []

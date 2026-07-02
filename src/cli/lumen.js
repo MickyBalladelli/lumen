@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { readFile } from 'node:fs/promises'
 import { Diagnostic, DiagnosticCollection } from '../diagnostics/Diagnostic.js'
+import { lumenVersion } from '../version.js'
 import {
   LumenCommandError,
   lumenHelp,
@@ -14,10 +14,7 @@ try {
   if (options.help) {
     console.log(lumenHelp)
   } else if (options.version) {
-    const packageJson = JSON.parse(
-      await readFile(new URL('../../package.json', import.meta.url), 'utf8')
-    )
-    console.log(packageJson.version)
+    console.log(lumenVersion)
   } else {
     process.exitCode = await runLumenCommand(options)
   }

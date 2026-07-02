@@ -2,6 +2,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { Compiler } from '../compiler/Compiler.js'
 import { formatSource } from '../formatter/Formatter.js'
 import { diagnosticsFrom } from '../diagnostics/Diagnostic.js'
+import { lumenVersion } from '../version.js'
 import {
   LanguageIndex,
   SemanticTokenTypes
@@ -65,7 +66,7 @@ export class LspServer {
         },
         serverInfo: {
           name: 'lumen-lsp',
-          version: '0.1.0'
+          version: lumenVersion
         }
       })
     }

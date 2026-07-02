@@ -4,6 +4,15 @@
   "description": "Lumen language intelligence, build command, and native debug launcher",
   "version": "0.1.0",
   "publisher": "lumen",
+  "license": "MIT",
+  "homepage": "https://github.com/MickyBalladelli/lumen#readme",
+  "bugs": {
+    "url": "https://github.com/MickyBalladelli/lumen/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MickyBalladelli/lumen.git"
+  },
   "icon": "images/lumen-logo-small.png",
   "engines": {
     "vscode": "^1.85.0"
@@ -140,7 +149,7 @@
     }
   },
   "scripts": {
-    "copy-compiler": "rm -rf compiler && mkdir -p compiler && cp -R ../src compiler/src && cp ../package.json compiler/package.json",
+    "copy-compiler": "rm -rf compiler && mkdir -p compiler && cp -R ../src compiler/src && cp ../package.json compiler/package.json && cp ../LICENSE ../CHANGELOG.md .",
     "package": "npm run copy-compiler && vsce package --no-dependencies"
   },
   "devDependencies": {

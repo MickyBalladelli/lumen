@@ -131,40 +131,31 @@ Before opening a pull request:
 4. Keep generated `build/`, tarball, and VSIX artifacts out of the commit.
 5. Call out platform-specific behavior and security impact.
 
-There is no automated CI yet. Include the tested OS, Node version, and Clang
-version in the pull request.
+Include the tested OS, Node version, and Clang version in the pull request.
 
 ## Release Process
 
-Releases are manual. There is no CI release job, prepublish gate, automatic
-changelog, or automatic checksum generation.
-
 Only a maintainer should release:
 
-1. Start from a clean checkout and choose a version.
-2. Keep versions synchronized in `package.json`, `photon.json`,
-   `vscode-lumen/package.json`, and `vscode-lumen/package-lock.json`.
+1. Start from a clean checkout and update `CHANGELOG.md`.
+2. Set the version with `npm version X.Y.Z`. The npm version hook synchronizes
+   Photon and VS Code metadata. The LSP reads the npm package version directly.
 3. Update user documentation and describe security-relevant changes.
-4. Run:
+4. Run the publish checks and build the release files:
 
    ```bash
-   npm install
-   npm run check:abi
-   npm test
-   npm run fuzz:http
-   npm pack --dry-run
-   cd vscode-lumen
-   npm install
-   npm run package
+   npm ci --prefix vscode-lumen
+   npm run release:check
+   npm run release:artifacts
+   cd dist
+   shasum -a 256 -c SHA256SUMS
    ```
 
-5. Return to the repository root and build the npm tarball with `npm pack`.
-6. Test the tarball and VSIX in disposable, clean environments.
-7. Generate SHA-256 checksums for the tarball and VSIX.
-8. Create a signed or annotated `vX.Y.Z` tag and a GitHub release containing
-   release notes, artifacts, and checksums.
-9. Publish to npm or the VS Code Marketplace only after the attached artifacts
-   match the tested files.
+5. Optionally run the separate HTTP fuzz suite for runtime parser changes.
+6. Create and push a signed or annotated `vX.Y.Z` tag.
+7. The release workflow checks the tag version, reruns publish checks, verifies
+   two byte-identical builds, and creates a GitHub release containing the npm
+   tarball, VSIX, and `SHA256SUMS`.
+8. Publish to npm or the VS Code Marketplace only from the tested artifacts.
 
-Until release automation exists, a second maintainer should verify versions,
-test results, artifact contents, and checksums.
+Running `npm publish` also invokes `release:check` through `prepublishOnly`.

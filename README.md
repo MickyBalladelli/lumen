@@ -14,6 +14,8 @@ Project work and security:
 
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
+- [Changelog](CHANGELOG.md)
+- [MIT license](LICENSE)
 
 ## What exists now
 

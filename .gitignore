@@ -3,3 +3,4 @@ build/
 vscode-lumen/node_modules/
 vscode-lumen/compiler/
 vscode-lumen/*.vsix
+dist/

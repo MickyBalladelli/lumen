@@ -71,10 +71,11 @@ npm unlink -g lumen
 
 ## Install From A Tarball
 
-Build a package tarball:
+Download `lumen-X.Y.Z.tgz` and `SHA256SUMS` from the matching GitHub release,
+then verify it:
 
 ```bash
-npm pack
+shasum -a 256 -c SHA256SUMS
 ```
 
 Install that tarball globally:
@@ -83,22 +84,34 @@ Install that tarball globally:
 npm install -g ./lumen-0.1.0.tgz
 ```
 
-If the version changes, use the tarball name printed by `npm pack`.
+If the version changes, use the tarball name from that release.
+
+Maintainers can create the tarball, VSIX, and checksum file locally:
+
+```bash
+npm ci --prefix vscode-lumen
+npm run release:artifacts
+cd dist
+shasum -a 256 -c SHA256SUMS
+```
+
+The release command builds each artifact twice and stops if the bytes differ.
 
 ## VS Code Extension
 
-Package the extension:
-
-```bash
-cd vscode-lumen
-npm install
-npm run package
-```
-
-Install the generated VSIX:
+Download `lumen-language-X.Y.Z.vsix` from the matching GitHub release, verify
+it with the supplied `SHA256SUMS`, then install it:
 
 ```bash
 code --install-extension lumen-language-0.1.0.vsix
+```
+
+To package only the extension from a checkout:
+
+```bash
+cd vscode-lumen
+npm ci
+npm run package
 ```
 
 If the version changes, use the VSIX name printed by `npm run package`.
