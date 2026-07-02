@@ -63,10 +63,15 @@ const CONTINUATION_TOKENS = new Set([
 const ENDING_PUNCTUATION = new Set([')', ']', '}'])
 
 export class Tokenizer {
-  constructor(source, { keywords = KEYWORDS, sourcePath = null } = {}) {
+  constructor(source, {
+    keywords = KEYWORDS,
+    sourcePath = null,
+    includeTrivia = false
+  } = {}) {
     this.source = source
     this.keywords = keywords
     this.sourcePath = sourcePath
+    this.includeTrivia = includeTrivia
     this.tokens = []
     this.start = 0
     this.current = 0
@@ -136,6 +141,11 @@ export class Tokenizer {
   }
 
   handleNewline() {
+    if (this.includeTrivia) {
+      this.addToken(TokenType.Newline, '\n')
+      return
+    }
+
     // Newlines become statement terminators only when the current expression
     // looks complete. Inside parentheses/brackets, newlines are plain whitespace,
     // so "for (...; ...; ...)" keeps relying on real semicolons.
@@ -184,6 +194,7 @@ export class Tokenizer {
 
   lineComment() {
     while (!this.isAtEnd() && this.peek() !== '\n') this.advance()
+    if (this.includeTrivia) this.addToken(TokenType.Comment)
   }
 
   blockComment() {
@@ -191,6 +202,7 @@ export class Tokenizer {
       if (this.peek() === '*' && this.peekNext() === '/') {
         this.advance()
         this.advance()
+        if (this.includeTrivia) this.addToken(TokenType.Comment)
         return
       }
       this.advance()

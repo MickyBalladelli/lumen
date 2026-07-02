@@ -908,6 +908,10 @@ npm run format -- examples/basic.lm
 npm run format -- --check examples/basic.lm
 ```
 
+Formatting is parser-validated and token-aware. It preserves comments and
+multiline syntax, is idempotent, normalizes CRLF to LF, and leaves malformed
+source untouched.
+
 Editor tooling can also use the language server:
 
 ```bash

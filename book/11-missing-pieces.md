@@ -240,15 +240,12 @@ All should use compiler data rather than re-parsing in the VS Code extension.
 
 ### Make Formatting Syntax-Aware And Idempotent
 
-- Format from tokens/AST rather than line regexes
-- Handle comments correctly (preserve placement)
-- Handle nested literals and complex expressions
-- Handle multiline function calls
-- Handle match and switch formatting
-- Handle strings containing braces (`${...}`)
-- Handle malformed input gracefully (don't destroy the file)
-- Handle CRLF line endings
-- Add format-twice idempotency tests
+Completed. Formatting first validates the parsed program, then uses
+trivia-aware tokens and delimiter structure for spacing and indentation.
+Comments and multiline calls/literals are preserved, match and switch bodies
+indent correctly, string contents do not affect brace depth, CRLF is
+normalized, and malformed source is returned untouched. Format-twice tests
+cover focused edge cases and every example.
 
 ### Complete Package Metadata And Release Automation
 

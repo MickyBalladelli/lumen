@@ -6,5 +6,7 @@ export const TokenType = Object.freeze({
   Operator: 'Operator',
   Punctuation: 'Punctuation',
   Semicolon: 'Semicolon',
+  Comment: 'Comment',
+  Newline: 'Newline',
   EndOfFile: 'EndOfFile'
 })

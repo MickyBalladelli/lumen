@@ -341,22 +341,19 @@ npm run format -- --check examples/basic.lm
 
 ### Formatting Rules
 
-The formatter currently uses line-based regex patterns. It normalizes:
+The formatter validates syntax with the parser, then formats a trivia-aware
+token stream. It normalizes:
+
 - Indentation (spaces)
 - Spacing around operators and braces
-- Line breaks between top-level declarations
+- Nested block, literal, call, match, and switch indentation
+- CRLF line endings to LF
+- `else`, `catch`, and `until` placement after a closing brace
 
-### Limitations
-
-- **Regex-based** — formatting is done with line regexes, not from tokens/AST.
-  This means it cannot handle all syntactic edge cases correctly.
-- **Comments** — comment formatting may not preserve original placement.
-- **Nested literals** — complex nested expressions may not format correctly.
-- **Strings with braces** — `"${...}"` interpolation inside strings may confuse
-  brace matching.
-- **CRLF** — line ending handling is not fully tested.
-- **Idempotency** — formatting twice may produce different output in edge
-  cases.
+Comments remain tokens, and braces or comment markers inside strings are never
+read as syntax. Malformed source is returned unchanged so editor formatting
+cannot damage an incomplete document. Focused tests and the complete example
+set are formatted twice to enforce idempotency.
 
 ## Language Server (LSP)
 
@@ -515,8 +512,8 @@ LLVM output. Completion is computed from the run and written to
 
 ### Tooling
 
-- **Formatter** — regex-based, not token/AST-based. Not idempotent in edge
-  cases.
+- **Formatter** — parser-validated and token-aware, with safe malformed-input
+  behavior and format-twice coverage.
 - **LSP** — local imports show `Unknown module`. No debounce, no `didClose`,
   state not isolated per document.
 - **Compiler command** — `lumen build`, `lumen emit`, and `lumen run` provide
