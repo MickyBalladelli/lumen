@@ -208,12 +208,10 @@ program-argument handling.
 
 ### Add An Installed-Package Smoke Test
 
-- Pack to a clean temporary directory
-- Install the tarball globally
-- Compile and run a Lumen program
-- Install a bundled Photon package
-- Start an LSP handshake
-- Verify all documented commands work from the installed package
+Completed. `npm run test:package` packs into a clean temporary directory,
+installs only that tarball, exercises every packaged command, compiles and runs
+native programs, installs and imports a bundled Photon package, completes an
+LSP initialize/shutdown handshake, and verifies the shipped README install link.
 
 ### Make LSP Compilation Use The Same Module Graph As CLI
 

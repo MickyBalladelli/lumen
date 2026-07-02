@@ -23,6 +23,10 @@ const layers = [
     args: [join('src', 'cli', 'test-http-runtime.js')]
   },
   {
+    name: 'Installed package',
+    args: [join('src', 'cli', 'test-installed-package.js')]
+  },
+  {
     name: 'Compiler integration',
     args: [join('src', 'cli', 'test-examples.js')]
   },

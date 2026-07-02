@@ -1,6 +1,6 @@
 
 
-- [ ] Add an installed-package smoke test.
+- [x] Add an installed-package smoke test.
   Pack to a clean temporary directory, install the tarball, compile and run a
   program, install a bundled Photon package, start an LSP handshake, and verify all
   documented commands. Include `book/install-lumen.md` or remove the broken package

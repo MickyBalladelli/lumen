@@ -305,11 +305,10 @@ my-project/
 | `npm run speedtest` | Run benchmarks |
 | `npm run test` | Run the full test suite |
 | `npm run test:unit` | Run only unit tests |
+| `npm run test:package` | Test the packed CLI from a clean temporary install |
 | `npm run test:sanitizers` | Run only sanitizer tests |
 
 ## Missing
 
 - Better CLI help output with subcommand descriptions and examples.
 - Cross-platform setup notes for Linux.
-- An installed-package smoke test that verifies the complete npm global install
-  workflow end-to-end.

@@ -10,6 +10,7 @@
     "README.md",
     "CONTRIBUTING.md",
     "SECURITY.md",
+    "book/install-lumen.md",
     "lumen.json",
     "photon.json"
   ],
@@ -46,6 +47,7 @@
     "test:parity": "node ./src/cli/test-parity.js",
     "test:sanitizers": "node ./src/cli/test-sanitizers.js",
     "test:http-runtime": "node ./src/cli/test-http-runtime.js",
+    "test:package": "node ./src/cli/test-installed-package.js",
     "fuzz:http": "node ./src/cli/fuzz-http.js"
   }
 }
