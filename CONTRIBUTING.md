@@ -97,7 +97,9 @@ generated IR first.
 | `npm run test:unit` | Parser, types, IR, LLVM goldens, modules, LSP, Photon, and ABI registry |
 | `npm run check:abi` | Registry declarations against C runtime implementations |
 | `npm run test:http-runtime` | C runtime, HTTP parser, WebSocket, platform, and crypto vectors |
-| `node src/cli/test-examples.js` | Native examples, negative cases, LSP checks, and three-stage bootstrap equality |
+| `npm run test:integration` | All integration suites; continues after a suite fails |
+| `npm run test:examples`, `test:cli`, `test:negative`, `test:lsp` | Focused native workflow suites |
+| `npm run test:bootstrap` | Three-stage bootstrap behavior and output equality |
 | `npm run test:parity` | JS/self-host diagnostics, LLVM behavior, and executable parity |
 | `npm run test:sanitizers` | Native ASan and UBSan runtime checks |
 | `npm run fuzz:http` | HTTP-request and WebSocket parser fuzzing |

@@ -32,7 +32,7 @@
   Run unit, example, negative, bootstrap, package, VS Code packaging, sanitizer, and
   clean-install tests. Cache tools without caching generated compiler outputs.
 
-- [ ] Split the 1,131-line example test runner.
+- [x] Split the 1,131-line example test runner.
   Create focused suites and helpers so one failure does not hide unrelated results.
   Add direct unit coverage for tokenizer, module loader, semantic analyzer, emitter,
   runtime ABI, CLI errors, and repeated compiler use.
