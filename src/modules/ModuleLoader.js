@@ -13,11 +13,15 @@ export class ModuleLoader {
   constructor({
     packageRoot = '.photon/packages',
     tokenizer = Tokenizer,
-    parser = Parser
+    parser = Parser,
+    sourceOverrides = new Map()
   } = {}) {
     this.packageRoot = resolve(packageRoot)
     this.tokenizer = tokenizer
     this.parser = parser
+    this.sourceOverrides = new Map(
+      [...sourceOverrides].map(([path, source]) => [resolve(path), source])
+    )
   }
 
   async load(entryPath) {
@@ -57,7 +61,8 @@ export class ModuleLoader {
     const cached = this.modules.get(canonicalPath)
     if (cached) return cached
 
-    const source = await readFile(canonicalPath, 'utf8')
+    const source = this.sourceOverrides.get(canonicalPath) ??
+      await readFile(canonicalPath, 'utf8')
     let tokens
     let ast
 
@@ -115,10 +120,13 @@ export class ModuleLoader {
   }
 
   async canonicalPath(filePath, importedBy) {
+    const requestedPath = resolve(filePath)
+    if (this.sourceOverrides.has(requestedPath)) return requestedPath
+
     try {
-      return await realpath(filePath)
+      return await realpath(requestedPath)
     } catch {
-      throw this.moduleDiagnostic(`Cannot resolve module "${filePath}"`, importedBy)
+      throw this.moduleDiagnostic(`Cannot resolve module "${requestedPath}"`, importedBy)
     }
   }
 

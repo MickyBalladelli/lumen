@@ -2,6 +2,7 @@ import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { spawn } from 'node:child_process'
 import { Compiler } from '../compiler/Compiler.js'
+import { printSpeedtestResults } from './SpeedtestReporter.js'
 
 const tests = ['sum', 'fib', 'branch', 'math', 'nested', 'state']
 const languages = ['lumen', 'rust', 'node', 'lmsh', 'python']
@@ -38,7 +39,7 @@ for (const test of tests) {
   }
 }
 
-printTable(rows)
+printSpeedtestResults(rows, tests)
 
 async function runBenchmark(language, test) {
   const row = {
@@ -174,54 +175,6 @@ async function commandExists(command) {
   } catch {
     return false
   }
-}
-
-function printTable(rows) {
-  const headers = ['test', 'language', 'rank', 'best run ms', 'median run ms']
-  const ranks = rankRows(rows)
-  const body = rows.map(row => [
-    row.test,
-    row.language,
-    ranks.get(row) ?? '-',
-    row.bestMs,
-    row.medianMs
-  ])
-  const widths = headers.map((header, index) => Math.max(
-    header.length,
-    ...body.map(row => String(row[index]).length)
-  ))
-
-  printRow(headers, widths)
-  console.log(widths.map(width => '-'.repeat(width)).join(' | '))
-  for (const row of body) printRow(row, widths)
-}
-
-function rankRows(rows) {
-  const ranks = new Map()
-
-  for (const test of tests) {
-    const testRows = rows
-      .filter(row => row.test === test && Number.isFinite(Number(row.bestMs)))
-      .sort((left, right) => Number(left.bestMs) - Number(right.bestMs))
-
-    testRows.forEach((row, index) => {
-      ranks.set(row, ordinal(index + 1))
-    })
-  }
-
-  return ranks
-}
-
-function ordinal(value) {
-  if (value === 1) return '1st'
-  if (value === 2) return '2nd'
-  if (value === 3) return '3rd'
-
-  return `${value}th`
-}
-
-function printRow(values, widths) {
-  console.log(values.map((value, index) => String(value).padEnd(widths[index])).join(' | '))
 }
 
 function now() {

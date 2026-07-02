@@ -6,7 +6,7 @@
   documented commands. Include `book/install-lumen.md` or remove the broken package
   link to a file excluded by npm.
 
-- [ ] Make LSP compilation use the same module graph as CLI compilation.
+- [x] Make LSP compilation use the same module graph as CLI compilation.
   Local imports currently produce `Unknown module` in the editor. Also implement
   `didClose`, debounce/cancel stale diagnostics, report all errors, and isolate
   compiler state per document/build.

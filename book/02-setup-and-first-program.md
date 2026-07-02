@@ -241,7 +241,8 @@ This compiles and runs benchmark programs (sum, fib, branch, math, nested,
 state) in Lumen, Rust, Python, and Node.js. Precompiled Lumen (`lumen`) and
 `lmsh` compile-and-run mode are both measured. Results show best and median run
 times in milliseconds. Set `LUMEN_SPEEDTEST_RUNS=5` to increase the number of
-runs from the default 3.
+runs from the default 3. Each benchmark has its own section. The winning row is
+green, section headings are cyan, and unavailable or invalid rows are yellow.
 
 Missing toolchain entries (no `rustc`, `python3`, or `node`) are noted as
 missing rather than failing the test.

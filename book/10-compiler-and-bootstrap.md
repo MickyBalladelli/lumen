@@ -362,7 +362,9 @@ Language Server Protocol over stdio.
 
 ### Capabilities
 
-- **Diagnostics** — reports compilation errors on file open and save
+- **Diagnostics** — reports all compilation errors on file open, change, and save
+- **Modules** — uses the CLI module graph with unsaved buffers overlaid on disk
+- **Document lifecycle** — debounces changes, drops stale builds, and clears on close
 - **Formatting** — formats documents via the formatter
 - **Compile** — VS Code extension provides a compile command
 
@@ -382,13 +384,6 @@ automatically.
 
 ### Known Gaps
 
-- **Local imports** — `import { ... } from "./file.lm"` currently produces
-  `Unknown module` in LSP diagnostics because the LSP uses a different
-  compilation path than the CLI module graph.
-- **No `didClose`** — closing a file does not clean up its diagnostics.
-- **No debounce** — every keystroke triggers a full recompile; diagnostics are
-  not debounced or cancelled.
-- **Single document** — compiler state is not isolated per document/build.
 - **No language intelligence** — go-to-definition, references, hover types,
   completion, rename, symbols, semantic tokens, and code actions are not
   implemented. The current extension re-parses files rather than using compiler
@@ -514,8 +509,8 @@ LLVM output. Completion is computed from the run and written to
 
 - **Formatter** — parser-validated and token-aware, with safe malformed-input
   behavior and format-twice coverage.
-- **LSP** — local imports show `Unknown module`. No debounce, no `didClose`,
-  state not isolated per document.
+- **LSP** — shares the CLI module graph, overlays unsaved files, debounces
+  changes, discards stale builds, handles `didClose`, and isolates each build.
 - **Compiler command** — `lumen build`, `lumen emit`, and `lumen run` provide
   packaged native, LLVM-only, config-driven, and compile-and-run workflows.
 - **CompilerOptions** — ownership, GC, target, and safety settings are

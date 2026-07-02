@@ -853,7 +853,9 @@ npm run speedtest
 The speed test compares precompiled Lumen, `lmsh` compile-and-run mode, Rust,
 Python, and Node versions of the same benchmark programs. Set
 `LUMEN_SPEEDTEST_RUNS=5` to change run count. If `rustc`, `python3`, or `node`
-is missing, that row is marked as missing.
+is missing, that row is marked as missing. Output is split into one section per
+benchmark: winners are green, section names are cyan, and unavailable or invalid
+rows are yellow.
 
 Latest local results from June 2, 2026 with the default 3 runs:
 

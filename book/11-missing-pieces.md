@@ -215,12 +215,12 @@ LSP initialize/shutdown handshake, and verifies the shipped README install link.
 
 ### Make LSP Compilation Use The Same Module Graph As CLI
 
-- Local imports (`import { ... } from "./file.lm"`) currently produce
-  `Unknown module` in LSP diagnostics
-- Implement `didClose` to clean up diagnostics when files close
-- Debounce and cancel stale diagnostic requests
-- Report all errors, not just the first
-- Isolate compiler state per document/build
+Completed. The CLI and LSP share `Compiler.compileFile` and the same linked
+module graph. Open buffers overlay disk modules, dependency edits rebuild open
+roots, diagnostics are grouped by source file, rapid changes are debounced, and
+stale builds cannot publish. `didClose` cancels pending work and clears
+diagnostics. Every build uses a fresh compiler instance and reports the full
+diagnostic collection.
 
 ### Add Language Intelligence
 

@@ -1,5 +1,7 @@
 const greenCode = '\u001b[32m'
 const redCode = '\u001b[31m'
+const yellowCode = '\u001b[33m'
+const cyanCode = '\u001b[36m'
 const resetCode = '\u001b[0m'
 
 export function green(message, stream = process.stdout) {
@@ -8,6 +10,14 @@ export function green(message, stream = process.stdout) {
 
 export function red(message, stream = process.stderr) {
   return color(message, redCode, stream)
+}
+
+export function yellow(message, stream = process.stdout) {
+  return color(message, yellowCode, stream)
+}
+
+export function cyan(message, stream = process.stdout) {
+  return color(message, cyanCode, stream)
 }
 
 function color(message, code, stream) {

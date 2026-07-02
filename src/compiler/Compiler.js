@@ -106,9 +106,19 @@ export class Compiler {
   }
 
   async writeLLVMFile(inputPath, outputPath) {
+    const result = await this.compileFile(inputPath)
+    await mkdir(dirname(outputPath), { recursive: true })
+    await writeFile(outputPath, result.llvm)
+    return result
+  }
+
+  async compileFile(inputPath, {
+    sourceOverrides = new Map()
+  } = {}) {
     const graph = await this.moduleLoaderFactory({
       tokenizer: this.tokenizer,
-      parser: this.parser
+      parser: this.parser,
+      sourceOverrides
     }).load(inputPath)
     const moduleRegistry = await ModuleRegistry.fromPackageRoot()
     const semanticAnalyzer = new SemanticAnalyzer({ moduleRegistry })
@@ -123,17 +133,28 @@ export class Compiler {
     } catch (error) {
       if (error instanceof Diagnostic) {
         const source = graph.sources.get(error.location?.sourcePath) ?? graph.entry.source
-        throw error.withSource(source)
+        error.withSource(source)
       }
       if (error instanceof DiagnosticCollection) {
-        throw error.withSources(graph.sources, graph.entry.source)
+        error.withSources(graph.sources, graph.entry.source)
       }
+      if (error && typeof error === 'object') error.moduleGraph = graph
       throw error
     }
 
-    await mkdir(dirname(outputPath), { recursive: true })
-    await writeFile(outputPath, result.llvm)
+    result.moduleGraph = graph
     return result
+  }
+
+  async diagnoseFile(inputPath, options = {}) {
+    try {
+      await this.compileFile(inputPath, options)
+      return []
+    } catch (error) {
+      const diagnostics = diagnosticsFrom(error)
+      if (diagnostics.length > 0) return diagnostics
+      throw error
+    }
   }
 
   async buildExecutable(llvmPath, outputPath, {

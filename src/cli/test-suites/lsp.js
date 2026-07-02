@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { LspTestClient } from '../../testing/LspTestClient.js'
 import { TestSuite } from '../../testing/TestSuite.js'
 
@@ -54,6 +57,51 @@ await suite.test('diagnostics and formatting over stdio', async () => {
     assert.equal(edits[0].newText, 'function main(): i32 {\n  return 0\n}\n')
   } finally {
     client.stop()
+  }
+})
+
+await suite.test('local imports compile over stdio', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'lumen-lsp-stdio-'))
+  const mainPath = join(root, 'main.lm')
+  const libraryPath = join(root, 'library.lm')
+  const client = new LspTestClient(process.execPath, [
+    join('src', 'cli', 'lsp.js')
+  ])
+
+  try {
+    await writeFile(libraryPath, [
+      'function value(): i32 {',
+      '  return 7',
+      '}'
+    ].join('\n'))
+    const source = [
+      'import { value } from "./library.lm"',
+      'function main(): i32 {',
+      '  return value()',
+      '}'
+    ].join('\n')
+    await writeFile(mainPath, source)
+
+    await client.start()
+    await client.request('initialize', {
+      processId: process.pid,
+      rootUri: pathToFileURL(root).href,
+      capabilities: {}
+    })
+
+    const uri = pathToFileURL(mainPath).href
+    client.notify('textDocument/didOpen', {
+      textDocument: {
+        uri,
+        languageId: 'lumen',
+        version: 1,
+        text: source
+      }
+    })
+    assert.deepEqual(await client.waitForDiagnostics(uri), [])
+  } finally {
+    client.stop()
+    await rm(root, { recursive: true, force: true })
   }
 })
 
