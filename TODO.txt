@@ -15,11 +15,11 @@
   Assert the tokenizer/parser never hang or crash, formatting is idempotent, invalid
   programs never reach LLVM, and generated LLVM always passes `clang` verification.
 
-- [ ] Make temporary outputs collision-safe and cacheable.
+- [x] Make temporary outputs collision-safe and cacheable.
   `lmsh` and compile flows use basenames in shared build directories. Key artifacts
   by canonical input path, target, compiler version, and flags; write atomically.
 
-- [ ] Either wire `CompilerOptions` into behavior or remove it.
+- [x] Either wire `CompilerOptions` into behavior or remove it.
   Garbage collector, ownership, target, and safety settings are public placeholders
   that currently change nothing.
 

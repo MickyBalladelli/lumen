@@ -7,6 +7,17 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Build artifacts now use canonical-path, target, compiler-version, and flag
+  keys with content fingerprints. LLVM, native, and published outputs are
+  written atomically.
+
+### Removed
+
+- Removed the unused `CompilerOptions` placeholder API. Its ownership, garbage
+  collector, target, and safety fields never affected compilation.
+
 ## [0.1.0] - 2026-07-02
 
 ### Added

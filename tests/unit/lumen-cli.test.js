@@ -58,7 +58,6 @@ test('lumen parses build, emit, and run workflows', () => {
 test('lumen build emits LLVM and links the requested output', async () => {
   const calls = []
   const output = []
-  const compiler = fakeCompiler(calls)
   const options = parseLumenArguments([
     'build',
     'main.lm',
@@ -71,17 +70,36 @@ test('lumen build emits LLVM and links the requested output', async () => {
 
   const code = await runLumenCommand(options, {
     cwd: '/project',
-    compiler,
-    print: value => output.push(value)
+    compiler: {},
+    print: value => output.push(value),
+    buildNative: async request => {
+      calls.push(['build', request])
+      return {
+        executablePath: '/cache/program'
+      }
+    },
+    publish: async (source, destination) => {
+      calls.push(['publish', source, destination])
+    }
   })
 
   assert.equal(code, 0)
-  assert.deepEqual(calls, [
-    ['emit', '/project/main.lm', '/project/artifacts/app.ll'],
-    ['build', '/project/artifacts/app.ll', '/project/artifacts/app', {
-      clang: 'custom-clang',
-      optimize: true
-    }]
+  assert.equal(calls[0][0], 'build')
+  assert.equal(calls[0][1].inputPath, '/project/main.lm')
+  assert.equal(calls[0][1].cacheRoot, '/project/build/cache')
+  assert.deepEqual(calls[0][1].flags, {
+    clang: 'custom-clang',
+    optimize: true,
+    sanitizers: []
+  })
+  assert.deepEqual(calls[0][1].buildOptions, {
+    clang: 'custom-clang',
+    optimize: true
+  })
+  assert.deepEqual(calls[1], [
+    'publish',
+    '/cache/program',
+    '/project/artifacts/app'
   ])
   assert.deepEqual(output, ['/project/artifacts/app'])
 })
@@ -108,7 +126,13 @@ test('lumen run forwards arguments and returns program status', async () => {
 
   const code = await runLumenCommand(options, {
     cwd: '/project',
-    compiler: fakeCompiler(calls),
+    compiler: {},
+    buildNative: async request => {
+      calls.push(request)
+      return {
+        executablePath: '/project/build/cache/main-key/content/program'
+      }
+    },
     execute: async (path, args) => {
       executions.push([path, args])
       return 7
@@ -117,9 +141,10 @@ test('lumen run forwards arguments and returns program status', async () => {
 
   assert.equal(code, 7)
   assert.deepEqual(executions, [[
-    '/project/build/main',
+    '/project/build/cache/main-key/content/program',
     ['one', 'two']
   ]])
+  assert.equal(calls[0].inputPath, '/project/main.lm')
 })
 
 test('lumen package exposes the command', async () => {
@@ -142,14 +167,3 @@ test('lumen reports invalid config', async () => {
     /Invalid JSON config/
   )
 })
-
-function fakeCompiler(calls) {
-  return {
-    async writeLLVMFile(input, output) {
-      calls.push(['emit', input, output])
-    },
-    async buildExecutable(llvm, output, options) {
-      calls.push(['build', llvm, output, options])
-    }
-  }
-}

@@ -1,8 +1,11 @@
 #!/usr/bin/env node
-import { mkdir } from 'node:fs/promises'
-import { basename, join } from 'node:path'
 import { spawn } from 'node:child_process'
+import { join, resolve } from 'node:path'
 import { Compiler } from '../compiler/Compiler.js'
+import {
+  compileNativeArtifact,
+  nativeBuildTarget
+} from '../compiler/BuildArtifacts.js'
 import { Diagnostic, DiagnosticCollection } from '../diagnostics/Diagnostic.js'
 
 const input = process.argv[2]
@@ -14,17 +17,26 @@ if (!input || input === '-h' || input === '--help') {
 }
 
 const compiler = new Compiler()
-const name = basename(input, '.lm')
-const outputDir = join('build', 'lmsh')
-const llvmPath = join(outputDir, `${name}.ll`)
-const executablePath = join(outputDir, name)
+const clang = process.env.LUMEN_CLANG ?? 'clang'
+const flags = {
+  clang,
+  optimize: false,
+  sanitizers: []
+}
 
 try {
-  await mkdir(outputDir, { recursive: true })
-  await compiler.writeLLVMFile(input, llvmPath)
-  await compiler.buildExecutable(llvmPath, executablePath)
+  const artifact = await compileNativeArtifact({
+    compiler,
+    inputPath: input,
+    cacheRoot: join('build', 'cache'),
+    target: nativeBuildTarget(),
+    flags,
+    buildOptions: {
+      clang
+    }
+  })
 
-  const result = await runExecutable(executablePath, args)
+  const result = await runExecutable(artifact.executablePath, args)
   process.exit(result)
 } catch (error) {
   if (!(error instanceof Diagnostic) && !(error instanceof DiagnosticCollection)) throw error
@@ -33,15 +45,15 @@ try {
 }
 
 function runExecutable(path, args) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(`./${path}`, args, {
+  return new Promise((resolveResult, reject) => {
+    const child = spawn(resolve(path), args, {
       stdio: 'inherit',
       env: process.env
     })
 
     child.on('error', reject)
     child.on('close', code => {
-      resolve(code ?? 1)
+      resolveResult(code ?? 1)
     })
   })
 }

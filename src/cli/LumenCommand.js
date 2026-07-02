@@ -1,7 +1,14 @@
 import { readFile } from 'node:fs/promises'
-import { basename, dirname, join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { spawn } from 'node:child_process'
 import { Compiler } from '../compiler/Compiler.js'
+import {
+  compileLLVMArtifact,
+  compileNativeArtifact,
+  llvmBuildTarget,
+  nativeBuildTarget,
+  publishArtifact
+} from '../compiler/BuildArtifacts.js'
 
 const commands = new Set(['build', 'emit', 'run'])
 
@@ -96,29 +103,53 @@ export async function runLumenCommand(options, {
   compiler = new Compiler(),
   print = value => console.log(value),
   execute = executeProgram,
-  loadFile = readFile
+  loadFile = readFile,
+  buildLLVM = compileLLVMArtifact,
+  buildNative = compileNativeArtifact,
+  publish = publishArtifact
 } = {}) {
   const project = await resolveProject(options, { cwd, loadFile })
   const clang = options.clang ?? env.LUMEN_CLANG ?? 'clang'
+  const cacheRoot = join(cwd, 'build', 'cache')
 
   if (options.command === 'emit') {
-    await compiler.writeLLVMFile(project.input, project.output)
-    print(project.output)
+    const artifact = await buildLLVM({
+      compiler,
+      inputPath: project.input,
+      cacheRoot,
+      target: llvmBuildTarget()
+    })
+    const output = project.output ?? artifact.llvmPath
+    if (project.output) await publish(artifact.llvmPath, project.output)
+    print(output)
     return 0
   }
 
-  await compiler.writeLLVMFile(project.input, project.llvm)
-  await compiler.buildExecutable(project.llvm, project.output, {
+  const flags = {
     clang,
-    optimize: options.release
+    optimize: options.release,
+    sanitizers: []
+  }
+  const artifact = await buildNative({
+    compiler,
+    inputPath: project.input,
+    cacheRoot,
+    target: nativeBuildTarget(),
+    flags,
+    buildOptions: {
+      clang,
+      optimize: options.release
+    }
   })
+  const output = project.output ?? artifact.executablePath
+  if (project.output) await publish(artifact.executablePath, project.output)
 
   if (options.command === 'build') {
-    print(project.output)
+    print(output)
     return 0
   }
 
-  return await execute(project.output, options.programArgs, env)
+  return await execute(output, options.programArgs, env)
 }
 
 export async function resolveProject(options, {
@@ -144,21 +175,21 @@ export async function resolveProject(options, {
     ? resolve(cwd, options.output)
     : configuredOutput
       ? configuredOutput
-      : resolve(cwd, join('build', basename(input, '.lm')))
+      : null
 
   if (options.command === 'emit') {
+    if (!baseOutput) return { input, output: null }
     const output = options.output
       ? baseOutput
       : baseOutput.endsWith('.ll')
         ? baseOutput
         : `${baseOutput}.ll`
-    return { input, output, llvm: output }
+    return { input, output }
   }
 
   return {
     input,
-    output: baseOutput,
-    llvm: `${baseOutput}.ll`
+    output: baseOutput
   }
 }
 

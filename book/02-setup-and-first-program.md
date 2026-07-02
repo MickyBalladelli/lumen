@@ -126,6 +126,12 @@ lumen run hello.lm
 
 This is the fastest way to iterate. No manual build steps needed.
 
+When no output path is configured, `lumen` and `lmsh` keep generated LLVM and
+native files in `build/cache/`. Cache paths include the canonical input path,
+native target, compiler version, and build flags, so equal basenames from
+different directories do not collide. Pass `-o` to publish an artifact at a
+stable project path.
+
 ## Compile To Native (Step By Step)
 
 For more control, break the process into explicit steps:

@@ -1,6 +1,7 @@
+import { randomUUID } from 'node:crypto'
 import { spawn } from 'node:child_process'
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
+import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
+import { basename, dirname, join } from 'node:path'
 import { Tokenizer } from '../lexer/Tokenizer.js'
 import { Parser } from '../parser/Parser.js'
 import { SemanticAnalyzer } from '../semantics/SemanticAnalyzer.js'
@@ -17,6 +18,7 @@ import {
 import { ModuleLoader } from '../modules/ModuleLoader.js'
 import { ModuleRegistry } from '../semantics/ModuleRegistry.js'
 import { runtimeSourcesForLLVM } from '../runtime/RuntimeUnits.js'
+import { atomicWriteFile } from './BuildArtifacts.js'
 
 export class Compiler {
   constructor({
@@ -100,15 +102,13 @@ export class Compiler {
 
   async writeLLVM(source, outputPath, { sourcePath = null } = {}) {
     const result = this.compileSource(source, { sourcePath })
-    await mkdir(dirname(outputPath), { recursive: true })
-    await writeFile(outputPath, result.llvm)
+    await atomicWriteFile(outputPath, result.llvm)
     return result
   }
 
   async writeLLVMFile(inputPath, outputPath) {
     const result = await this.compileFile(inputPath)
-    await mkdir(dirname(outputPath), { recursive: true })
-    await writeFile(outputPath, result.llvm)
+    await atomicWriteFile(outputPath, result.llvm)
     return result
   }
 
@@ -168,17 +168,23 @@ export class Compiler {
       flags.push(`-fsanitize=${sanitizers.join(',')}`, '-fno-omit-frame-pointer')
     }
 
+    await mkdir(dirname(outputPath), { recursive: true })
     const llvm = await readFile(llvmPath, 'utf8')
-    const objectPath = `${outputPath}.o`
-    await this.run(clang, [...flags, '-c', llvmPath, '-o', objectPath])
-
+    const temporaryPrefix = join(
+      dirname(outputPath),
+      `.${basename(outputPath)}.${process.pid}.${randomUUID()}`
+    )
+    const executablePath = `${temporaryPrefix}.tmp`
+    const objectPath = `${temporaryPrefix}.o`
     const sources = [objectPath]
-    const generated = []
+    const generated = [executablePath, objectPath]
 
     try {
+      await this.run(clang, [...flags, '-c', llvmPath, '-o', objectPath])
+
       if (/@lumen_compiler_image\(\)/.test(llvm)) {
-        const imageSourcePath = `${outputPath}.compiler-image.c`
-        const imageObjectPath = `${outputPath}.compiler-image.o`
+        const imageSourcePath = `${temporaryPrefix}.compiler-image.c`
+        const imageObjectPath = `${temporaryPrefix}.compiler-image.o`
         generated.push(imageSourcePath, imageObjectPath)
         await writeFile(imageSourcePath, createCompilerImageSource(llvm))
         await this.run(clang, [...flags, '-c', imageSourcePath, '-o', imageObjectPath])
@@ -186,7 +192,8 @@ export class Compiler {
       }
 
       sources.push(...runtimeSourcesForLLVM(llvm))
-      await this.run(clang, [...flags, ...sources, '-pthread', '-o', outputPath])
+      await this.run(clang, [...flags, ...sources, '-pthread', '-o', executablePath])
+      await rename(executablePath, outputPath)
     } finally {
       await Promise.all(generated.map(path => unlink(path).catch(error => {
         if (error.code !== 'ENOENT') throw error

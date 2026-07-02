@@ -124,13 +124,32 @@ The compiler driver:
 Each compilation creates fresh instances of semantic, type, IR, and backend
 components — there is no shared mutable state between compilations.
 
+### Build Artifacts And Cache
+
+Default `lumen`, `lmsh`, and JavaScript compile-driver artifacts live under
+`build/cache/`. The first cache directory is keyed by:
+
+- canonical input path
+- LLVM/native target and host architecture
+- compiler package version
+- Clang, optimization, and sanitizer flags
+
+A second content fingerprint covers emitted LLVM plus selected runtime sources
+and runtime headers. Unchanged native builds reuse the executable. Source,
+runtime, target, version, or flag changes select a different cache entry.
+
+LLVM files, linked executables, and explicit `-o` destinations are written to a
+unique sibling temporary path and renamed only after success. Concurrent builds
+do not share temporary object files, and a failed build leaves an existing
+output untouched.
+
 ### Supporting Files
 
 | File | Purpose |
 | --- | --- |
 | `src/modules/ModuleGraph.js` | Resolves imports, detects cycles, isolates private names |
 | `src/modules/ModuleLoader.js` | Loads local and Photon module sources |
-| `src/runtime/CompilerOptions.js` | Ownership mode, garbage collector, and safety settings (currently placeholders) |
+| `src/compiler/BuildArtifacts.js` | Cache identities, content fingerprints, and atomic publishing |
 | `src/diagnostics/Diagnostic.js` | Error formatting with source line and caret |
 | `src/formatter/Formatter.js` | Source code formatting |
 | `src/lsp/LspServer.js` | Language Server Protocol implementation |
@@ -400,10 +419,8 @@ The C runtime owns all heap-allocated values:
 - **Borrowed pointers** (arguments, environment strings, literals, static data)
   are not registered as owned — the runtime does not free them
 
-`CompilerOptions` in `src/runtime/CompilerOptions.js` has exposed settings for
-`ownership` with values `manual`, `arc`, `borrow`, `gc`, and `hybrid`. These
-are **reserved placeholders** — changing them currently has no effect on
-behavior.
+There is no configurable garbage collector or ownership mode. This
+runtime-owned process-lifetime model is the only implemented memory strategy.
 
 ## Bounds Checking
 
@@ -495,5 +512,3 @@ See the [generated platform matrix](support-matrix.md#platform-support).
   changes, discards stale builds, handles `didClose`, and isolates each build.
 - **Compiler command** — `lumen build`, `lumen emit`, and `lumen run` provide
   packaged native, LLVM-only, config-driven, and compile-and-run workflows.
-- **CompilerOptions** — ownership, GC, target, and safety settings are
-  placeholders with no effect on behavior.

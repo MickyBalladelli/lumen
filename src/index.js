@@ -1,4 +1,3 @@
-export { CompilerOptions } from './runtime/CompilerOptions.js'
 export { TokenType } from './lexer/TokenType.js'
 export { Token } from './lexer/Token.js'
 export { Tokenizer } from './lexer/Tokenizer.js'

@@ -264,22 +264,18 @@ single monolithic suite. One failure hides unrelated results.
   analysis)
 - Assert generated LLVM always passes `clang` verification
 
-### Make Temporary Outputs Collision-Safe
+### Collision-Safe Cached Build Artifacts
 
-- Key build artifacts by canonical input path, target, compiler version, and
-  flags
-- Write atomically (write to temp file, rename)
-- Avoid `lmsh` and compile flows sharing basenames in build directories
+Completed. Default artifacts use canonical-path, target, compiler-version, and
+flag keys plus a content fingerprint. `lmsh`, `lumen`, and the JavaScript
+compile driver share the cache. LLVM, executable, and explicit output writes
+use sibling temporary files and atomic rename.
 
-### Either Wire CompilerOptions Or Remove It
+### Remove Dead CompilerOptions
 
-`CompilerOptions` exposes `ownership` (`manual`, `arc`, `borrow`, `gc`,
-`hybrid`), `target`, and safety settings. These are public placeholders that
-currently change nothing.
-
-- Either implement the settings so they affect compilation
-- Or remove the options and document the current memory management model as
-  intentional
+Completed. The unused public options class and export were removed. The only
+implemented memory strategy is the runtime-owned process-lifetime model
+documented in the compiler chapter.
 
 ### Generated Feature And Support Matrix
 
