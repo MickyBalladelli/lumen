@@ -25,7 +25,7 @@ copy embedded stage-1 LLVM instead of compiling the Lumen source.
   to match. Verify both modules with Clang and compare the linked compiler
   behavior when byte equality is not meaningful.
 
-- [ ] Add a compiler-source coverage gate.
+- [x] Add a compiler-source coverage gate.
   Inventory every syntax node, type, IR operation, builtin, and module feature
   used by `compiler/*.lm`. The real bootstrap cannot pass while any used
   construct falls through an unsupported or fixture-specific path.

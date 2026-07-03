@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict'
-import { readFile, readdir, unlink } from 'node:fs/promises'
+import { mkdir, readFile, readdir, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Compiler } from '../../compiler/Compiler.js'
 import { findBootstrapDelegation } from '../../testing/BootstrapDelegationGuard.js'
 import { canonicalizeBootstrapLLVM } from '../../testing/BootstrapEquivalence.js'
+import {
+  analyzeCompilerSourceCoverage,
+  formatCompilerSourceCoverage
+} from '../../testing/CompilerSourceCoverage.js'
 import { TestSuite } from '../../testing/TestSuite.js'
 import {
   runCommand,
@@ -190,6 +194,15 @@ if (requireRealBootstrap) {
       [],
       `real bootstrap is red:\n${findings.join('\n')}`
     )
+  })
+
+  await suite.test('compiler source uses only generic bootstrap features', async () => {
+    const compilation = await compiler.compileFile(join('compiler', 'main.lm'))
+    const report = analyzeCompilerSourceCoverage(compilation)
+    const reportPath = join(outputDir, 'bootstrap', 'compiler-source-coverage.json')
+    await mkdir(join(outputDir, 'bootstrap'), { recursive: true })
+    await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`)
+    assert.equal(report.ready, true, formatCompilerSourceCoverage(report))
   })
 }
 

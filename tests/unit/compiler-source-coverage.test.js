@@ -1,0 +1,39 @@
+import assert from 'node:assert/strict'
+import test from 'node:test'
+import { Compiler } from '../../src/compiler/Compiler.js'
+import {
+  analyzeCompilerSourceCoverage,
+  formatCompilerSourceCoverage
+} from '../../src/testing/CompilerSourceCoverage.js'
+
+test('compiler source coverage inventories the complete self-host closure', async () => {
+  const compilation = await new Compiler().compileFile('compiler/main.lm')
+  const report = analyzeCompilerSourceCoverage(compilation)
+
+  assert.equal(report.entry, 'compiler/main.lm')
+  assert.equal(report.inventory.modules.length, 9)
+  assert.ok(report.inventory.syntaxNodes.includes('ImportDeclaration'))
+  assert.ok(report.inventory.syntaxNodes.includes('WhileStatement'))
+  assert.ok(report.inventory.typeNames.includes('Result<string>'))
+  assert.ok(report.inventory.irOperations.includes('value:call'))
+  assert.ok(report.inventory.builtins.includes('compilerImage'))
+  assert.ok(report.inventory.moduleFeatures.includes('shared-dependency'))
+  assert.equal(report.ready, false)
+  assert.match(formatCompilerSourceCoverage(report), /fixture-specific paths:/)
+})
+
+test('compiler source coverage reports unsupported and fixture features', async () => {
+  const compilation = await new Compiler().compileFile('compiler/main.lm')
+  const report = analyzeCompilerSourceCoverage(compilation)
+
+  assert.ok(report.gaps.some(gap => {
+    return gap.category === 'irOperations' &&
+      gap.name === 'value:call' &&
+      gap.status === 'fixture'
+  }))
+  assert.ok(report.gaps.some(gap => {
+    return gap.category === 'builtins' &&
+      gap.name === 'listPush' &&
+      gap.status === 'unsupported'
+  }))
+})
