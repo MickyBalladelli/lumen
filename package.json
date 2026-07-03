@@ -76,6 +76,8 @@
     "test:sanitizers": "node ./src/cli/test-sanitizers.js",
     "test:http-runtime": "node ./src/cli/test-http-runtime.js",
     "test:package": "node ./src/cli/test-installed-package.js",
+    "test:properties": "node ./src/cli/fuzz-compiler.js --runs 250",
+    "fuzz:compiler": "node ./src/cli/fuzz-compiler.js --runs 5000 --timeout 120000",
     "fuzz:http": "node ./src/cli/fuzz-http.js",
     "docs:support": "node ./scripts/generate-support-matrix.mjs",
     "check:docs": "node ./scripts/generate-support-matrix.mjs --check && node ./scripts/check-docs.mjs",

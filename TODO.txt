@@ -11,7 +11,7 @@
   Add direct unit coverage for tokenizer, module loader, semantic analyzer, emitter,
   runtime ABI, CLI errors, and repeated compiler use.
 
-- [ ] Add parser/compiler fuzzing and property tests.
+- [x] Add parser/compiler fuzzing and property tests.
   Assert the tokenizer/parser never hang or crash, formatting is idempotent, invalid
   programs never reach LLVM, and generated LLVM always passes `clang` verification.
 

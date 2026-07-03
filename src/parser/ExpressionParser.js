@@ -349,8 +349,8 @@ export class ExpressionParser {
   }
 
   advance() {
-    if (!this.isAtEnd()) this.current += 1
-    return this.tokens[this.current - 1]
+    if (this.isAtEnd()) return undefined
+    return this.tokens[this.current++]
   }
 
   previous() {

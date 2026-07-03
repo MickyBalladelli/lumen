@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { Diagnostic } from '../../src/diagnostics/Diagnostic.js'
 import { Tokenizer } from '../../src/lexer/Tokenizer.js'
 import { Parser } from '../../src/parser/Parser.js'
 
@@ -83,4 +84,11 @@ test('parser represents arrow predicate inside call', () => {
   assert.equal(call.arguments[1].kind, 'ArrowFunctionExpression')
   assert.equal(call.arguments[1].params[0].name, 'item')
   assert.equal(call.arguments[1].body.kind, 'BinaryExpression')
+})
+
+test('parser reports an incomplete match without recursing forever', () => {
+  assert.throws(
+    () => parse('; match'),
+    error => error instanceof Diagnostic && error.rawMessage === 'Expected expression'
+  )
 })
