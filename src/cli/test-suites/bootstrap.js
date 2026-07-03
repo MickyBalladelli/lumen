@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
-import { readFile, readdir } from 'node:fs/promises'
+import { readFile, readdir, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Compiler } from '../../compiler/Compiler.js'
 import { findBootstrapDelegation } from '../../testing/BootstrapDelegationGuard.js'
+import { canonicalizeBootstrapLLVM } from '../../testing/BootstrapEquivalence.js'
 import { TestSuite } from '../../testing/TestSuite.js'
 import {
   runCommand,
@@ -79,6 +80,7 @@ await suite.test('build stage-2 compiler', async () => {
 
   const llvm = await readFile(llvmPath, 'utf8')
   assert.equal(hasCompilerDelegation(llvm), false)
+  await verifyLLVM(llvmPath, 'stage-2 LLVM')
   await compiler.buildExecutable(llvmPath, stageTwoCompiler)
   assert.equal(await hasSelfFallbackSymbols(stageTwoCompiler), false)
 })
@@ -109,25 +111,63 @@ await suite.test('stage-2 and stage-3 compilers are equal', async () => {
 
   const stageTwoLLVM = await readFile(`${stageTwoCompiler}.ll`, 'utf8')
   const stageThreeLLVM = await readFile(stageThreeLLVMPath, 'utf8')
-  assert.equal(stageThreeLLVM, stageTwoLLVM)
+  assert.equal(
+    canonicalizeBootstrapLLVM(stageThreeLLVM),
+    canonicalizeBootstrapLLVM(stageTwoLLVM)
+  )
   assert.equal(hasCompilerDelegation(stageThreeLLVM), false)
 
+  await verifyLLVM(stageThreeLLVMPath, 'stage-3 LLVM')
   await compiler.buildExecutable(stageThreeLLVMPath, stageThreeCompiler)
   assert.equal(await hasSelfFallbackSymbols(stageThreeCompiler), false)
 })
 
-await suite.test('stage-3 output matches stage-2', async () => {
-  const outputPath = join(outputDir, 'tiny-self3.ll')
-  const result = await compileWith(
+await suite.test('linked stage-2 and stage-3 compilers behave equally', async () => {
+  const stageTwoOutput = join(outputDir, 'equivalence-stage2.ll')
+  const stageThreeOutput = join(outputDir, 'equivalence-stage3.ll')
+  const positiveInput = join('tests', 'bootstrap', 'tiny.lm')
+  const stageTwoResult = await compileWith(
+    stageTwoCompiler,
+    positiveInput,
+    stageTwoOutput
+  )
+  const stageThreeResult = await compileWith(
     stageThreeCompiler,
-    join('tests', 'bootstrap', 'tiny.lm'),
-    outputPath
+    positiveInput,
+    stageThreeOutput
   )
-  assert.equal(result.code, 0, result.stdout)
+  assert.deepEqual(stageThreeResult, stageTwoResult)
+  assert.equal(stageTwoResult.code, 0, stageTwoResult.stdout)
+
+  const stageTwoProgramLLVM = await readFile(stageTwoOutput, 'utf8')
+  const stageThreeProgramLLVM = await readFile(stageThreeOutput, 'utf8')
   assert.equal(
-    await readFile(outputPath, 'utf8'),
-    await readFile(programLLVM('tiny', 2), 'utf8')
+    canonicalizeBootstrapLLVM(stageThreeProgramLLVM),
+    canonicalizeBootstrapLLVM(stageTwoProgramLLVM)
   )
+
+  const stageTwoProgram = stageTwoOutput.slice(0, -3)
+  const stageThreeProgram = stageThreeOutput.slice(0, -3)
+  await compiler.buildExecutable(stageTwoOutput, stageTwoProgram)
+  await compiler.buildExecutable(stageThreeOutput, stageThreeProgram)
+  assert.deepEqual(
+    await runExecutable(stageThreeProgram),
+    await runExecutable(stageTwoProgram)
+  )
+
+  const negativeInput = join('tests', 'bootstrap', 'invalid.lm')
+  const stageTwoFailure = await compileWith(
+    stageTwoCompiler,
+    negativeInput,
+    join(outputDir, 'equivalence-invalid-stage2.ll')
+  )
+  const stageThreeFailure = await compileWith(
+    stageThreeCompiler,
+    negativeInput,
+    join(outputDir, 'equivalence-invalid-stage3.ll')
+  )
+  assert.notEqual(stageTwoFailure.code, 0)
+  assert.deepEqual(stageThreeFailure, stageTwoFailure)
 })
 
 if (requireRealBootstrap) {
@@ -195,6 +235,31 @@ function hasCompilerDelegation(llvm) {
   return llvm.includes('self-host compiler delegate') ||
     llvm.includes('compiler.self.unsupported') ||
     llvm.includes('call i32 @lumen_exec')
+}
+
+async function verifyLLVM(path, label) {
+  const objectPath = `${path}.verify.o`
+
+  try {
+    const result = await runCommand(process.env.LUMEN_CLANG ?? 'clang', [
+      '-Wno-override-module',
+      '-x',
+      'ir',
+      '-c',
+      path,
+      '-o',
+      objectPath
+    ])
+    assert.equal(
+      result.code,
+      0,
+      `${label} failed Clang verification\n${result.stderr}`
+    )
+  } finally {
+    await unlink(objectPath).catch(error => {
+      if (error.code !== 'ENOENT') throw error
+    })
+  }
 }
 
 async function bootstrapDelegationFindings() {

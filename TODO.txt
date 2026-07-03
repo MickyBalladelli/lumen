@@ -20,7 +20,7 @@ copy embedded stage-1 LLVM instead of compiling the Lumen source.
   `lumen_compiler_image`, an embedded compiler image, JavaScript, Node, or a
   subprocess compiler. Also reject behavior selected by the input filename.
 
-- [ ] Define deterministic stage equivalence.
+- [x] Define deterministic stage equivalence.
   Canonicalize harmless LLVM metadata, then require stage-2 and stage-3 output
   to match. Verify both modules with Clang and compare the linked compiler
   behavior when byte equality is not meaningful.
