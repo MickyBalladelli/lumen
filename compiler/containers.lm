@@ -1,0 +1,329 @@
+struct CompilerToken {
+  kind: string
+  lexeme: string
+  literal: string
+  file: string
+  offset: i32
+  line: i32
+  column: i32
+}
+
+struct CompilerAstNode {
+  kind: string
+  parent: i32
+  firstChild: i32
+  childCount: i32
+  tokenStart: i32
+  tokenEnd: i32
+  typeId: i32
+  text: string
+}
+
+struct CompilerType {
+  kind: string
+  name: string
+  elementType: i32
+  nullable: i32
+}
+
+struct CompilerSymbol {
+  kind: string
+  name: string
+  typeId: i32
+  scopeId: i32
+  declarationId: i32
+}
+
+struct CompilerIrValue {
+  kind: string
+  typeId: i32
+  operand0: i32
+  operand1: i32
+  text: string
+}
+
+struct CompilerIrBlock {
+  name: string
+  firstValue: i32
+  valueCount: i32
+  terminator: string
+  target0: i32
+  target1: i32
+}
+
+struct CompilerDiagnostic {
+  severity: string
+  message: string
+  file: string
+  offset: i32
+  line: i32
+  column: i32
+  length: i32
+}
+
+struct TokenArena {
+  storage: string
+  count: i32
+}
+
+struct AstArena {
+  storage: string
+  count: i32
+}
+
+struct TypeArena {
+  storage: string
+  count: i32
+}
+
+struct SymbolArena {
+  storage: string
+  count: i32
+}
+
+struct IrValueArena {
+  storage: string
+  count: i32
+}
+
+struct IrBlockArena {
+  storage: string
+  count: i32
+}
+
+struct DiagnosticArena {
+  storage: string
+  count: i32
+}
+
+struct CompilerContainers {
+  tokens: TokenArena
+  ast: AstArena
+  types: TypeArena
+  symbols: SymbolArena
+  values: IrValueArena
+  blocks: IrBlockArena
+  diagnostics: DiagnosticArena
+}
+
+function tokenArena(): TokenArena {
+  return TokenArena {
+    storage: arenaNew(),
+    count: 0
+  }
+}
+
+function tokenArenaPush(arena: TokenArena, token: CompilerToken): TokenArena {
+  let index = arenaAppend(arena.storage)
+  arenaSetString(arena.storage, index, 0, token.kind)
+  arenaSetString(arena.storage, index, 1, token.lexeme)
+  arenaSetString(arena.storage, index, 2, token.literal)
+  arenaSetString(arena.storage, index, 3, token.file)
+  arenaSetI32(arena.storage, index, 4, token.offset)
+  arenaSetI32(arena.storage, index, 5, token.line)
+  arenaSetI32(arena.storage, index, 6, token.column)
+  arena.count = arenaLen(arena.storage)
+  return arena
+}
+
+function tokenArenaGet(arena: TokenArena, index: i32): CompilerToken {
+  return CompilerToken {
+    kind: arenaGetString(arena.storage, index, 0),
+    lexeme: arenaGetString(arena.storage, index, 1),
+    literal: arenaGetString(arena.storage, index, 2),
+    file: arenaGetString(arena.storage, index, 3),
+    offset: arenaGetI32(arena.storage, index, 4),
+    line: arenaGetI32(arena.storage, index, 5),
+    column: arenaGetI32(arena.storage, index, 6)
+  }
+}
+
+function astArena(): AstArena {
+  return AstArena {
+    storage: arenaNew(),
+    count: 0
+  }
+}
+
+function astArenaPush(arena: AstArena, node: CompilerAstNode): AstArena {
+  let index = arenaAppend(arena.storage)
+  arenaSetString(arena.storage, index, 0, node.kind)
+  arenaSetI32(arena.storage, index, 1, node.parent)
+  arenaSetI32(arena.storage, index, 2, node.firstChild)
+  arenaSetI32(arena.storage, index, 3, node.childCount)
+  arenaSetI32(arena.storage, index, 4, node.tokenStart)
+  arenaSetI32(arena.storage, index, 5, node.tokenEnd)
+  arenaSetI32(arena.storage, index, 6, node.typeId)
+  arenaSetString(arena.storage, index, 7, node.text)
+  arena.count = arenaLen(arena.storage)
+  return arena
+}
+
+function astArenaGet(arena: AstArena, index: i32): CompilerAstNode {
+  return CompilerAstNode {
+    kind: arenaGetString(arena.storage, index, 0),
+    parent: arenaGetI32(arena.storage, index, 1),
+    firstChild: arenaGetI32(arena.storage, index, 2),
+    childCount: arenaGetI32(arena.storage, index, 3),
+    tokenStart: arenaGetI32(arena.storage, index, 4),
+    tokenEnd: arenaGetI32(arena.storage, index, 5),
+    typeId: arenaGetI32(arena.storage, index, 6),
+    text: arenaGetString(arena.storage, index, 7)
+  }
+}
+
+function typeArena(): TypeArena {
+  return TypeArena {
+    storage: arenaNew(),
+    count: 0
+  }
+}
+
+function typeArenaPush(arena: TypeArena, compilerType: CompilerType): TypeArena {
+  let index = arenaAppend(arena.storage)
+  arenaSetString(arena.storage, index, 0, compilerType.kind)
+  arenaSetString(arena.storage, index, 1, compilerType.name)
+  arenaSetI32(arena.storage, index, 2, compilerType.elementType)
+  arenaSetI32(arena.storage, index, 3, compilerType.nullable)
+  arena.count = arenaLen(arena.storage)
+  return arena
+}
+
+function typeArenaGet(arena: TypeArena, index: i32): CompilerType {
+  return CompilerType {
+    kind: arenaGetString(arena.storage, index, 0),
+    name: arenaGetString(arena.storage, index, 1),
+    elementType: arenaGetI32(arena.storage, index, 2),
+    nullable: arenaGetI32(arena.storage, index, 3)
+  }
+}
+
+function symbolArena(): SymbolArena {
+  return SymbolArena {
+    storage: arenaNew(),
+    count: 0
+  }
+}
+
+function symbolArenaPush(arena: SymbolArena, symbol: CompilerSymbol): SymbolArena {
+  let index = arenaAppend(arena.storage)
+  arenaSetString(arena.storage, index, 0, symbol.kind)
+  arenaSetString(arena.storage, index, 1, symbol.name)
+  arenaSetI32(arena.storage, index, 2, symbol.typeId)
+  arenaSetI32(arena.storage, index, 3, symbol.scopeId)
+  arenaSetI32(arena.storage, index, 4, symbol.declarationId)
+  arena.count = arenaLen(arena.storage)
+  return arena
+}
+
+function symbolArenaGet(arena: SymbolArena, index: i32): CompilerSymbol {
+  return CompilerSymbol {
+    kind: arenaGetString(arena.storage, index, 0),
+    name: arenaGetString(arena.storage, index, 1),
+    typeId: arenaGetI32(arena.storage, index, 2),
+    scopeId: arenaGetI32(arena.storage, index, 3),
+    declarationId: arenaGetI32(arena.storage, index, 4)
+  }
+}
+
+function irValueArena(): IrValueArena {
+  return IrValueArena {
+    storage: arenaNew(),
+    count: 0
+  }
+}
+
+function irValueArenaPush(arena: IrValueArena, value: CompilerIrValue): IrValueArena {
+  let index = arenaAppend(arena.storage)
+  arenaSetString(arena.storage, index, 0, value.kind)
+  arenaSetI32(arena.storage, index, 1, value.typeId)
+  arenaSetI32(arena.storage, index, 2, value.operand0)
+  arenaSetI32(arena.storage, index, 3, value.operand1)
+  arenaSetString(arena.storage, index, 4, value.text)
+  arena.count = arenaLen(arena.storage)
+  return arena
+}
+
+function irValueArenaGet(arena: IrValueArena, index: i32): CompilerIrValue {
+  return CompilerIrValue {
+    kind: arenaGetString(arena.storage, index, 0),
+    typeId: arenaGetI32(arena.storage, index, 1),
+    operand0: arenaGetI32(arena.storage, index, 2),
+    operand1: arenaGetI32(arena.storage, index, 3),
+    text: arenaGetString(arena.storage, index, 4)
+  }
+}
+
+function irBlockArena(): IrBlockArena {
+  return IrBlockArena {
+    storage: arenaNew(),
+    count: 0
+  }
+}
+
+function irBlockArenaPush(arena: IrBlockArena, block: CompilerIrBlock): IrBlockArena {
+  let index = arenaAppend(arena.storage)
+  arenaSetString(arena.storage, index, 0, block.name)
+  arenaSetI32(arena.storage, index, 1, block.firstValue)
+  arenaSetI32(arena.storage, index, 2, block.valueCount)
+  arenaSetString(arena.storage, index, 3, block.terminator)
+  arenaSetI32(arena.storage, index, 4, block.target0)
+  arenaSetI32(arena.storage, index, 5, block.target1)
+  arena.count = arenaLen(arena.storage)
+  return arena
+}
+
+function irBlockArenaGet(arena: IrBlockArena, index: i32): CompilerIrBlock {
+  return CompilerIrBlock {
+    name: arenaGetString(arena.storage, index, 0),
+    firstValue: arenaGetI32(arena.storage, index, 1),
+    valueCount: arenaGetI32(arena.storage, index, 2),
+    terminator: arenaGetString(arena.storage, index, 3),
+    target0: arenaGetI32(arena.storage, index, 4),
+    target1: arenaGetI32(arena.storage, index, 5)
+  }
+}
+
+function diagnosticArena(): DiagnosticArena {
+  return DiagnosticArena {
+    storage: arenaNew(),
+    count: 0
+  }
+}
+
+function diagnosticArenaPush(arena: DiagnosticArena, diagnostic: CompilerDiagnostic): DiagnosticArena {
+  let index = arenaAppend(arena.storage)
+  arenaSetString(arena.storage, index, 0, diagnostic.severity)
+  arenaSetString(arena.storage, index, 1, diagnostic.message)
+  arenaSetString(arena.storage, index, 2, diagnostic.file)
+  arenaSetI32(arena.storage, index, 3, diagnostic.offset)
+  arenaSetI32(arena.storage, index, 4, diagnostic.line)
+  arenaSetI32(arena.storage, index, 5, diagnostic.column)
+  arenaSetI32(arena.storage, index, 6, diagnostic.length)
+  arena.count = arenaLen(arena.storage)
+  return arena
+}
+
+function diagnosticArenaGet(arena: DiagnosticArena, index: i32): CompilerDiagnostic {
+  return CompilerDiagnostic {
+    severity: arenaGetString(arena.storage, index, 0),
+    message: arenaGetString(arena.storage, index, 1),
+    file: arenaGetString(arena.storage, index, 2),
+    offset: arenaGetI32(arena.storage, index, 3),
+    line: arenaGetI32(arena.storage, index, 4),
+    column: arenaGetI32(arena.storage, index, 5),
+    length: arenaGetI32(arena.storage, index, 6)
+  }
+}
+
+function compilerContainers(): CompilerContainers {
+  return CompilerContainers {
+    tokens: tokenArena(),
+    ast: astArena(),
+    types: typeArena(),
+    symbols: symbolArena(),
+    values: irValueArena(),
+    blocks: irBlockArena(),
+    diagnostics: diagnosticArena()
+  }
+}

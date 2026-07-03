@@ -37,7 +37,7 @@ copy embedded stage-1 LLVM instead of compiling the Lumen source.
 
 ## P1 - Build a real frontend in Lumen
 
-- [ ] Add lossless compiler containers.
+- [x] Add lossless compiler containers.
   Provide growable typed storage or typed arenas for tokens, AST nodes, types,
   symbols, IR values, blocks, and diagnostics. Stop encoding compiler records
   and collections into delimiter-sensitive strings.

@@ -94,7 +94,7 @@ integer.
 - **Maps** are string-keyed values created with `map(key, value, ...)`. Mutation
   helpers include `mapSet`, `mapDelete`, and `mapKeys`.
 
-- **Lists** are dynamic string-backed sequences with `list()`, `listPush`,
+- **Lists** are dynamic lossless string sequences with `list()`, `listPush`,
   `listGet`, and `listLen`.
 
 - **Channels** provide a small message-passing foundation for thread

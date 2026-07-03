@@ -59,6 +59,15 @@ export const RuntimeUnits = Object.freeze([
     'lumen_map_keys',
     'lumen_map_set'
   ]),
+  unit('arena', [
+    'lumen_arena_append',
+    'lumen_arena_get_i32',
+    'lumen_arena_get_string',
+    'lumen_arena_len',
+    'lumen_arena_new',
+    'lumen_arena_set_i32',
+    'lumen_arena_set_string'
+  ]),
   unit('string', [
     'lumen_int_to_string',
     'lumen_parse_f32',

@@ -51,6 +51,7 @@ class ValueLowering {
       return this.emitUpdate(node.argument, node.operator)
     }
     if (node.op === 'match') return this.emitMatchNode(node)
+    if (node.op === 'struct') return this.emitStructValueNode(node)
     if (node.op === 'constant') {
       const token = {
         type: node.tokenType,

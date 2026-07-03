@@ -17,6 +17,12 @@ const cases = [
     stdout: 'safe\nhello lumen\nhello lumen\n'
   },
   {
+    name: 'lossless compiler containers',
+    source: 'tests/runtime/lossless-compiler-containers.lm',
+    code: 0,
+    stdout: 'lossless containers\n'
+  },
+  {
     name: 'array bounds',
     source: 'tests/runtime/array-out-of-bounds.lm',
     code: 1,

@@ -645,16 +645,23 @@ class BuiltinLowering {
       tokens: arg,
       location: tokens[0].location
     }))
-    const result = this.nextTemp()
-    const signature = values.map(() => 'ptr').join(', ')
-    const callArgs = values.map(value => `ptr ${value.value}`).join(', ')
     const llvmReturnType = this.llvmType(builtin.returnType)
+    const result = builtin.returnType === LumenTypes.Void ? null : this.nextTemp()
+    const callArgs = values.map((value, index) => {
+      const type = abi.parameters[index]
+      if (type === 'i32') return `i32 ${this.cast(value, LumenTypes.I32)}`
+      if (type === 'i64') return `i64 ${this.cast(value, LumenTypes.I64)}`
+      if (type === 'i1') return `i1 ${this.cast(value, LumenTypes.Bool)}`
+      if (type === 'float') return `float ${this.cast(value, LumenTypes.F32)}`
+      return `ptr ${value.value}`
+    }).join(', ')
+    const prefix = result ? `${result} = ` : ''
 
-    this.lines.push(`  ${result} = call ${llvmReturnType} @${abi.symbol}(${signature ? `${callArgs}` : ''})`)
+    this.lines.push(`  ${prefix}call ${llvmReturnType} @${abi.symbol}(${callArgs})`)
 
     return {
       type: builtin.returnType,
-      value: result
+      value: result ?? ''
     }
   }
 

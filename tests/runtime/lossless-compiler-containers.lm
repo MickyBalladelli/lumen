@@ -1,0 +1,112 @@
+import { AstArena, CompilerAstNode, CompilerDiagnostic, CompilerIrBlock, CompilerIrValue, CompilerSymbol, CompilerToken, CompilerType, DiagnosticArena, IrBlockArena, IrValueArena, SymbolArena, TokenArena, TypeArena, astArena, astArenaGet, astArenaPush, diagnosticArena, diagnosticArenaGet, diagnosticArenaPush, irBlockArena, irBlockArenaGet, irBlockArenaPush, irValueArena, irValueArenaGet, irValueArenaPush, symbolArena, symbolArenaGet, symbolArenaPush, tokenArena, tokenArenaGet, tokenArenaPush, typeArena, typeArenaGet, typeArenaPush } from "../../compiler/containers.lm"
+
+function main(): i32 {
+  let payload = "left:=\nright"
+  let key = "scope=\nname:"
+
+  let items = list()
+  items = listPush(items, payload)
+  assert(stringEquals(listGet(items, 0), payload), "list must preserve delimiters")
+
+  let entries = map(key, payload)
+  entries = mapSet(entries, "empty=\n:", "")
+  assert(stringEquals(mapGet(entries, key), payload), "map must preserve delimiters")
+  assert(mapHas(entries, "empty=\n:"), "map must preserve empty values")
+  assert(stringEquals(listGet(mapKeys(entries), 0), key), "map keys must be lossless")
+
+  let tokens: TokenArena = tokenArena()
+  let index: i32 = 0
+  while index < 12 do {
+    let token = CompilerToken {
+      kind: "identifier",
+      lexeme: payload,
+      literal: key,
+      file: "compiler/main.lm",
+      offset: index,
+      line: index + 1,
+      column: 3
+    }
+    tokens = tokenArenaPush(tokens, token)
+    index = index + 1
+  }
+
+  let lastToken = tokenArenaGet(tokens, 11)
+  assert(tokens.count == 12, "token arena must grow")
+  assert(stringEquals(lastToken.lexeme, payload), "token lexeme must be lossless")
+  assert(lastToken.offset == 11, "token integer field must survive")
+
+  let nodes: AstArena = astArena()
+  nodes = astArenaPush(nodes, CompilerAstNode {
+    kind: "CallExpression",
+    parent: -1,
+    firstChild: 1,
+    childCount: 2,
+    tokenStart: 4,
+    tokenEnd: 9,
+    typeId: 3,
+    text: payload
+  })
+  let node = astArenaGet(nodes, 0)
+  assert(stringEquals(node.text, payload), "AST text must be lossless")
+
+  let types: TypeArena = typeArena()
+  types = typeArenaPush(types, CompilerType {
+    kind: "array",
+    name: payload,
+    elementType: 2,
+    nullable: 1
+  })
+  let compilerType = typeArenaGet(types, 0)
+  assert(stringEquals(compilerType.name, payload), "type name must be lossless")
+
+  let symbols: SymbolArena = symbolArena()
+  symbols = symbolArenaPush(symbols, CompilerSymbol {
+    kind: "local",
+    name: payload,
+    typeId: 2,
+    scopeId: 4,
+    declarationId: 7
+  })
+  let symbol = symbolArenaGet(symbols, 0)
+  assert(stringEquals(symbol.name, payload), "symbol name must be lossless")
+
+  let values: IrValueArena = irValueArena()
+  values = irValueArenaPush(values, CompilerIrValue {
+    kind: "binary",
+    typeId: 2,
+    operand0: 3,
+    operand1: 5,
+    text: payload
+  })
+  let value = irValueArenaGet(values, 0)
+  assert(stringEquals(value.text, payload), "IR value must be lossless")
+
+  let blocks: IrBlockArena = irBlockArena()
+  blocks = irBlockArenaPush(blocks, CompilerIrBlock {
+    name: payload,
+    firstValue: 0,
+    valueCount: 1,
+    terminator: "return",
+    target0: -1,
+    target1: -1
+  })
+  let block = irBlockArenaGet(blocks, 0)
+  assert(stringEquals(block.name, payload), "IR block must be lossless")
+
+  let diagnostics: DiagnosticArena = diagnosticArena()
+  diagnostics = diagnosticArenaPush(diagnostics, CompilerDiagnostic {
+    severity: "error",
+    message: payload,
+    file: key,
+    offset: 8,
+    line: 2,
+    column: 5,
+    length: 3
+  })
+  let diagnostic = diagnosticArenaGet(diagnostics, 0)
+  assert(stringEquals(diagnostic.message, payload), "diagnostic must be lossless")
+  assert(stringEquals(diagnostic.file, key), "diagnostic file must be lossless")
+
+  println("lossless containers")
+  return 0
+}

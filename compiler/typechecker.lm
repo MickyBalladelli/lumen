@@ -1,4 +1,5 @@
 import { AstProgram } from "./ast.lm"
+import { CompilerToken, TokenArena, tokenArenaGet } from "./containers.lm"
 
 struct TypeResult {
   ok: bool
@@ -29,43 +30,19 @@ function typeError(message: string, checkedCount: i32, tokenIndex: i32): TypeRes
   return result
 }
 
-function typeTokenValue(token: string): string {
-  let index: i32 = 0
-  let length = stringLen(token)
-
-  while index < length do {
-    let ch = token[index..index + 1]
-    if includes(":", ch) {
-      return token[index + 1..length]
-    }
-
-    index = index + 1
-  }
-
-  return token
+function typeTokenValue(token: CompilerToken): string {
+  return token.lexeme
 }
 
-function typeTokenKind(token: string): string {
-  let index: i32 = 0
-  let length = stringLen(token)
-
-  while index < length do {
-    let ch = token[index..index + 1]
-    if includes(":", ch) {
-      return token[0..index]
-    }
-
-    index = index + 1
-  }
-
-  return token
+function typeTokenKind(token: CompilerToken): string {
+  return token.kind
 }
 
-function typeFindNext(tokens: string, index: i32, wanted: string): i32 {
-  let count = listLen(tokens)
+function typeFindNext(tokens: TokenArena, index: i32, wanted: string): i32 {
+  let count = tokens.count
 
   while index < count do {
-    if stringEquals(typeTokenValue(listGet(tokens, index)), wanted) {
+    if stringEquals(typeTokenValue(tokenArenaGet(tokens, index)), wanted) {
       return index
     }
 
@@ -75,12 +52,12 @@ function typeFindNext(tokens: string, index: i32, wanted: string): i32 {
   return index
 }
 
-function readTypeName(tokens: string, index: i32, stop: string): string {
+function readTypeName(tokens: TokenArena, index: i32, stop: string): string {
   let out = stringBuilder()
-  let count = listLen(tokens)
+  let count = tokens.count
 
   while index < count do {
-    let value = typeTokenValue(listGet(tokens, index))
+    let value = typeTokenValue(tokenArenaGet(tokens, index))
 
     if stringEquals(value, stop) {
       return out
@@ -142,8 +119,8 @@ function functionSignatureReturnType(signature: string): string {
   return "i32"
 }
 
-function inferType(tokens: string, index: i32, variables: string, functions: string): string {
-  let token = listGet(tokens, index)
+function inferType(tokens: TokenArena, index: i32, variables: string, functions: string): string {
+  let token = tokenArenaGet(tokens, index)
   let kind = typeTokenKind(token)
   let value = typeTokenValue(token)
 
@@ -156,7 +133,7 @@ function inferType(tokens: string, index: i32, variables: string, functions: str
   }
 
   if stringEquals(value, "[") {
-    let firstKind = typeTokenKind(listGet(tokens, index + 1))
+    let firstKind = typeTokenKind(tokenArenaGet(tokens, index + 1))
     if stringEquals(firstKind, "number") {
       return "i32[]"
     }
@@ -199,7 +176,7 @@ function inferType(tokens: string, index: i32, variables: string, functions: str
     return argType + "?"
   }
 
-  if stringEquals(typeTokenValue(listGet(tokens, index + 1)), "(") {
+  if stringEquals(typeTokenValue(tokenArenaGet(tokens, index + 1)), "(") {
     let signature = mapGet(functions, value)
     if includes(signature, ":return:") {
       return functionSignatureReturnType(signature)
@@ -208,7 +185,7 @@ function inferType(tokens: string, index: i32, variables: string, functions: str
 
   let known = mapGet(variables, value)
   if includes(known, "type:") {
-    if stringEquals(typeTokenValue(listGet(tokens, index + 1)), "[") {
+    if stringEquals(typeTokenValue(tokenArenaGet(tokens, index + 1)), "[") {
       if includes(known, "i32[]") {
         return "i32"
       }
@@ -288,9 +265,9 @@ function isStrictActualType(actual: string): bool {
   return false
 }
 
-function typeCheckVariable(tokens: string, index: i32, variables: string, functions: string): TypeResult {
-  let name = typeTokenValue(listGet(tokens, index + 1))
-  let next = typeTokenValue(listGet(tokens, index + 2))
+function typeCheckVariable(tokens: TokenArena, index: i32, variables: string, functions: string): TypeResult {
+  let name = typeTokenValue(tokenArenaGet(tokens, index + 1))
+  let next = typeTokenValue(tokenArenaGet(tokens, index + 2))
   let checked: i32 = 0
 
   if stringEquals(next, ":") {
@@ -313,9 +290,9 @@ function typeCheckVariable(tokens: string, index: i32, variables: string, functi
   return typeOk(checked)
 }
 
-function registerVariableType(tokens: string, index: i32, variables: string, functions: string): string {
-  let name = typeTokenValue(listGet(tokens, index + 1))
-  let next = typeTokenValue(listGet(tokens, index + 2))
+function registerVariableType(tokens: TokenArena, index: i32, variables: string, functions: string): string {
+  let name = typeTokenValue(tokenArenaGet(tokens, index + 1))
+  let next = typeTokenValue(tokenArenaGet(tokens, index + 2))
 
   if stringEquals(next, ":") {
     let expected = readTypeName(tokens, index + 3, "=")
@@ -327,12 +304,12 @@ function registerVariableType(tokens: string, index: i32, variables: string, fun
   return mapSet(variables, name, "type:" + inferred)
 }
 
-function registerFunctionType(tokens: string, index: i32, functions: string): string {
-  let name = typeTokenValue(listGet(tokens, index + 1))
+function registerFunctionType(tokens: TokenArena, index: i32, functions: string): string {
+  let name = typeTokenValue(tokenArenaGet(tokens, index + 1))
   let open = typeFindNext(tokens, index, "(")
   let close = typeFindNext(tokens, index, ")")
   let returnType = "i32"
-  let afterClose = typeTokenValue(listGet(tokens, close + 1))
+  let afterClose = typeTokenValue(tokenArenaGet(tokens, close + 1))
 
   if stringEquals(afterClose, ":") {
     returnType = readTypeName(tokens, close + 2, "{")
@@ -349,8 +326,8 @@ function registerFunctionType(tokens: string, index: i32, functions: string): st
   return mapSet(functions, name, "param::return:" + returnType)
 }
 
-function checkFunctionCall(tokens: string, index: i32, variables: string, functions: string): TypeResult {
-  let name = typeTokenValue(listGet(tokens, index))
+function checkFunctionCall(tokens: TokenArena, index: i32, variables: string, functions: string): TypeResult {
+  let name = typeTokenValue(tokenArenaGet(tokens, index))
   let signature = mapGet(functions, name)
 
   if includes(signature, "param:") {
@@ -380,8 +357,8 @@ function checkFunctionCall(tokens: string, index: i32, variables: string, functi
   return typeOk(0)
 }
 
-function checkAssignment(tokens: string, index: i32, variables: string, functions: string): TypeResult {
-  let name = typeTokenValue(listGet(tokens, index))
+function checkAssignment(tokens: TokenArena, index: i32, variables: string, functions: string): TypeResult {
+  let name = typeTokenValue(tokenArenaGet(tokens, index))
   let known = mapGet(variables, name)
 
   if includes(known, "type:") {
@@ -402,7 +379,7 @@ function checkAssignment(tokens: string, index: i32, variables: string, function
   return typeOk(0)
 }
 
-function checkReturnType(tokens: string, index: i32, variables: string, functions: string, expected: string): TypeResult {
+function checkReturnType(tokens: TokenArena, index: i32, variables: string, functions: string, expected: string): TypeResult {
   let actual = inferType(tokens, index + 1, variables, functions)
 
   if stringEquals(expected, "i32") {
@@ -428,8 +405,8 @@ function checkReturnType(tokens: string, index: i32, variables: string, function
   return typeError("compile error: return type " + actual + " does not match " + expected, 1, index)
 }
 
-function checkThrowType(tokens: string, index: i32, variables: string, functions: string): TypeResult {
-  let argKind = typeTokenKind(listGet(tokens, index + 1))
+function checkThrowType(tokens: TokenArena, index: i32, variables: string, functions: string): TypeResult {
+  let argKind = typeTokenKind(tokenArenaGet(tokens, index + 1))
   let actual = inferType(tokens, index + 1, variables, functions)
 
   if stringEquals(actual, "string") {
@@ -453,7 +430,7 @@ function checkThrowType(tokens: string, index: i32, variables: string, functions
   return typeError("compile error: throw expects string or error, got " + actual, 1, index)
 }
 
-function checkForOfType(tokens: string, index: i32, variables: string, functions: string): TypeResult {
+function checkForOfType(tokens: TokenArena, index: i32, variables: string, functions: string): TypeResult {
   let actual = inferType(tokens, index + 1, variables, functions)
 
   if includes(actual, "[]") {
@@ -471,13 +448,13 @@ function checkForOfType(tokens: string, index: i32, variables: string, functions
   return typeOk(0)
 }
 
-function checkSwitchCases(tokens: string, index: i32, variables: string, functions: string): TypeResult {
+function checkSwitchCases(tokens: TokenArena, index: i32, variables: string, functions: string): TypeResult {
   let subjectType = inferType(tokens, index + 1, variables, functions)
   let end = typeFindNext(tokens, index, "}")
   let cursor = index + 1
 
   while cursor < end do {
-    let current = typeTokenValue(listGet(tokens, cursor))
+    let current = typeTokenValue(tokenArenaGet(tokens, cursor))
 
     if stringEquals(current, "case") {
       let caseType = inferType(tokens, cursor + 1, variables, functions)
@@ -495,16 +472,16 @@ function checkSwitchCases(tokens: string, index: i32, variables: string, functio
   return typeOk(1)
 }
 
-function checkTypes(ast: AstProgram, tokens: string): TypeResult {
+function checkTypes(ast: AstProgram, tokens: TokenArena): TypeResult {
   let variables = map("unused", "unused")
   let functions = map("unused", "unused")
-  let count = listLen(tokens)
+  let count = tokens.count
   let index: i32 = 0
   let checked: i32 = 0
   let currentReturnType = "void"
 
   while index < count do {
-    let current = typeTokenValue(listGet(tokens, index))
+    let current = typeTokenValue(tokenArenaGet(tokens, index))
 
     if stringEquals(current, "function") {
       functions = registerFunctionType(tokens, index, functions)
@@ -516,11 +493,11 @@ function checkTypes(ast: AstProgram, tokens: string): TypeResult {
   index = 0
 
   while index < count do {
-    let current = typeTokenValue(listGet(tokens, index))
+    let current = typeTokenValue(tokenArenaGet(tokens, index))
 
     if stringEquals(current, "function") {
       let close = typeFindNext(tokens, index, ")")
-      let afterClose = typeTokenValue(listGet(tokens, close + 1))
+      let afterClose = typeTokenValue(tokenArenaGet(tokens, close + 1))
       if stringEquals(afterClose, ":") {
         currentReturnType = readTypeName(tokens, close + 2, "{")
       } else {
@@ -548,7 +525,7 @@ function checkTypes(ast: AstProgram, tokens: string): TypeResult {
       }
     }
 
-    if stringEquals(typeTokenValue(listGet(tokens, index + 1)), "=") {
+    if stringEquals(typeTokenValue(tokenArenaGet(tokens, index + 1)), "=") {
       let assignResult = checkAssignment(tokens, index, variables, functions)
       checked = checked + assignResult.checkedCount
       if assignResult.ok {
@@ -598,7 +575,7 @@ function checkTypes(ast: AstProgram, tokens: string): TypeResult {
       }
     }
 
-    if stringEquals(typeTokenValue(listGet(tokens, index + 1)), "(") {
+    if stringEquals(typeTokenValue(tokenArenaGet(tokens, index + 1)), "(") {
       let callResult = checkFunctionCall(tokens, index, variables, functions)
       checked = checked + callResult.checkedCount
       if callResult.ok {

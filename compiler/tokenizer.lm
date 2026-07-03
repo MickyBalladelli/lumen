@@ -1,3 +1,5 @@
+import { CompilerToken, TokenArena, tokenArena, tokenArenaPush } from "./containers.lm"
+
 function charAt(source: string, index: i32): string {
   return source[index..index + 1]
 }
@@ -31,31 +33,52 @@ function isAlphaNumeric(ch: string): bool {
   return isDigit(ch)
 }
 
-function addToken(tokens: string, kind: string, value: string): string {
-  return listPush(tokens, kind + ":" + value)
+function addToken(tokens: TokenArena, kind: string, value: string, offset: i32, line: i32, column: i32): TokenArena {
+  let token = CompilerToken {
+    kind: kind,
+    lexeme: value,
+    literal: value,
+    file: "",
+    offset: offset,
+    line: line,
+    column: column
+  }
+  return tokenArenaPush(tokens, token)
 }
 
-function tokenize(source: string): string {
-  let tokens = list()
+function tokenize(source: string): TokenArena {
+  let tokens = tokenArena()
   let index: i32 = 0
   let length = stringLen(source)
+  let line: i32 = 1
+  let column: i32 = 1
 
   while index < length do {
     let ch = charAt(source, index)
 
     if isWhitespace(ch) {
+      if includes('
+', ch) {
+        line = line + 1
+        column = 1
+      } else {
+        column = column + 1
+      }
       index = index + 1
       continue
     }
 
     if isAlpha(ch) {
       let start = index
+      let startColumn = column
       index = index + 1
+      column = column + 1
 
       while index < length do {
         let next = charAt(source, index)
         if isAlphaNumeric(next) {
           index = index + 1
+          column = column + 1
           continue
         }
 
@@ -63,18 +86,21 @@ function tokenize(source: string): string {
       }
 
       let value = source[start..index]
-      tokens = addToken(tokens, "identifier", value)
+      tokens = addToken(tokens, "identifier", value, start, line, startColumn)
       continue
     }
 
     if isDigit(ch) {
       let start = index
+      let startColumn = column
       index = index + 1
+      column = column + 1
 
       while index < length do {
         let next = charAt(source, index)
         if isDigit(next) {
           index = index + 1
+          column = column + 1
           continue
         }
 
@@ -82,30 +108,43 @@ function tokenize(source: string): string {
       }
 
       let value = source[start..index]
-      tokens = addToken(tokens, "number", value)
+      tokens = addToken(tokens, "number", value, start, line, startColumn)
       continue
     }
 
     if includes('"', ch) {
+      let tokenOffset = index
+      let tokenLine = line
+      let tokenColumn = column
       let start = index + 1
       index = index + 1
+      column = column + 1
 
       while index < length do {
         if includes('"', charAt(source, index)) {
           break
         }
 
+        if includes('
+', charAt(source, index)) {
+          line = line + 1
+          column = 1
+        } else {
+          column = column + 1
+        }
         index = index + 1
       }
 
       let value = source[start..index]
-      tokens = addToken(tokens, "string", value)
+      tokens = addToken(tokens, "string", value, tokenOffset, tokenLine, tokenColumn)
       index = index + 1
+      column = column + 1
       continue
     }
 
-    tokens = addToken(tokens, "symbol", ch)
+    tokens = addToken(tokens, "symbol", ch, index, line, column)
     index = index + 1
+    column = column + 1
   }
 
   return tokens

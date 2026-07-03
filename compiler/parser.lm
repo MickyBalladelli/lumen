@@ -1,54 +1,55 @@
 import { AstProgram, astProgram, astRecordFunction, astRecordReturn, astRecordStatement, astRecordSyntax } from "./ast.lm"
+import { CompilerToken, TokenArena, tokenArenaGet } from "./containers.lm"
 
-function tokenValue(token: string): string {
-  let index: i32 = 0
-  let length = stringLen(token)
-
-  while index < length do {
-    let ch = token[index..index + 1]
-    if includes(":", ch) {
-      return token[index + 1..length]
-    }
-
-    index = index + 1
-  }
-
-  return token
+function tokenValue(token: CompilerToken): string {
+  return token.lexeme
 }
 
-function tokenKind(token: string): string {
-  let index: i32 = 0
-  let length = stringLen(token)
-
-  while index < length do {
-    let ch = token[index..index + 1]
-    if includes(":", ch) {
-      return token[0..index]
-    }
-
-    index = index + 1
-  }
-
-  return token
+function tokenKind(token: CompilerToken): string {
+  return token.kind
 }
 
 function mapValueKind(value: string): string {
-  return tokenKind(value)
+  let index: i32 = 0
+  let length = stringLen(value)
+
+  while index < length do {
+    let ch = value[index..index + 1]
+    if includes(":", ch) {
+      return value[0..index]
+    }
+
+    index = index + 1
+  }
+
+  return value
 }
 
 function mapValueBody(value: string): string {
-  return tokenValue(value)
+  let index: i32 = 0
+  let length = stringLen(value)
+
+  while index < length do {
+    let ch = value[index..index + 1]
+    if includes(":", ch) {
+      return value[index + 1..length]
+    }
+
+    index = index + 1
+  }
+
+  return value
 }
 
-function readValue(tokens: string, index: i32, variables: string): string {
-  let token = listGet(tokens, index)
+function readValue(tokens: TokenArena, index: i32, variables: string): string {
+  let token = tokenArenaGet(tokens, index)
   let kind = tokenKind(token)
   let value = tokenValue(token)
 
-  if stringEquals(tokenValue(listGet(tokens, index + 1)), ".") {
+  if stringEquals(tokenValue(tokenArenaGet(tokens, index + 1)), ".") {
     let resolved = mapGet(variables, value)
     if includes(resolved, "struct") {
-      let field = tokenValue(listGet(tokens, index + 2))
+      let field = tokenValue(tokenArenaGet(tokens, index + 2))
       let fieldValue = structFieldValue(resolved, field)
       let text = intToString(fieldValue)
       return "number:" + text
@@ -71,11 +72,11 @@ function readValue(tokens: string, index: i32, variables: string): string {
   return kind + ":" + value
 }
 
-function findNext(tokens: string, index: i32, wanted: string): i32 {
-  let count = listLen(tokens)
+function findNext(tokens: TokenArena, index: i32, wanted: string): i32 {
+  let count = tokens.count
 
   while index < count do {
-    if stringEquals(tokenValue(listGet(tokens, index)), wanted) {
+    if stringEquals(tokenValue(tokenArenaGet(tokens, index)), wanted) {
       return index
     }
 
@@ -119,13 +120,13 @@ function arrayItemValue(value: string, slot: i32): i32 {
   return 0
 }
 
-function functionReturnNumber(tokens: string, name: string): i32 {
+function functionReturnNumber(tokens: TokenArena, name: string): i32 {
   let index: i32 = 0
-  let count = listLen(tokens)
+  let count = tokens.count
 
   while index < count do {
-    if stringEquals(tokenValue(listGet(tokens, index)), "function") {
-      if stringEquals(tokenValue(listGet(tokens, index + 1)), name) {
+    if stringEquals(tokenValue(tokenArenaGet(tokens, index)), "function") {
+      if stringEquals(tokenValue(tokenArenaGet(tokens, index + 1)), name) {
         let bodyStart = findNext(tokens, index, "{")
         let returnIndex = findNext(tokens, bodyStart, "return")
         return evalNumber(tokens, returnIndex + 1, map("unused", "unused"))
@@ -138,8 +139,8 @@ function functionReturnNumber(tokens: string, name: string): i32 {
   return 0
 }
 
-function evalNumber(tokens: string, index: i32, variables: string): i32 {
-  let token = listGet(tokens, index)
+function evalNumber(tokens: TokenArena, index: i32, variables: string): i32 {
+  let token = tokenArenaGet(tokens, index)
   let kind = tokenKind(token)
   let value = tokenValue(token)
 
@@ -155,11 +156,11 @@ function evalNumber(tokens: string, index: i32, variables: string): i32 {
 
   let resolved = mapGet(variables, value)
   if includes(resolved, "array") {
-    if stringEquals(tokenValue(listGet(tokens, index + 1)), "[") {
+    if stringEquals(tokenValue(tokenArenaGet(tokens, index + 1)), "[") {
       let slot = evalNumber(tokens, index + 2, variables)
       let item = arrayItemValue(resolved, slot)
 
-      if includes(tokenValue(listGet(tokens, index + 4)), "+") {
+      if includes(tokenValue(tokenArenaGet(tokens, index + 4)), "+") {
         let right = evalNumber(tokens, index + 5, variables)
         return item + right
       }
@@ -169,10 +170,10 @@ function evalNumber(tokens: string, index: i32, variables: string): i32 {
   }
 
   if includes(resolved, "struct") {
-    let field = tokenValue(listGet(tokens, index + 2))
+    let field = tokenValue(tokenArenaGet(tokens, index + 2))
     let fieldValue = structFieldValue(resolved, field)
 
-    if includes(tokenValue(listGet(tokens, index + 3)), "+") {
+    if includes(tokenValue(tokenArenaGet(tokens, index + 3)), "+") {
       let right = evalNumber(tokens, index + 4, variables)
       return fieldValue + right
     }
@@ -183,7 +184,7 @@ function evalNumber(tokens: string, index: i32, variables: string): i32 {
   if includes(resolved, "number") {
     let number = mapValueBody(resolved)
 
-    if includes(tokenValue(listGet(tokens, index + 1)), "+") {
+    if includes(tokenValue(tokenArenaGet(tokens, index + 1)), "+") {
       let left = stringToInt(number)
       let right = evalNumber(tokens, index + 2, variables)
       return left + right
@@ -224,21 +225,21 @@ function structFieldValue(value: string, field: string): i32 {
   return 0
 }
 
-function readStructInitializer(tokens: string, index: i32, variables: string): string {
+function readStructInitializer(tokens: TokenArena, index: i32, variables: string): string {
   let equals = findNext(tokens, index, "=")
-  let structName = tokenValue(listGet(tokens, equals + 1))
+  let structName = tokenValue(tokenArenaGet(tokens, equals + 1))
   let cursor = equals + 3
-  let count = listLen(tokens)
+  let count = tokens.count
   let out = "struct:" + structName
 
   while cursor < count do {
-    let current = tokenValue(listGet(tokens, cursor))
+    let current = tokenValue(tokenArenaGet(tokens, cursor))
 
     if stringEquals(current, "}") {
       return out
     }
 
-    if stringEquals(tokenValue(listGet(tokens, cursor + 1)), ":") {
+    if stringEquals(tokenValue(tokenArenaGet(tokens, cursor + 1)), ":") {
       let fieldName = current
       let value = evalNumber(tokens, cursor + 2, variables)
       let valueText = intToString(value)
@@ -255,20 +256,20 @@ function readStructInitializer(tokens: string, index: i32, variables: string): s
   return out
 }
 
-function readArrayInitializer(tokens: string, index: i32, variables: string): string {
+function readArrayInitializer(tokens: TokenArena, index: i32, variables: string): string {
   let equals = findNext(tokens, index, "=")
   let cursor = equals + 2
-  let count = listLen(tokens)
+  let count = tokens.count
   let out = "array"
 
   while cursor < count do {
-    let current = tokenValue(listGet(tokens, cursor))
+    let current = tokenValue(tokenArenaGet(tokens, cursor))
 
     if stringEquals(current, "]") {
       return out
     }
 
-    if stringEquals(tokenKind(listGet(tokens, cursor)), "number") {
+    if stringEquals(tokenKind(tokenArenaGet(tokens, cursor)), "number") {
       out = out + ":"
       out = out + current
     }
@@ -279,9 +280,9 @@ function readArrayInitializer(tokens: string, index: i32, variables: string): st
   return out
 }
 
-function readMatchInitializer(tokens: string, index: i32, variables: string): string {
+function readMatchInitializer(tokens: TokenArena, index: i32, variables: string): string {
   let equals = findNext(tokens, index, "=")
-  let subjectName = tokenValue(listGet(tokens, equals + 2))
+  let subjectName = tokenValue(tokenArenaGet(tokens, equals + 2))
   let subject = mapValueBody(mapGet(variables, subjectName))
   let cursor = equals + 4
   let end = findBlockEnd(tokens, equals + 3)
@@ -292,10 +293,10 @@ function readMatchInitializer(tokens: string, index: i32, variables: string): st
   }
 
   while cursor < end do {
-    let label = tokenValue(listGet(tokens, cursor))
+    let label = tokenValue(tokenArenaGet(tokens, cursor))
 
     if stringEquals(label, "_") {
-      fallback = tokenValue(listGet(tokens, cursor + 2))
+      fallback = tokenValue(tokenArenaGet(tokens, cursor + 2))
     } else if stringEquals(label, subject) {
       return readValue(tokens, cursor + 2, variables)
     }
@@ -306,8 +307,8 @@ function readMatchInitializer(tokens: string, index: i32, variables: string): st
   return "string:" + fallback
 }
 
-function switchValueMatches(subject: string, tokens: string, index: i32, variables: string): bool {
-  let caseValue = tokenValue(listGet(tokens, index))
+function switchValueMatches(subject: string, tokens: TokenArena, index: i32, variables: string): bool {
+  let caseValue = tokenValue(tokenArenaGet(tokens, index))
   if stringEquals(mapValueBody(subject), caseValue) {
     return true
   }
@@ -320,12 +321,12 @@ function switchValueMatches(subject: string, tokens: string, index: i32, variabl
   return false
 }
 
-function runAssignmentBlock(tokens: string, start: i32, end: i32, variables: string): string {
+function runAssignmentBlock(tokens: TokenArena, start: i32, end: i32, variables: string): string {
   let scan = start
 
   while scan < end do {
-    if stringEquals(tokenValue(listGet(tokens, scan + 1)), "=") {
-      let name = tokenValue(listGet(tokens, scan))
+    if stringEquals(tokenValue(tokenArenaGet(tokens, scan + 1)), "=") {
+      let name = tokenValue(tokenArenaGet(tokens, scan))
       let number = evalNumber(tokens, scan + 2, variables)
       let text = intToString(number)
       variables = mapSet(variables, name, "number:" + text)
@@ -337,14 +338,14 @@ function runAssignmentBlock(tokens: string, start: i32, end: i32, variables: str
   return variables
 }
 
-function runSwitch(tokens: string, index: i32, variables: string): string {
+function runSwitch(tokens: TokenArena, index: i32, variables: string): string {
   let subject = readValue(tokens, index + 1, variables)
   let bodyStart = findNext(tokens, index, "{")
   let bodyEnd = findBlockEnd(tokens, index)
   let scan = bodyStart + 1
 
   while scan < bodyEnd do {
-    let current = tokenValue(listGet(tokens, scan))
+    let current = tokenValue(tokenArenaGet(tokens, scan))
 
     if stringEquals(current, "case") {
       if switchValueMatches(subject, tokens, scan + 1, variables) {
@@ -368,19 +369,19 @@ function runSwitch(tokens: string, index: i32, variables: string): string {
   return variables
 }
 
-function readEnumInitializer(tokens: string, index: i32): string {
+function readEnumInitializer(tokens: TokenArena, index: i32): string {
   let equals = findNext(tokens, index, "=")
-  let value = tokenValue(listGet(tokens, equals + 1))
+  let value = tokenValue(tokenArenaGet(tokens, equals + 1))
   return "enum:" + value
 }
 
-function readInitializer(tokens: string, index: i32, variables: string): string {
+function readInitializer(tokens: TokenArena, index: i32, variables: string): string {
   let equals = findNext(tokens, index, "=")
-  let kind = tokenKind(listGet(tokens, equals + 1))
-  let value = tokenValue(listGet(tokens, equals + 1))
+  let kind = tokenKind(tokenArenaGet(tokens, equals + 1))
+  let value = tokenValue(tokenArenaGet(tokens, equals + 1))
 
   if stringEquals(value, "await") {
-    let fnName = tokenValue(listGet(tokens, equals + 2))
+    let fnName = tokenValue(tokenArenaGet(tokens, equals + 2))
     let number = functionReturnNumber(tokens, fnName)
     let text = intToString(number)
     return "number:" + text
@@ -398,11 +399,11 @@ function readInitializer(tokens: string, index: i32, variables: string): string 
     return readValue(tokens, equals + 1, variables)
   }
 
-  if stringEquals(tokenValue(listGet(tokens, index + 2)), ":") {
+  if stringEquals(tokenValue(tokenArenaGet(tokens, index + 2)), ":") {
     if stringEquals(kind, "identifier") {
-      if stringEquals(tokenValue(listGet(tokens, index + 3)), "i32") {
+      if stringEquals(tokenValue(tokenArenaGet(tokens, index + 3)), "i32") {
         let skipI32 = 1
-      } else if stringEquals(tokenValue(listGet(tokens, index + 3)), "string") {
+      } else if stringEquals(tokenValue(tokenArenaGet(tokens, index + 3)), "string") {
         let skipString = 1
       } else {
         return readEnumInitializer(tokens, index)
@@ -410,7 +411,7 @@ function readInitializer(tokens: string, index: i32, variables: string): string 
     }
   }
 
-  if stringEquals(tokenValue(listGet(tokens, equals + 2)), "{") {
+  if stringEquals(tokenValue(tokenArenaGet(tokens, equals + 2)), "{") {
     return readStructInitializer(tokens, index, variables)
   }
 
@@ -419,10 +420,10 @@ function readInitializer(tokens: string, index: i32, variables: string): string 
   return "number:" + text
 }
 
-function expressionKind(tokens: string, index: i32): string {
-  let value = tokenValue(listGet(tokens, index))
-  let kind = tokenKind(listGet(tokens, index))
-  let next = tokenValue(listGet(tokens, index + 1))
+function expressionKind(tokens: TokenArena, index: i32): string {
+  let value = tokenValue(tokenArenaGet(tokens, index))
+  let kind = tokenKind(tokenArenaGet(tokens, index))
+  let next = tokenValue(tokenArenaGet(tokens, index + 1))
 
   if stringEquals(next, ".") {
     return "identifier"
@@ -451,16 +452,16 @@ function expressionKind(tokens: string, index: i32): string {
   return "identifier"
 }
 
-function expressionValue(tokens: string, index: i32): string {
-  let value = tokenValue(listGet(tokens, index))
-  let next = tokenValue(listGet(tokens, index + 1))
+function expressionValue(tokens: TokenArena, index: i32): string {
+  let value = tokenValue(tokenArenaGet(tokens, index))
+  let next = tokenValue(tokenArenaGet(tokens, index + 1))
 
   if stringEquals(next, ".") {
-    if stringEquals(tokenValue(listGet(tokens, index + 3)), "+") {
+    if stringEquals(tokenValue(tokenArenaGet(tokens, index + 3)), "+") {
       return "+"
     }
 
-    let field = tokenValue(listGet(tokens, index + 2))
+    let field = tokenValue(tokenArenaGet(tokens, index + 2))
     return value + "." + field
   }
 
@@ -475,61 +476,61 @@ function expressionValue(tokens: string, index: i32): string {
   return value
 }
 
-function expressionLeftValue(tokens: string, index: i32): string {
-  if stringEquals(tokenValue(listGet(tokens, index + 1)), ".") {
-    let base = tokenValue(listGet(tokens, index))
-    let field = tokenValue(listGet(tokens, index + 2))
+function expressionLeftValue(tokens: TokenArena, index: i32): string {
+  if stringEquals(tokenValue(tokenArenaGet(tokens, index + 1)), ".") {
+    let base = tokenValue(tokenArenaGet(tokens, index))
+    let field = tokenValue(tokenArenaGet(tokens, index + 2))
     return base + "." + field
   }
 
-  return tokenValue(listGet(tokens, index))
+  return tokenValue(tokenArenaGet(tokens, index))
 }
 
-function expressionRightValue(tokens: string, index: i32): string {
-  let next = tokenValue(listGet(tokens, index + 1))
+function expressionRightValue(tokens: TokenArena, index: i32): string {
+  let next = tokenValue(tokenArenaGet(tokens, index + 1))
 
   if stringEquals(next, ".") {
-    if stringEquals(tokenValue(listGet(tokens, index + 3)), "+") {
-      if stringEquals(tokenValue(listGet(tokens, index + 5)), ".") {
-        let base = tokenValue(listGet(tokens, index + 4))
-        let field = tokenValue(listGet(tokens, index + 6))
+    if stringEquals(tokenValue(tokenArenaGet(tokens, index + 3)), "+") {
+      if stringEquals(tokenValue(tokenArenaGet(tokens, index + 5)), ".") {
+        let base = tokenValue(tokenArenaGet(tokens, index + 4))
+        let field = tokenValue(tokenArenaGet(tokens, index + 6))
         return base + "." + field
       }
 
-      return tokenValue(listGet(tokens, index + 4))
+      return tokenValue(tokenArenaGet(tokens, index + 4))
     }
   }
 
   if stringEquals(next, "+") {
-    return tokenValue(listGet(tokens, index + 2))
+    return tokenValue(tokenArenaGet(tokens, index + 2))
   }
 
   if stringEquals(next, "*") {
-    return tokenValue(listGet(tokens, index + 2))
+    return tokenValue(tokenArenaGet(tokens, index + 2))
   }
 
   if stringEquals(next, "==") {
-    return tokenValue(listGet(tokens, index + 2))
+    return tokenValue(tokenArenaGet(tokens, index + 2))
   }
 
   return ""
 }
 
-function expressionCallArg(tokens: string, index: i32, offset: i32): string {
-  if stringEquals(tokenValue(listGet(tokens, index + 1)), "(") {
-    if stringEquals(tokenValue(listGet(tokens, index + offset)), ")") {
+function expressionCallArg(tokens: TokenArena, index: i32, offset: i32): string {
+  if stringEquals(tokenValue(tokenArenaGet(tokens, index + 1)), "(") {
+    if stringEquals(tokenValue(tokenArenaGet(tokens, index + offset)), ")") {
       return ""
     }
 
-    return tokenValue(listGet(tokens, index + offset))
+    return tokenValue(tokenArenaGet(tokens, index + offset))
   }
 
   return ""
 }
 
-function expressionCallArgCount(tokens: string, index: i32): string {
-  if stringEquals(tokenValue(listGet(tokens, index + 1)), "(") {
-    if stringEquals(tokenValue(listGet(tokens, index + 3)), ")") {
+function expressionCallArgCount(tokens: TokenArena, index: i32): string {
+  if stringEquals(tokenValue(tokenArenaGet(tokens, index + 1)), "(") {
+    if stringEquals(tokenValue(tokenArenaGet(tokens, index + 3)), ")") {
       return "1"
     }
 
@@ -577,30 +578,30 @@ function setStatement(program: string, index: i32, kind: string, name: string, e
   return program
 }
 
-function findAfterImport(tokens: string, index: i32): i32 {
+function findAfterImport(tokens: TokenArena, index: i32): i32 {
   let fromIndex = findNext(tokens, index, "from")
   return fromIndex + 2
 }
 
-function findAfterExtern(tokens: string, index: i32): i32 {
+function findAfterExtern(tokens: TokenArena, index: i32): i32 {
   let close = findNext(tokens, index, ")")
-  if stringEquals(tokenValue(listGet(tokens, close + 1)), ":") {
+  if stringEquals(tokenValue(tokenArenaGet(tokens, close + 1)), ":") {
     return close + 3
   }
 
   return close + 1
 }
 
-function isRangeLoop(tokens: string, index: i32): bool {
-  return stringEquals(tokenValue(listGet(tokens, index + 2)), "in")
+function isRangeLoop(tokens: TokenArena, index: i32): bool {
+  return stringEquals(tokenValue(tokenArenaGet(tokens, index + 2)), "in")
 }
 
-function isForOfLoop(tokens: string, index: i32): bool {
+function isForOfLoop(tokens: TokenArena, index: i32): bool {
   let scan = index
   let end = findNext(tokens, index, ")")
 
   while scan < end do {
-    if stringEquals(tokenValue(listGet(tokens, scan)), "of") {
+    if stringEquals(tokenValue(tokenArenaGet(tokens, scan)), "of") {
       return true
     }
 
@@ -610,12 +611,12 @@ function isForOfLoop(tokens: string, index: i32): bool {
   return false
 }
 
-function isMatchInitializer(tokens: string, index: i32): bool {
+function isMatchInitializer(tokens: TokenArena, index: i32): bool {
   let equals = findNext(tokens, index, "=")
-  return stringEquals(tokenValue(listGet(tokens, equals + 1)), "match")
+  return stringEquals(tokenValue(tokenArenaGet(tokens, equals + 1)), "match")
 }
 
-function setExpressionParts(program: string, index: i32, tokens: string, exprIndex: i32): string {
+function setExpressionParts(program: string, index: i32, tokens: TokenArena, exprIndex: i32): string {
   let prefix = parserStatementPrefix(index)
 
   program = mapSet(program, prefix + "ExprLeftValue", expressionLeftValue(tokens, exprIndex))
@@ -636,8 +637,8 @@ function setResolvedStatement(program: string, index: i32, value: string): strin
   return program
 }
 
-function initializerEnd(tokens: string, equals: i32): i32 {
-  let value = tokenValue(listGet(tokens, equals + 1))
+function initializerEnd(tokens: TokenArena, equals: i32): i32 {
+  let value = tokenValue(tokenArenaGet(tokens, equals + 1))
 
   if stringEquals(value, "match") {
     let blockStart = findNext(tokens, equals, "{")
@@ -650,7 +651,7 @@ function initializerEnd(tokens: string, equals: i32): i32 {
     return end + 1
   }
 
-  if stringEquals(tokenValue(listGet(tokens, equals + 2)), "{") {
+  if stringEquals(tokenValue(tokenArenaGet(tokens, equals + 2)), "{") {
     let blockEnd = findBlockEnd(tokens, equals + 2)
     return blockEnd + 1
   }
@@ -766,9 +767,9 @@ function runFor(program: string, statement: i32, variables: string): string {
   return variables
 }
 
-function runWhile(tokens: string, index: i32, variables: string): string {
-  let leftName = tokenValue(listGet(tokens, index + 1))
-  let rightValue = stringToInt(tokenValue(listGet(tokens, index + 3)))
+function runWhile(tokens: TokenArena, index: i32, variables: string): string {
+  let leftName = tokenValue(tokenArenaGet(tokens, index + 1))
+  let rightValue = stringToInt(tokenValue(tokenArenaGet(tokens, index + 3)))
   let bodyStart = findNext(tokens, index, "{")
   let bodyEnd = findBlockEnd(tokens, index)
   let scan = bodyStart + 1
@@ -777,16 +778,16 @@ function runWhile(tokens: string, index: i32, variables: string): string {
   let incrementName = ""
 
   while scan < bodyEnd do {
-    if stringEquals(tokenValue(listGet(tokens, scan + 1)), "=") {
-      if stringEquals(tokenValue(listGet(tokens, scan + 3)), "+") {
-        assignName = tokenValue(listGet(tokens, scan))
-        addRight = tokenValue(listGet(tokens, scan + 4))
+    if stringEquals(tokenValue(tokenArenaGet(tokens, scan + 1)), "=") {
+      if stringEquals(tokenValue(tokenArenaGet(tokens, scan + 3)), "+") {
+        assignName = tokenValue(tokenArenaGet(tokens, scan))
+        addRight = tokenValue(tokenArenaGet(tokens, scan + 4))
       }
     }
 
-    if stringEquals(tokenValue(listGet(tokens, scan + 1)), "+") {
-      if stringEquals(tokenValue(listGet(tokens, scan + 2)), "+") {
-        incrementName = tokenValue(listGet(tokens, scan))
+    if stringEquals(tokenValue(tokenArenaGet(tokens, scan + 1)), "+") {
+      if stringEquals(tokenValue(tokenArenaGet(tokens, scan + 2)), "+") {
+        incrementName = tokenValue(tokenArenaGet(tokens, scan))
       }
     }
 
@@ -816,32 +817,32 @@ function runWhile(tokens: string, index: i32, variables: string): string {
   return variables
 }
 
-function setForControl(program: string, prefix: string, kind: string, tokens: string, index: i32, variables: string): string {
-  let operator = tokenValue(listGet(tokens, index + 2))
+function setForControl(program: string, prefix: string, kind: string, tokens: TokenArena, index: i32, variables: string): string {
+  let operator = tokenValue(tokenArenaGet(tokens, index + 2))
   let valueIndex = index + 3
-  if stringEquals(tokenValue(listGet(tokens, valueIndex)), "=") {
+  if stringEquals(tokenValue(tokenArenaGet(tokens, valueIndex)), "=") {
     operator = operator + "="
     valueIndex = valueIndex + 1
   }
 
-  program = mapSet(program, prefix + kind + "Left", tokenValue(listGet(tokens, index + 1)))
+  program = mapSet(program, prefix + kind + "Left", tokenValue(tokenArenaGet(tokens, index + 1)))
   program = mapSet(program, prefix + kind + "Operator", operator)
   program = mapSet(program, prefix + kind + "Value", intToString(evalNumber(tokens, valueIndex, variables)))
   return program
 }
 
-function setForStatement(program: string, statement: i32, tokens: string, index: i32, variables: string): string {
+function setForStatement(program: string, statement: i32, tokens: TokenArena, index: i32, variables: string): string {
   let prefix = parserStatementPrefix(statement)
   let open = findNext(tokens, index, "(")
   let firstSeparator = findNext(tokens, open, ";")
   let secondSeparator = findNext(tokens, firstSeparator + 1, ";")
   let equals = findNext(tokens, open, "=")
-  let loopName = tokenValue(listGet(tokens, open + 2))
+  let loopName = tokenValue(tokenArenaGet(tokens, open + 2))
   let initial = evalNumber(tokens, equals + 1, variables)
-  let conditionLeft = tokenValue(listGet(tokens, firstSeparator + 1))
-  let conditionOperator = tokenValue(listGet(tokens, firstSeparator + 2))
+  let conditionLeft = tokenValue(tokenArenaGet(tokens, firstSeparator + 1))
+  let conditionOperator = tokenValue(tokenArenaGet(tokens, firstSeparator + 2))
   let conditionValueIndex = firstSeparator + 3
-  if stringEquals(tokenValue(listGet(tokens, conditionValueIndex)), "=") {
+  if stringEquals(tokenValue(tokenArenaGet(tokens, conditionValueIndex)), "=") {
     conditionOperator = conditionOperator + "="
     conditionValueIndex = conditionValueIndex + 1
   }
@@ -859,13 +860,13 @@ function setForStatement(program: string, statement: i32, tokens: string, index:
   program = mapSet(program, prefix + "LoopUpdateValue", intToString(updateValue))
 
   while scan < bodyEnd do {
-    let current = tokenValue(listGet(tokens, scan))
+    let current = tokenValue(tokenArenaGet(tokens, scan))
 
-    if stringEquals(tokenValue(listGet(tokens, scan + 1)), "=") {
-      if stringEquals(tokenValue(listGet(tokens, scan + 3)), "+") {
+    if stringEquals(tokenValue(tokenArenaGet(tokens, scan + 1)), "=") {
+      if stringEquals(tokenValue(tokenArenaGet(tokens, scan + 3)), "+") {
         program = mapSet(program, prefix + "BodyAssignName", current)
-        program = mapSet(program, prefix + "BodyAddLeft", tokenValue(listGet(tokens, scan + 2)))
-        program = mapSet(program, prefix + "BodyAddRight", tokenValue(listGet(tokens, scan + 4)))
+        program = mapSet(program, prefix + "BodyAddLeft", tokenValue(tokenArenaGet(tokens, scan + 2)))
+        program = mapSet(program, prefix + "BodyAddRight", tokenValue(tokenArenaGet(tokens, scan + 4)))
       }
     }
 
@@ -875,7 +876,7 @@ function setForStatement(program: string, statement: i32, tokens: string, index:
       let controlScan = controlStart + 1
 
       while controlScan < controlEnd do {
-        let control = tokenValue(listGet(tokens, controlScan))
+        let control = tokenValue(tokenArenaGet(tokens, controlScan))
         if stringEquals(control, "continue") {
           program = setForControl(program, prefix, "Continue", tokens, scan, variables)
         }
@@ -895,13 +896,13 @@ function setForStatement(program: string, statement: i32, tokens: string, index:
   return program
 }
 
-function findBlockEnd(tokens: string, index: i32): i32 {
-  let count = listLen(tokens)
+function findBlockEnd(tokens: TokenArena, index: i32): i32 {
+  let count = tokens.count
   let depth: i32 = 0
   let seen: bool = false
 
   while index < count do {
-    let value = tokenValue(listGet(tokens, index))
+    let value = tokenValue(tokenArenaGet(tokens, index))
 
     if stringEquals(value, "{") {
       depth = depth + 1
@@ -923,24 +924,24 @@ function findBlockEnd(tokens: string, index: i32): i32 {
   return index
 }
 
-function setFunction(program: string, index: i32, tokens: string, functionIndex: i32): string {
+function setFunction(program: string, index: i32, tokens: TokenArena, functionIndex: i32): string {
   let slot = intToString(index)
   let prefix = "function" + slot
-  let name = tokenValue(listGet(tokens, functionIndex + 1))
+  let name = tokenValue(tokenArenaGet(tokens, functionIndex + 1))
   let bodyStart = findNext(tokens, functionIndex, "{")
   let returnIndex = findNext(tokens, bodyStart, "return")
   let closeParams = findNext(tokens, functionIndex, ")")
   let paramCount = "1"
 
-  if stringEquals(tokenValue(listGet(tokens, functionIndex + 6)), ",") {
+  if stringEquals(tokenValue(tokenArenaGet(tokens, functionIndex + 6)), ",") {
     paramCount = "2"
   }
 
   program = mapSet(program, prefix + "Name", name)
-  program = mapSet(program, prefix + "Param0", tokenValue(listGet(tokens, functionIndex + 3)))
+  program = mapSet(program, prefix + "Param0", tokenValue(tokenArenaGet(tokens, functionIndex + 3)))
   program = mapSet(program, prefix + "ParamCount", paramCount)
   if stringEquals(paramCount, "2") {
-    program = mapSet(program, prefix + "Param1", tokenValue(listGet(tokens, functionIndex + 7)))
+    program = mapSet(program, prefix + "Param1", tokenValue(tokenArenaGet(tokens, functionIndex + 7)))
   } else {
     program = mapSet(program, prefix + "Param1", "")
   }
@@ -953,14 +954,14 @@ function setFunction(program: string, index: i32, tokens: string, functionIndex:
   return program
 }
 
-function parseAst(tokens: string): AstProgram {
+function parseAst(tokens: TokenArena): AstProgram {
   let program = astProgram()
   let variables = map("unused", "unused")
   let index: i32 = 0
-  let count = listLen(tokens)
+  let count = tokens.count
 
   while index < count do {
-    let current = tokenValue(listGet(tokens, index))
+    let current = tokenValue(tokenArenaGet(tokens, index))
 
     if stringEquals(current, "import") {
       program = astRecordSyntax(program, "import")
@@ -995,7 +996,7 @@ function parseAst(tokens: string): AstProgram {
     }
 
     if stringEquals(current, "function") {
-      let name = tokenValue(listGet(tokens, index + 1))
+      let name = tokenValue(tokenArenaGet(tokens, index + 1))
 
       if stringEquals(name, "main") {
         let start = findNext(tokens, index, "{")
@@ -1014,7 +1015,7 @@ function parseAst(tokens: string): AstProgram {
         program = astRecordSyntax(program, "match")
       }
 
-      let name = tokenValue(listGet(tokens, index + 1))
+      let name = tokenValue(tokenArenaGet(tokens, index + 1))
       let value = readInitializer(tokens, index, variables)
       variables = mapSet(variables, name, value)
       program = astRecordStatement(program)
@@ -1028,7 +1029,7 @@ function parseAst(tokens: string): AstProgram {
         program = astRecordSyntax(program, "match")
       }
 
-      let name = tokenValue(listGet(tokens, index + 1))
+      let name = tokenValue(tokenArenaGet(tokens, index + 1))
       let value = readInitializer(tokens, index, variables)
       variables = mapSet(variables, name, value)
       program = astRecordStatement(program)
@@ -1041,7 +1042,7 @@ function parseAst(tokens: string): AstProgram {
       program = astRecordSyntax(program, "if")
       program = astRecordStatement(program)
       let end = findBlockEnd(tokens, index)
-      if stringEquals(tokenValue(listGet(tokens, end + 1)), "else") {
+      if stringEquals(tokenValue(tokenArenaGet(tokens, end + 1)), "else") {
         let elseEnd = findBlockEnd(tokens, end + 1)
         index = elseEnd + 1
         continue
@@ -1098,7 +1099,7 @@ function parseAst(tokens: string): AstProgram {
     if stringEquals(current, "try") {
       program = astRecordSyntax(program, "tryCatch")
       let tryEnd = findBlockEnd(tokens, index)
-      if stringEquals(tokenValue(listGet(tokens, tryEnd + 1)), "catch") {
+      if stringEquals(tokenValue(tokenArenaGet(tokens, tryEnd + 1)), "catch") {
         let catchEnd = findBlockEnd(tokens, tryEnd + 1)
         index = catchEnd + 1
         continue
@@ -1145,7 +1146,7 @@ function parseAst(tokens: string): AstProgram {
       continue
     }
 
-    if stringEquals(tokenValue(listGet(tokens, index + 1)), "=") {
+    if stringEquals(tokenValue(tokenArenaGet(tokens, index + 1)), "=") {
       let number = evalNumber(tokens, index + 2, variables)
       let text = intToString(number)
       let value = "number:" + text
@@ -1160,18 +1161,18 @@ function parseAst(tokens: string): AstProgram {
   return program
 }
 
-function parseProgram(tokens: string): string {
+function parseProgram(tokens: TokenArena): string {
   let ast = parseAst(tokens)
   let program = map("kind", "program", "mainReturnKind", "number", "mainReturnValue", "0", "printCount", "0", "statementCount", "0", "functionCount", "0", "syntaxCount", "0")
   let variables = map("unused", "unused")
   let index: i32 = 0
-  let count = listLen(tokens)
+  let count = tokens.count
   let prints: i32 = 0
   let statements: i32 = 0
   let functions: i32 = 0
 
   while index < count do {
-    let current = tokenValue(listGet(tokens, index))
+    let current = tokenValue(tokenArenaGet(tokens, index))
 
     if stringEquals(current, "import") {
       program = recordSyntax(program, "import")
@@ -1207,7 +1208,7 @@ function parseProgram(tokens: string): string {
     }
 
     if stringEquals(current, "function") {
-      let name = tokenValue(listGet(tokens, index + 1))
+      let name = tokenValue(tokenArenaGet(tokens, index + 1))
       if stringEquals(name, "compileTiny") {
         program = mapSet(program, "mode", "compiler-main")
       }
@@ -1230,7 +1231,7 @@ function parseProgram(tokens: string): string {
         program = recordSyntax(program, "match")
       }
 
-      let name = tokenValue(listGet(tokens, index + 1))
+      let name = tokenValue(tokenArenaGet(tokens, index + 1))
       let value = readInitializer(tokens, index, variables)
       variables = mapSet(variables, name, value)
       let equals = findNext(tokens, index, "=")
@@ -1247,7 +1248,7 @@ function parseProgram(tokens: string): string {
         program = recordSyntax(program, "match")
       }
 
-      let name = tokenValue(listGet(tokens, index + 1))
+      let name = tokenValue(tokenArenaGet(tokens, index + 1))
       let value = readInitializer(tokens, index, variables)
       variables = mapSet(variables, name, value)
       let equals = findNext(tokens, index, "=")
@@ -1263,8 +1264,8 @@ function parseProgram(tokens: string): string {
       program = recordSyntax(program, "if")
       program = setStatement(program, statements, "if", "", "compare", "==")
       let prefix = parserStatementPrefix(statements)
-      program = mapSet(program, prefix + "ExprLeftValue", tokenValue(listGet(tokens, index + 1)))
-      program = mapSet(program, prefix + "ExprRightValue", tokenValue(listGet(tokens, index + 4)))
+      program = mapSet(program, prefix + "ExprLeftValue", tokenValue(tokenArenaGet(tokens, index + 1)))
+      program = mapSet(program, prefix + "ExprRightValue", tokenValue(tokenArenaGet(tokens, index + 4)))
 
       let bodyStart = findNext(tokens, index, "{")
       let bodyValue = readValue(tokens, bodyStart + 3, variables)
@@ -1281,7 +1282,7 @@ function parseProgram(tokens: string): string {
 
       statements = statements + 1
       let end = findBlockEnd(tokens, index)
-      if stringEquals(tokenValue(listGet(tokens, end + 1)), "else") {
+      if stringEquals(tokenValue(tokenArenaGet(tokens, end + 1)), "else") {
         let elseEnd = findBlockEnd(tokens, end + 1)
         index = elseEnd + 1
         continue
@@ -1317,27 +1318,27 @@ function parseProgram(tokens: string): string {
 
     if stringEquals(current, "while") {
       program = recordSyntax(program, "while")
-      program = setStatement(program, statements, "while", "", "compare", tokenValue(listGet(tokens, index + 2)))
+      program = setStatement(program, statements, "while", "", "compare", tokenValue(tokenArenaGet(tokens, index + 2)))
       let prefix = parserStatementPrefix(statements)
-      program = mapSet(program, prefix + "ExprLeftValue", tokenValue(listGet(tokens, index + 1)))
-      program = mapSet(program, prefix + "ExprRightValue", tokenValue(listGet(tokens, index + 3)))
+      program = mapSet(program, prefix + "ExprLeftValue", tokenValue(tokenArenaGet(tokens, index + 1)))
+      program = mapSet(program, prefix + "ExprRightValue", tokenValue(tokenArenaGet(tokens, index + 3)))
 
       let bodyStart = findNext(tokens, index, "{")
       let bodyEnd = findBlockEnd(tokens, index)
       let scan = bodyStart + 1
 
       while scan < bodyEnd do {
-        if stringEquals(tokenValue(listGet(tokens, scan + 1)), "=") {
-          if stringEquals(tokenValue(listGet(tokens, scan + 3)), "+") {
-            program = mapSet(program, prefix + "BodyAssignName", tokenValue(listGet(tokens, scan)))
-            program = mapSet(program, prefix + "BodyAddLeft", tokenValue(listGet(tokens, scan + 2)))
-            program = mapSet(program, prefix + "BodyAddRight", tokenValue(listGet(tokens, scan + 4)))
+        if stringEquals(tokenValue(tokenArenaGet(tokens, scan + 1)), "=") {
+          if stringEquals(tokenValue(tokenArenaGet(tokens, scan + 3)), "+") {
+            program = mapSet(program, prefix + "BodyAssignName", tokenValue(tokenArenaGet(tokens, scan)))
+            program = mapSet(program, prefix + "BodyAddLeft", tokenValue(tokenArenaGet(tokens, scan + 2)))
+            program = mapSet(program, prefix + "BodyAddRight", tokenValue(tokenArenaGet(tokens, scan + 4)))
           }
         }
 
-        if stringEquals(tokenValue(listGet(tokens, scan + 1)), "+") {
-          if stringEquals(tokenValue(listGet(tokens, scan + 2)), "+") {
-            program = mapSet(program, prefix + "BodyIncrementName", tokenValue(listGet(tokens, scan)))
+        if stringEquals(tokenValue(tokenArenaGet(tokens, scan + 1)), "+") {
+          if stringEquals(tokenValue(tokenArenaGet(tokens, scan + 2)), "+") {
+            program = mapSet(program, prefix + "BodyIncrementName", tokenValue(tokenArenaGet(tokens, scan)))
           }
         }
 
@@ -1363,8 +1364,8 @@ function parseProgram(tokens: string): string {
       variables = runSwitch(tokens, index, variables)
       let switchScan = findNext(tokens, index, "{") + 1
       while switchScan < end do {
-        if stringEquals(tokenValue(listGet(tokens, switchScan + 1)), "=") {
-          let assignedName = tokenValue(listGet(tokens, switchScan))
+        if stringEquals(tokenValue(tokenArenaGet(tokens, switchScan + 1)), "=") {
+          let assignedName = tokenValue(tokenArenaGet(tokens, switchScan))
           let assignedValue = mapGet(variables, assignedName)
           program = setStatement(program, statements, "assign", assignedName, mapValueKind(assignedValue), mapValueBody(assignedValue))
           program = setResolvedStatement(program, statements, assignedValue)
@@ -1381,7 +1382,7 @@ function parseProgram(tokens: string): string {
     if stringEquals(current, "try") {
       program = recordSyntax(program, "tryCatch")
       let tryEnd = findBlockEnd(tokens, index)
-      if stringEquals(tokenValue(listGet(tokens, tryEnd + 1)), "catch") {
+      if stringEquals(tokenValue(tokenArenaGet(tokens, tryEnd + 1)), "catch") {
         let catchEnd = findBlockEnd(tokens, tryEnd + 1)
         let throwIndex = findNext(tokens, index, "throw")
         let thrown = readValue(tokens, throwIndex + 1, variables)
@@ -1389,9 +1390,9 @@ function parseProgram(tokens: string): string {
         let scan = catchStart + 1
 
         while scan < catchEnd do {
-          if stringEquals(tokenValue(listGet(tokens, scan)), "println") {
-            let argName = tokenValue(listGet(tokens, scan + 2))
-            if stringEquals(argName, tokenValue(listGet(tokens, tryEnd + 2))) {
+          if stringEquals(tokenValue(tokenArenaGet(tokens, scan)), "println") {
+            let argName = tokenValue(tokenArenaGet(tokens, scan + 2))
+            if stringEquals(argName, tokenValue(tokenArenaGet(tokens, tryEnd + 2))) {
               program = setStatement(program, statements, "println", "", "string", mapValueBody(thrown))
               program = setResolvedStatement(program, statements, thrown)
               statements = statements + 1
@@ -1410,10 +1411,10 @@ function parseProgram(tokens: string): string {
             }
           }
 
-          if stringEquals(tokenValue(listGet(tokens, scan + 1)), "=") {
+          if stringEquals(tokenValue(tokenArenaGet(tokens, scan + 1)), "=") {
             let number = evalNumber(tokens, scan + 2, variables)
             let text = intToString(number)
-            let name = tokenValue(listGet(tokens, scan))
+            let name = tokenValue(tokenArenaGet(tokens, scan))
             let assigned = "number:" + text
             variables = mapSet(variables, name, assigned)
             program = setStatement(program, statements, "assign", name, "number", text)
@@ -1456,7 +1457,7 @@ function parseProgram(tokens: string): string {
       continue
     }
 
-    if stringEquals(tokenValue(listGet(tokens, index + 1)), "=") {
+    if stringEquals(tokenValue(tokenArenaGet(tokens, index + 1)), "=") {
       let number = evalNumber(tokens, index + 2, variables)
       let text = intToString(number)
       let value = "number:" + text

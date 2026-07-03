@@ -1,4 +1,5 @@
 import { AstProgram } from "./ast.lm"
+import { CompilerToken, TokenArena, tokenArenaGet } from "./containers.lm"
 
 struct SemanticResult {
   ok: bool
@@ -29,43 +30,19 @@ function semanticError(message: string, symbolCount: i32, tokenIndex: i32): Sema
   return result
 }
 
-function semanticTokenValue(token: string): string {
-  let index: i32 = 0
-  let length = stringLen(token)
-
-  while index < length do {
-    let ch = token[index..index + 1]
-    if includes(":", ch) {
-      return token[index + 1..length]
-    }
-
-    index = index + 1
-  }
-
-  return token
+function semanticTokenValue(token: CompilerToken): string {
+  return token.lexeme
 }
 
-function semanticTokenKind(token: string): string {
-  let index: i32 = 0
-  let length = stringLen(token)
-
-  while index < length do {
-    let ch = token[index..index + 1]
-    if includes(":", ch) {
-      return token[0..index]
-    }
-
-    index = index + 1
-  }
-
-  return token
+function semanticTokenKind(token: CompilerToken): string {
+  return token.kind
 }
 
-function semanticFindNext(tokens: string, index: i32, wanted: string): i32 {
-  let count = listLen(tokens)
+function semanticFindNext(tokens: TokenArena, index: i32, wanted: string): i32 {
+  let count = tokens.count
 
   while index < count do {
-    if stringEquals(semanticTokenValue(listGet(tokens, index)), wanted) {
+    if stringEquals(semanticTokenValue(tokenArenaGet(tokens, index)), wanted) {
       return index
     }
 
@@ -75,13 +52,13 @@ function semanticFindNext(tokens: string, index: i32, wanted: string): i32 {
   return index
 }
 
-function semanticFindBlockEnd(tokens: string, index: i32): i32 {
-  let count = listLen(tokens)
+function semanticFindBlockEnd(tokens: TokenArena, index: i32): i32 {
+  let count = tokens.count
   let depth: i32 = 0
   let seen: bool = false
 
   while index < count do {
-    let value = semanticTokenValue(listGet(tokens, index))
+    let value = semanticTokenValue(tokenArenaGet(tokens, index))
 
     if stringEquals(value, "{") {
       depth = depth + 1
@@ -103,7 +80,7 @@ function semanticFindBlockEnd(tokens: string, index: i32): i32 {
   return index
 }
 
-function semanticBlockContains(tokens: string, blockStart: i32, target: i32): bool {
+function semanticBlockContains(tokens: TokenArena, blockStart: i32, target: i32): bool {
   let bodyStart = semanticFindNext(tokens, blockStart, "{")
   let bodyEnd = semanticFindBlockEnd(tokens, blockStart)
 
@@ -116,12 +93,12 @@ function semanticBlockContains(tokens: string, blockStart: i32, target: i32): bo
   return false
 }
 
-function semanticIsInLoop(tokens: string, target: i32): bool {
+function semanticIsInLoop(tokens: TokenArena, target: i32): bool {
   let index: i32 = 0
-  let count = listLen(tokens)
+  let count = tokens.count
 
   while index < target do {
-    let current = semanticTokenValue(listGet(tokens, index))
+    let current = semanticTokenValue(tokenArenaGet(tokens, index))
 
     if stringEquals(current, "for") {
       if semanticBlockContains(tokens, index, target) {
@@ -147,12 +124,12 @@ function semanticIsInLoop(tokens: string, target: i32): bool {
   return false
 }
 
-function semanticIsInSwitch(tokens: string, target: i32): bool {
+function semanticIsInSwitch(tokens: TokenArena, target: i32): bool {
   let index: i32 = 0
-  let count = listLen(tokens)
+  let count = tokens.count
 
   while index < target do {
-    let current = semanticTokenValue(listGet(tokens, index))
+    let current = semanticTokenValue(tokenArenaGet(tokens, index))
 
     if stringEquals(current, "switch") {
       if semanticBlockContains(tokens, index, target) {
@@ -166,11 +143,11 @@ function semanticIsInSwitch(tokens: string, target: i32): bool {
   return false
 }
 
-function semanticHasPriorLoop(tokens: string, target: i32): bool {
+function semanticHasPriorLoop(tokens: TokenArena, target: i32): bool {
   let index = target - 1
 
   while index > 0 do {
-    let current = semanticTokenValue(listGet(tokens, index))
+    let current = semanticTokenValue(tokenArenaGet(tokens, index))
 
     if stringEquals(current, "function") {
       return false
@@ -194,25 +171,25 @@ function semanticHasPriorLoop(tokens: string, target: i32): bool {
   return false
 }
 
-function semanticSymbolName(tokens: string, index: i32): string {
-  let current = semanticTokenValue(listGet(tokens, index))
+function semanticSymbolName(tokens: TokenArena, index: i32): string {
+  let current = semanticTokenValue(tokenArenaGet(tokens, index))
 
   if stringEquals(current, "async") {
-    return semanticTokenValue(listGet(tokens, index + 2))
+    return semanticTokenValue(tokenArenaGet(tokens, index + 2))
   }
 
-  return semanticTokenValue(listGet(tokens, index + 1))
+  return semanticTokenValue(tokenArenaGet(tokens, index + 1))
 }
 
-function semanticIsNamedDeclaration(tokens: string, index: i32): bool {
-  let kind = semanticTokenKind(listGet(tokens, index))
+function semanticIsNamedDeclaration(tokens: TokenArena, index: i32): bool {
+  let kind = semanticTokenKind(tokenArenaGet(tokens, index))
   if stringEquals(kind, "identifier") {
     let okKind = 1
   } else {
     return false
   }
 
-  let current = semanticTokenValue(listGet(tokens, index))
+  let current = semanticTokenValue(tokenArenaGet(tokens, index))
 
   if stringEquals(current, "function") {
     return true
@@ -227,7 +204,7 @@ function semanticIsNamedDeclaration(tokens: string, index: i32): bool {
   }
 
   if stringEquals(current, "async") {
-    if stringEquals(semanticTokenValue(listGet(tokens, index + 1)), "function") {
+    if stringEquals(semanticTokenValue(tokenArenaGet(tokens, index + 1)), "function") {
       return true
     }
   }
@@ -235,16 +212,16 @@ function semanticIsNamedDeclaration(tokens: string, index: i32): bool {
   return false
 }
 
-function semanticCheckDuplicateParameters(tokens: string, functionIndex: i32, symbolCount: i32): SemanticResult {
+function semanticCheckDuplicateParameters(tokens: TokenArena, functionIndex: i32, symbolCount: i32): SemanticResult {
   let params = map("unused", "unused")
   let open = semanticFindNext(tokens, functionIndex, "(")
   let close = semanticFindNext(tokens, functionIndex, ")")
   let index = open + 1
 
   while index < close do {
-    let kind = semanticTokenKind(listGet(tokens, index))
-    let value = semanticTokenValue(listGet(tokens, index))
-    let next = semanticTokenValue(listGet(tokens, index + 1))
+    let kind = semanticTokenKind(tokenArenaGet(tokens, index))
+    let value = semanticTokenValue(tokenArenaGet(tokens, index))
+    let next = semanticTokenValue(tokenArenaGet(tokens, index + 1))
 
     if stringEquals(kind, "identifier") {
       if stringEquals(next, ":") {
@@ -262,10 +239,10 @@ function semanticCheckDuplicateParameters(tokens: string, functionIndex: i32, sy
   return semanticOk(symbolCount)
 }
 
-function analyzeSemantics(ast: AstProgram, tokens: string): SemanticResult {
+function analyzeSemantics(ast: AstProgram, tokens: TokenArena): SemanticResult {
   let symbols = map("unused", "unused")
   let scopes = ""
-  let count = listLen(tokens)
+  let count = tokens.count
   let index: i32 = 0
   let symbolCount: i32 = 0
   let scopeDepth: i32 = 0
@@ -276,8 +253,8 @@ function analyzeSemantics(ast: AstProgram, tokens: string): SemanticResult {
   let hasMain: bool = false
 
   while index < count do {
-    let currentKind = semanticTokenKind(listGet(tokens, index))
-    let current = semanticTokenValue(listGet(tokens, index))
+    let currentKind = semanticTokenKind(tokenArenaGet(tokens, index))
+    let current = semanticTokenValue(tokenArenaGet(tokens, index))
 
     if stringEquals(currentKind, "identifier") {
       if stringEquals(current, "for") {
@@ -359,7 +336,7 @@ function analyzeSemantics(ast: AstProgram, tokens: string): SemanticResult {
 
     if stringEquals(currentKind, "identifier") {
       if stringEquals(current, "while") {
-      let condition = semanticTokenValue(listGet(tokens, index + 1))
+      let condition = semanticTokenValue(tokenArenaGet(tokens, index + 1))
       if stringEquals(condition, "1") {
         return semanticError("compile error: unsupported while", symbolCount, index)
       }

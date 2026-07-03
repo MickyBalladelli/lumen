@@ -2,6 +2,32 @@ import { Diagnostic } from '../diagnostics/Diagnostic.js'
 import { LumenTypes } from '../semantics/TypeSystem.js'
 
 class AggregateLowering {
+  emitStructValueNode(node) {
+    const struct = this.typeSystem.getStruct(node.type)
+    if (!struct) {
+      throw new Diagnostic(`Unknown struct "${node.type}"`, node.location, 'backend')
+    }
+
+    const values = new Map(node.fields.map(field => [field.key, field.value]))
+    let aggregate = 'undef'
+
+    for (let index = 0; index < struct.fields.length; index += 1) {
+      const field = struct.fields[index]
+      const valueNode = values.get(field.name)
+      const value = valueNode?.op === 'struct'
+        ? this.emitStructValueNode(valueNode)
+        : this.emitExpression(valueNode)
+      const next = this.nextTemp()
+      this.lines.push(`  ${next} = insertvalue ${this.llvmType(node.type)} ${aggregate}, ${this.llvmType(field.type)} ${this.cast(value, field.type)}, ${index}`)
+      aggregate = next
+    }
+
+    return {
+      type: node.type,
+      value: aggregate
+    }
+  }
+
   emitMemberNode(node) {
     if (node.computed && node.object.op === 'reference') {
       const base = this.resolve(node.object.name)

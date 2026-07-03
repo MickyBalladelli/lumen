@@ -5,22 +5,11 @@ import { analyzeSemantics } from "./semantics.lm"
 import { checkTypes } from "./typechecker.lm"
 import { buildIr, irToProgram } from "./ir.lm"
 import { emitIr } from "./emitter.lm"
+import { TokenArena, tokenArenaGet } from "./containers.lm"
 
-function diagnosticTokenText(tokens: string, index: i32): string {
-  let token = listGet(tokens, index)
-  let cursor: i32 = 0
-  let length = stringLen(token)
-
-  while cursor < length do {
-    let ch = token[cursor..cursor + 1]
-    if includes(":", ch) {
-      return token[cursor + 1..length]
-    }
-
-    cursor = cursor + 1
-  }
-
-  return token
+function diagnosticTokenText(tokens: TokenArena, index: i32): string {
+  let token = tokenArenaGet(tokens, index)
+  return token.lexeme
 }
 
 function diagnosticFindToken(source: string, needle: string, start: i32): i32 {
@@ -55,7 +44,7 @@ function diagnosticLineBefore(source: string, end: i32): i32 {
   return line
 }
 
-function diagnosticTokenLine(source: string, tokens: string, target: i32): i32 {
+function diagnosticTokenLine(source: string, tokens: TokenArena, target: i32): i32 {
   let index: i32 = 0
   let cursor: i32 = 0
 
@@ -75,7 +64,7 @@ function diagnosticTokenLine(source: string, tokens: string, target: i32): i32 {
   return 1
 }
 
-function diagnosticMessage(source: string, tokens: string, message: string, tokenIndex: i32): string {
+function diagnosticMessage(source: string, tokens: TokenArena, message: string, tokenIndex: i32): string {
   let line = diagnosticTokenLine(source, tokens, tokenIndex)
   let lineText = intToString(line)
   let near = diagnosticTokenText(tokens, tokenIndex)

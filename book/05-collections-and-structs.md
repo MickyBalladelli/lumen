@@ -209,7 +209,7 @@ println(mapHas(headers, "x-lumen"))        // "true"
 
 - `mapGet(map, key)` returns the value for a key, or an empty string if the key
   is missing
-- `mapHas(map, key)` returns `"true"` or `"false"` as a string
+- `mapHas(map, key)` returns a boolean
 
 ### Mutating Maps
 
@@ -226,11 +226,11 @@ println(mapHas(symbols, "total"))   // "false"
 
 - `mapSet(map, key, value)` adds or updates a key
 - `mapDelete(map, key)` removes a key
-- `mapKeys(map)` returns a string of comma-separated keys
+- `mapKeys(map)` returns a list of keys
 
-Maps are currently string-backed: keys and values are both strings. They are
-used by the bootstrap compiler for symbol tables and by programs for header
-collections.
+Map keys and values are strings. Their runtime representation is
+length-prefixed, so newlines, equals signs, colons, and empty values are
+preserved.
 
 ## Lists
 
@@ -252,8 +252,18 @@ println(listLen(tokens))      // 3
 - `listGet(list, index)` returns the element at an index
 - `listLen(list)` returns the number of elements
 
-Like maps, lists are string-backed. They are used by the bootstrap compiler for
-token collections and similar sequences.
+List elements are length-prefixed. Delimiter characters inside an element do
+not change collection boundaries.
+
+## Compiler Arenas
+
+The self-host compiler uses growable typed arena wrappers for tokens, AST
+nodes, types, symbols, IR values, blocks, and diagnostics. The low-level
+`arenaNew`, `arenaAppend`, `arenaLen`, `arenaSetString`, `arenaSetI32`,
+`arenaGetString`, and `arenaGetI32` helpers provide opaque runtime storage.
+Compiler code exposes category-specific structs and accessors from
+`compiler/containers.lm`; records are not serialized through separator
+characters.
 
 ## Channels
 

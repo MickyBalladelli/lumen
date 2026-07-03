@@ -11,7 +11,7 @@ test('compiler source coverage inventories the complete self-host closure', asyn
   const report = analyzeCompilerSourceCoverage(compilation)
 
   assert.equal(report.entry, 'compiler/main.lm')
-  assert.equal(report.inventory.modules.length, 9)
+  assert.equal(report.inventory.modules.length, 10)
   assert.ok(report.inventory.syntaxNodes.includes('ImportDeclaration'))
   assert.ok(report.inventory.syntaxNodes.includes('WhileStatement'))
   assert.ok(report.inventory.typeNames.includes('Result<string>'))
@@ -34,7 +34,7 @@ test('compiler source coverage reports unsupported and fixture features', async 
   }))
   assert.ok(report.gaps.some(gap => {
     return gap.category === 'builtins' &&
-      gap.name === 'listPush' &&
+      gap.name === 'arenaAppend' &&
       gap.status === 'unsupported'
   }))
 })
