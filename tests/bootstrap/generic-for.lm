@@ -1,0 +1,19 @@
+function main(): i32 {
+  const ceiling: i32 = 7
+  let accumulator: i32 = 4
+
+  for (let cursor: i32 = 1; cursor < ceiling; cursor++) {
+    if cursor == 3 {
+      continue
+    }
+
+    if cursor == 6 {
+      break
+    }
+
+    accumulator = accumulator + cursor
+  }
+
+  println("value ${accumulator}")
+  return accumulator
+}

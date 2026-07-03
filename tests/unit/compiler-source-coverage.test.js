@@ -19,7 +19,8 @@ test('compiler source coverage inventories the complete self-host closure', asyn
   assert.ok(report.inventory.builtins.includes('compilerImage'))
   assert.ok(report.inventory.moduleFeatures.includes('shared-dependency'))
   assert.equal(report.ready, false)
-  assert.match(formatCompilerSourceCoverage(report), /fixture-specific paths:/)
+  assert.equal(report.fixturePaths.length, 0)
+  assert.doesNotMatch(formatCompilerSourceCoverage(report), /fixture-specific paths:/)
 })
 
 test('compiler source coverage reports unsupported and fixture features', async () => {

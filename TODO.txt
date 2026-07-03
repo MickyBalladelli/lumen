@@ -30,7 +30,7 @@ copy embedded stage-1 LLVM instead of compiling the Lumen source.
   used by `compiler/*.lm`. The real bootstrap cannot pass while any used
   construct falls through an unsupported or fixture-specific path.
 
-- [ ] Remove fixture-shaped compiler behavior.
+- [x] Remove fixture-shaped compiler behavior.
   Delete hard-coded variable names, values, loop bounds, print values, and
   special cases such as `total`, `sum`, `bad`, `5`, and `8`. Lower syntax from
   its structure and types for arbitrary programs.

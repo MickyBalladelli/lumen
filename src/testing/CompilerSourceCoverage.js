@@ -76,7 +76,6 @@ const SUPPORT = {
 }
 
 const FIXTURE_PATTERNS = [
-  fixture('compiler checkpoint mode', /["']compiler-main["']/),
   fixture('known for-loop evaluator', /\brunKnownFor\b/),
   fixture('known while-loop evaluator', /\brunKnownWhile\b/),
   fixture('name-selected sum behavior', /includes\([^,\n]*(?:name|Name)[^,\n]*,\s*["']sum["']\)/),

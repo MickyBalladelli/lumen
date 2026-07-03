@@ -32,12 +32,15 @@ Each row is exercised across diagnostics, llvm, executable.
 | classic for loops and updates | Parity-tested subset | `examples/for-loop.lm` |
 | while loops | Parity-tested subset | `examples/while-do.lm` |
 | break, continue, interpolation, and else | Parity-tested subset | `examples/control-flow.lm` |
+| data-driven loop names, values, and bounds | Parity-tested subset | `tests/bootstrap/generic-for.lm` |
 | struct literals and field access | Parity-tested subset | `examples/struct.lm` |
 | integer arrays and indexing | Parity-tested subset | `examples/self-host-array.lm` |
 | simple async functions and await | Parity-tested subset | `examples/self-host-async.lm` |
 | enums and match expressions | Parity-tested subset | `examples/self-host-enum-match.lm` |
 | numeric switch cases and default | Parity-tested subset | `examples/self-host-switch.lm` |
+| data-driven switch assignments | Parity-tested subset | `tests/bootstrap/generic-switch.lm` |
 | throw and catch recovery | Parity-tested subset | `examples/self-host-try-catch.lm` |
+| data-driven catch assignments and print values | Parity-tested subset | `tests/bootstrap/generic-catch-print.lm` |
 | local module imports | Parity-tested subset | `examples/module-app.lm` |
 
 ## JavaScript/Bootstrap Diagnostic Parity

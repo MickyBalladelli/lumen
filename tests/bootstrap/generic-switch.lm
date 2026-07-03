@@ -1,0 +1,17 @@
+function main(): i32 {
+  let selector: i32 = 3
+  let outcome: i32 = 2
+
+  switch selector {
+    case 3 {
+      outcome = outcome + 9
+      break
+    }
+    default {
+      outcome = outcome + 40
+    }
+  }
+
+  println(outcome)
+  return outcome
+}

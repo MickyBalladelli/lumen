@@ -659,19 +659,114 @@ function initializerEnd(tokens: string, equals: i32): i32 {
 }
 
 function interpolate(value: string, variables: string): string {
-  let marker = "$" + "{sum}"
-  if includes(value, marker) {
-    return "sum 23"
+  let out = stringBuilder()
+  let index: i32 = 0
+  let length = stringLen(value)
+
+  while index < length do {
+    let ch = value[index..index + 1]
+    if stringEquals(ch, "$") {
+      if index + 1 < length {
+        if stringEquals(value[index + 1..index + 2], "{") {
+          let end = index + 2
+          let replaced: bool = false
+          while end < length do {
+            if stringEquals(value[end..end + 1], "}") {
+              let name = value[index + 2..end]
+              let resolved = mapGet(variables, name)
+              out = stringBuilderAppend(out, mapValueBody(resolved))
+              index = end + 1
+              replaced = true
+              break
+            }
+            end = end + 1
+          }
+          if replaced {
+            continue
+          }
+        }
+      }
+    }
+
+    out = stringBuilderAppend(out, ch)
+    index = index + 1
   }
 
-  return value
+  return out
 }
 
-function runKnownFor(tokens: string, index: i32, variables: string): string {
-  return mapSet(variables, "total", "number:10")
+function compareNumbers(left: i32, operator: string, right: i32): bool {
+  if stringEquals(operator, "<") {
+    return left < right
+  }
+  if stringEquals(operator, "<=") {
+    return left <= right
+  }
+  if stringEquals(operator, ">") {
+    return left > right
+  }
+  if stringEquals(operator, ">=") {
+    return left >= right
+  }
+  if stringEquals(operator, "==") {
+    return left == right
+  }
+  if stringEquals(operator, "!=") {
+    return left != right
+  }
+  return false
 }
 
-function runKnownWhile(tokens: string, index: i32, variables: string): string {
+function forControlValue(program: string, prefix: string, kind: string): string {
+  return mapGet(program, prefix + kind + "Value")
+}
+
+function forControlMatches(program: string, prefix: string, kind: string, current: i32): bool {
+  let operator = mapGet(program, prefix + kind + "Operator")
+  if stringEquals(operator, "") {
+    return false
+  }
+
+  let right = stringToInt(forControlValue(program, prefix, kind))
+  return compareNumbers(current, operator, right)
+}
+
+function runFor(program: string, statement: i32, variables: string): string {
+  let prefix = parserStatementPrefix(statement)
+  let loopName = mapGet(program, prefix + "LoopVariable")
+  let assignName = mapGet(program, prefix + "BodyAssignName")
+  let addLeft = mapGet(program, prefix + "BodyAddLeft")
+  let addRight = mapGet(program, prefix + "BodyAddRight")
+  let current = stringToInt(mapGet(program, prefix + "LoopInitialValue"))
+  let bound = stringToInt(mapGet(program, prefix + "LoopBoundValue"))
+  let compare = mapGet(program, prefix + "LoopCompareOperator")
+  let update = stringToInt(mapGet(program, prefix + "LoopUpdateValue"))
+
+  while compareNumbers(current, compare, bound) do {
+    variables = mapSet(variables, loopName, "number:" + intToString(current))
+
+    if forControlMatches(program, prefix, "Continue", current) {
+      current = current + update
+      continue
+    }
+    if forControlMatches(program, prefix, "Break", current) {
+      break
+    }
+
+    if !stringEquals(assignName, "") {
+      let left = stringToInt(mapValueBody(mapGet(variables, addLeft)))
+      let right = stringToInt(mapValueBody(mapGet(variables, addRight)))
+      variables = mapSet(variables, assignName, "number:" + intToString(left + right))
+    }
+
+    current = current + update
+  }
+
+  variables = mapSet(variables, loopName, "number:" + intToString(current))
+  return variables
+}
+
+function runWhile(tokens: string, index: i32, variables: string): string {
   let leftName = tokenValue(listGet(tokens, index + 1))
   let rightValue = stringToInt(tokenValue(listGet(tokens, index + 3)))
   let bodyStart = findNext(tokens, index, "{")
@@ -719,6 +814,85 @@ function runKnownWhile(tokens: string, index: i32, variables: string): string {
   variables = mapSet(variables, assignName, "number:" + totalText)
 
   return variables
+}
+
+function setForControl(program: string, prefix: string, kind: string, tokens: string, index: i32, variables: string): string {
+  let operator = tokenValue(listGet(tokens, index + 2))
+  let valueIndex = index + 3
+  if stringEquals(tokenValue(listGet(tokens, valueIndex)), "=") {
+    operator = operator + "="
+    valueIndex = valueIndex + 1
+  }
+
+  program = mapSet(program, prefix + kind + "Left", tokenValue(listGet(tokens, index + 1)))
+  program = mapSet(program, prefix + kind + "Operator", operator)
+  program = mapSet(program, prefix + kind + "Value", intToString(evalNumber(tokens, valueIndex, variables)))
+  return program
+}
+
+function setForStatement(program: string, statement: i32, tokens: string, index: i32, variables: string): string {
+  let prefix = parserStatementPrefix(statement)
+  let open = findNext(tokens, index, "(")
+  let firstSeparator = findNext(tokens, open, ";")
+  let secondSeparator = findNext(tokens, firstSeparator + 1, ";")
+  let equals = findNext(tokens, open, "=")
+  let loopName = tokenValue(listGet(tokens, open + 2))
+  let initial = evalNumber(tokens, equals + 1, variables)
+  let conditionLeft = tokenValue(listGet(tokens, firstSeparator + 1))
+  let conditionOperator = tokenValue(listGet(tokens, firstSeparator + 2))
+  let conditionValueIndex = firstSeparator + 3
+  if stringEquals(tokenValue(listGet(tokens, conditionValueIndex)), "=") {
+    conditionOperator = conditionOperator + "="
+    conditionValueIndex = conditionValueIndex + 1
+  }
+  let conditionRight = evalNumber(tokens, conditionValueIndex, variables)
+  let updateValue: i32 = 1
+  let bodyStart = findNext(tokens, secondSeparator, "{")
+  let bodyEnd = findBlockEnd(tokens, bodyStart)
+  let scan = bodyStart + 1
+
+  program = mapSet(program, prefix + "LoopVariable", loopName)
+  program = mapSet(program, prefix + "LoopInitialValue", intToString(initial))
+  program = mapSet(program, prefix + "LoopCompareLeft", conditionLeft)
+  program = mapSet(program, prefix + "LoopCompareOperator", conditionOperator)
+  program = mapSet(program, prefix + "LoopBoundValue", intToString(conditionRight))
+  program = mapSet(program, prefix + "LoopUpdateValue", intToString(updateValue))
+
+  while scan < bodyEnd do {
+    let current = tokenValue(listGet(tokens, scan))
+
+    if stringEquals(tokenValue(listGet(tokens, scan + 1)), "=") {
+      if stringEquals(tokenValue(listGet(tokens, scan + 3)), "+") {
+        program = mapSet(program, prefix + "BodyAssignName", current)
+        program = mapSet(program, prefix + "BodyAddLeft", tokenValue(listGet(tokens, scan + 2)))
+        program = mapSet(program, prefix + "BodyAddRight", tokenValue(listGet(tokens, scan + 4)))
+      }
+    }
+
+    if stringEquals(current, "if") {
+      let controlStart = findNext(tokens, scan, "{")
+      let controlEnd = findBlockEnd(tokens, controlStart)
+      let controlScan = controlStart + 1
+
+      while controlScan < controlEnd do {
+        let control = tokenValue(listGet(tokens, controlScan))
+        if stringEquals(control, "continue") {
+          program = setForControl(program, prefix, "Continue", tokens, scan, variables)
+        }
+        if stringEquals(control, "break") {
+          program = setForControl(program, prefix, "Break", tokens, scan, variables)
+        }
+        controlScan = controlScan + 1
+      }
+
+      scan = controlEnd + 1
+      continue
+    }
+
+    scan = scan + 1
+  }
+
+  return program
 }
 
 function findBlockEnd(tokens: string, index: i32): i32 {
@@ -1133,8 +1307,9 @@ function parseProgram(tokens: string): string {
 
       program = recordSyntax(program, "for")
       program = setStatement(program, statements, "for", "", "loop", "classic")
+      program = setForStatement(program, statements, tokens, index, variables)
+      variables = runFor(program, statements, variables)
       statements = statements + 1
-      variables = runKnownFor(tokens, index, variables)
       let end = findBlockEnd(tokens, index)
       index = end + 1
       continue
@@ -1170,7 +1345,7 @@ function parseProgram(tokens: string): string {
       }
 
       statements = statements + 1
-      variables = runKnownWhile(tokens, index, variables)
+      variables = runWhile(tokens, index, variables)
       index = bodyEnd + 1
       continue
     }
@@ -1186,13 +1361,18 @@ function parseProgram(tokens: string): string {
       program = recordSyntax(program, "switch")
       let end = findBlockEnd(tokens, index)
       variables = runSwitch(tokens, index, variables)
-      let switchSubject = readValue(tokens, index + 1, variables)
-      let switchSubjectBody = mapValueBody(switchSubject)
-      if stringEquals(switchSubjectBody, "2") {
-        variables = mapSet(variables, "total", "number:20")
-        program = setStatement(program, statements, "assign", "total", "number", "20")
-        program = setResolvedStatement(program, statements, "number:20")
-        statements = statements + 1
+      let switchScan = findNext(tokens, index, "{") + 1
+      while switchScan < end do {
+        if stringEquals(tokenValue(listGet(tokens, switchScan + 1)), "=") {
+          let assignedName = tokenValue(listGet(tokens, switchScan))
+          let assignedValue = mapGet(variables, assignedName)
+          program = setStatement(program, statements, "assign", assignedName, mapValueKind(assignedValue), mapValueBody(assignedValue))
+          program = setResolvedStatement(program, statements, assignedValue)
+          statements = statements + 1
+          switchScan = end
+          continue
+        }
+        switchScan = switchScan + 1
       }
       index = end + 1
       continue
@@ -1234,16 +1414,16 @@ function parseProgram(tokens: string): string {
             let number = evalNumber(tokens, scan + 2, variables)
             let text = intToString(number)
             let name = tokenValue(listGet(tokens, scan))
-            variables = mapSet(variables, name, "number:" + text)
+            let assigned = "number:" + text
+            variables = mapSet(variables, name, assigned)
+            program = setStatement(program, statements, "assign", name, "number", text)
+            program = setResolvedStatement(program, statements, assigned)
+            statements = statements + 1
           }
 
           scan = scan + 1
         }
 
-        variables = mapSet(variables, "recovered", "number:7")
-        program = setStatement(program, statements, "assign", "recovered", "number", "7")
-        program = setResolvedStatement(program, statements, "number:7")
-        statements = statements + 1
         index = catchEnd + 1
         continue
       }
@@ -1291,17 +1471,12 @@ function parseProgram(tokens: string): string {
       let body = interpolate(mapValueBody(value), variables)
       program = setStatement(program, statements, "println", "", expressionKind(tokens, index + 2), expressionValue(tokens, index + 2))
       program = setExpressionParts(program, statements, tokens, index + 2)
-      program = setResolvedStatement(program, statements, value)
-      statements = statements + 1
-
-      if includes(body, "bad") {
-        let sumValue = mapGet(variables, "sum")
-        let sumBody = mapValueBody(sumValue)
-        if includes(sumBody, "23") {
-          index = index + 1
-          continue
-        }
+      if includes(kind, "string") {
+        program = setResolvedStatement(program, statements, "string:" + body)
+      } else {
+        program = setResolvedStatement(program, statements, value)
       }
+      statements = statements + 1
 
       if prints == 0 {
         program = mapSet(program, "print0Kind", kind)
@@ -1329,9 +1504,6 @@ function parseProgram(tokens: string): string {
       program = setExpressionParts(program, statements, tokens, index + 1)
       program = setResolvedStatement(program, statements, value)
       statements = statements + 1
-      if stringEquals(tokenValue(listGet(tokens, index + 1)), "sum") {
-        value = "number:23"
-      }
       program = mapSet(program, "mainReturnKind", mapValueKind(value))
       program = mapSet(program, "mainReturnValue", mapValueBody(value))
       index = index + 1

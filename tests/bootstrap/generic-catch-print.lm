@@ -1,0 +1,15 @@
+function main(): i32 {
+  let answer: i32 = 0
+
+  try {
+    throw "failure"
+    answer = 99
+  } catch issue {
+    println(issue)
+    answer = 11
+  }
+
+  println("bad")
+  println(answer)
+  return answer
+}

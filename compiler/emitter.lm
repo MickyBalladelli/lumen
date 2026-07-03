@@ -225,6 +225,17 @@ function buildStatementSymbols(program: string): string {
       symbols = mapSet(symbols, name + "Value", "%" + name + ".done")
     }
 
+    if includes(kind, "for") {
+      let name = mapGet(program, prefix + "BodyAssignName")
+      let loopName = mapGet(program, prefix + "LoopVariable")
+      let initial = mapGet(symbols, name + "Value")
+      symbols = mapSet(symbols, name + "InitialValue", initial)
+      symbols = mapSet(symbols, name + "Kind", "number")
+      symbols = mapSet(symbols, name + "Value", "%" + name + ".done")
+      symbols = mapSet(symbols, loopName + "Kind", "number")
+      symbols = mapSet(symbols, loopName + "Value", "%" + loopName + ".done")
+    }
+
     index = index + 1
   }
 
@@ -333,25 +344,6 @@ function hasWhileStatement(program: string): bool {
   return false
 }
 
-function hasControlForShape(program: string): bool {
-  let count = stringToInt(mapGet(program, "statementCount"))
-  let index: i32 = 0
-
-  while index < count do {
-    let prefix = statementPrefix(index)
-    let name = mapGet(program, prefix + "Name")
-    if includes(name, "sum") {
-      if hasFunction(program) {
-        return true
-      }
-    }
-
-    index = index + 1
-  }
-
-  return false
-}
-
 function resolvedNumberAtom(symbols: string, value: string): string {
   let resolved = mapGet(symbols, value + "Value")
   if includes(resolved, "%") {
@@ -404,23 +396,6 @@ function hasWhileStatementIr(ir: IrModule, program: string): bool {
     let statement = statementAt(ir, program, index)
     if includes(statement.kind, "while") {
       return true
-    }
-
-    index = index + 1
-  }
-
-  return false
-}
-
-function hasControlForShapeIr(ir: IrModule, program: string): bool {
-  let index: i32 = 0
-
-  while index < ir.statementCount do {
-    let statement = statementAt(ir, program, index)
-    if includes(statement.name, "sum") {
-      if hasFunctionIr(ir) {
-        return true
-      }
     }
 
     index = index + 1
@@ -484,6 +459,16 @@ function buildStatementSymbolsIr(ir: IrModule, program: string): string {
       symbols = mapSet(symbols, name + "Value", "%" + name + ".done")
     }
 
+    if includes(statement.kind, "for") {
+      let name = statement.bodyAssignName
+      let initial = mapGet(symbols, name + "Value")
+      symbols = mapSet(symbols, name + "InitialValue", initial)
+      symbols = mapSet(symbols, name + "Kind", "number")
+      symbols = mapSet(symbols, name + "Value", "%" + name + ".done")
+      symbols = mapSet(symbols, statement.loopVariable + "Kind", "number")
+      symbols = mapSet(symbols, statement.loopVariable + "Value", "%" + statement.loopVariable + ".done")
+    }
+
     index = index + 1
   }
 
@@ -496,11 +481,6 @@ function emitStatementMainIr(ir: IrModule, program: string): string {
   let hasFor = hasForStatementIr(ir, program)
   let hasWhile = hasWhileStatementIr(ir, program)
   let out = stringBuilder()
-
-  if hasFor {
-    symbols = mapSet(symbols, "totalKind", "number")
-    symbols = mapSet(symbols, "totalValue", "%total.done")
-  }
 
   out = stringBuilderAppend(out, "; Lumen self-host LLVM IR
 ")
@@ -543,14 +523,9 @@ function emitStatementMainIr(ir: IrModule, program: string): string {
 ")
   out = stringBuilderAppend(out, "entry:
 ")
+  out = emitLocalStorageIr(out, ir, program, symbols)
   if hasFor {
-    out = emitKnownForLoopIr(out, ir, program)
-  }
-
-  if hasFor {
-    let storageSkipped = 1
-  } else {
-    out = emitLocalStorageIr(out, ir, program, symbols)
+    out = emitForStatementsIr(out, ir, program, symbols)
   }
   out = emitBinaryStatementsIr(out, ir, program, symbols)
   out = emitCallStatementsIr(out, ir, program, symbols)
@@ -589,11 +564,6 @@ function emitStatementMain(program: string): string {
   let hasFor = hasForStatement(program)
   let hasWhile = hasWhileStatement(program)
   let out = stringBuilder()
-
-  if hasFor {
-    symbols = mapSet(symbols, "totalKind", "number")
-    symbols = mapSet(symbols, "totalValue", "%total.done")
-  }
 
   out = stringBuilderAppend(out, "; Lumen self-host LLVM IR
 ")
@@ -639,14 +609,9 @@ function emitStatementMain(program: string): string {
 ")
   out = stringBuilderAppend(out, "entry:
 ")
+  out = emitLocalStorage(out, program, symbols)
   if hasFor {
-    out = emitKnownForLoop(out, program)
-  }
-
-  if hasFor {
-    let storageSkipped = 1
-  } else {
-    out = emitLocalStorage(out, program, symbols)
+    out = emitForStatements(out, program, symbols)
   }
   out = emitBinaryStatements(out, program, symbols)
   out = emitCallStatements(out, program, symbols)
@@ -1054,170 +1019,251 @@ function emitBinaryAdd(out: string, slot: string, program: string, symbols: stri
   return out
 }
 
-function emitKnownForLoop(out: string, program: string): string {
-  if hasControlForShape(program) {
-    return emitKnownForLoopWithControl(out)
+function llvmIntegerPredicate(operator: string): string {
+  if stringEquals(operator, "==") {
+    return "eq"
   }
+  if stringEquals(operator, "!=") {
+    return "ne"
+  }
+  if stringEquals(operator, "<=") {
+    return "sle"
+  }
+  if stringEquals(operator, ">") {
+    return "sgt"
+  }
+  if stringEquals(operator, ">=") {
+    return "sge"
+  }
+  return "slt"
+}
 
-  out = stringBuilderAppend(out, "  %total.addr = alloca i32
-")
-  out = stringBuilderAppend(out, "  %i.addr = alloca i32
-")
-  out = stringBuilderAppend(out, "  store i32 0, ptr %total.addr
-")
-  out = stringBuilderAppend(out, "  store i32 0, ptr %i.addr
-")
-  out = stringBuilderAppend(out, "  br label %for.cond
-")
-  out = stringBuilderAppend(out, "for.cond:
-")
-  out = stringBuilderAppend(out, "  %i.cond = load i32, ptr %i.addr
-")
-  out = stringBuilderAppend(out, "  %loop.keep = icmp slt i32 %i.cond, 5
-")
-  out = stringBuilderAppend(out, "  br i1 %loop.keep, label %for.body, label %for.end
-")
-  out = stringBuilderAppend(out, "for.body:
-")
-  out = stringBuilderAppend(out, "  %total.current = load i32, ptr %total.addr
-")
-  out = stringBuilderAppend(out, "  %i.body = load i32, ptr %i.addr
-")
-  out = stringBuilderAppend(out, "  %total.next = add i32 %total.current, %i.body
-")
-  out = stringBuilderAppend(out, "  store i32 %total.next, ptr %total.addr
-")
-  out = stringBuilderAppend(out, "  br label %for.update
-")
-  out = stringBuilderAppend(out, "for.update:
-")
-  out = stringBuilderAppend(out, "  %i.update = load i32, ptr %i.addr
-")
-  out = stringBuilderAppend(out, "  %i.next = add i32 %i.update, 1
-")
-  out = stringBuilderAppend(out, "  store i32 %i.next, ptr %i.addr
-")
-  out = stringBuilderAppend(out, "  br label %for.cond
-")
-  out = stringBuilderAppend(out, "for.end:
-")
-  out = stringBuilderAppend(out, "  %total.done = load i32, ptr %total.addr
-")
+function emitForStatements(out: string, program: string, symbols: string): string {
+  let count = stringToInt(mapGet(program, "statementCount"))
+  let index: i32 = 0
+
+  while index < count do {
+    let statement = irStatementFromProgram(program, index)
+    if includes(statement.kind, "for") {
+      out = emitForStatement(out, intToString(index), symbols, statement)
+    }
+    index = index + 1
+  }
 
   return out
 }
 
-function emitKnownForLoopIr(out: string, ir: IrModule, program: string): string {
-  if hasControlForShapeIr(ir, program) {
-    return emitKnownForLoopWithControl(out)
-  }
+function emitForStatementsIr(out: string, ir: IrModule, program: string, symbols: string): string {
+  let index: i32 = 0
 
-  out = stringBuilderAppend(out, "  %total.addr = alloca i32
-")
-  out = stringBuilderAppend(out, "  %i.addr = alloca i32
-")
-  out = stringBuilderAppend(out, "  store i32 0, ptr %total.addr
-")
-  out = stringBuilderAppend(out, "  store i32 0, ptr %i.addr
-")
-  out = stringBuilderAppend(out, "  br label %for.cond
-")
-  out = stringBuilderAppend(out, "for.cond:
-")
-  out = stringBuilderAppend(out, "  %i.cond = load i32, ptr %i.addr
-")
-  out = stringBuilderAppend(out, "  %loop.keep = icmp slt i32 %i.cond, 5
-")
-  out = stringBuilderAppend(out, "  br i1 %loop.keep, label %for.body, label %for.end
-")
-  out = stringBuilderAppend(out, "for.body:
-")
-  out = stringBuilderAppend(out, "  %total.current = load i32, ptr %total.addr
-")
-  out = stringBuilderAppend(out, "  %i.body = load i32, ptr %i.addr
-")
-  out = stringBuilderAppend(out, "  %total.next = add i32 %total.current, %i.body
-")
-  out = stringBuilderAppend(out, "  store i32 %total.next, ptr %total.addr
-")
-  out = stringBuilderAppend(out, "  br label %for.update
-")
-  out = stringBuilderAppend(out, "for.update:
-")
-  out = stringBuilderAppend(out, "  %i.update = load i32, ptr %i.addr
-")
-  out = stringBuilderAppend(out, "  %i.next = add i32 %i.update, 1
-")
-  out = stringBuilderAppend(out, "  store i32 %i.next, ptr %i.addr
-")
-  out = stringBuilderAppend(out, "  br label %for.cond
-")
-  out = stringBuilderAppend(out, "for.end:
-")
-  out = stringBuilderAppend(out, "  %total.done = load i32, ptr %total.addr
-")
+  while index < ir.statementCount do {
+    let statement = statementAt(ir, program, index)
+    if includes(statement.kind, "for") {
+      out = emitForStatement(out, intToString(index), symbols, statement)
+    }
+    index = index + 1
+  }
 
   return out
 }
 
-function emitKnownForLoopWithControl(out: string): string {
-  out = stringBuilderAppend(out, "  %total.addr = alloca i32
+function emitLoopControl(out: string, slot: string, label: string, operator: string, value: string, loopName: string, destination: string, next: string): string {
+  if stringEquals(operator, "") {
+    return out
+  }
+
+  out = stringBuilderAppend(out, "  %for.")
+  out = stringBuilderAppend(out, label)
+  out = stringBuilderAppend(out, ".")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, " = icmp ")
+  out = stringBuilderAppend(out, llvmIntegerPredicate(operator))
+  out = stringBuilderAppend(out, " i32 %")
+  out = stringBuilderAppend(out, loopName)
+  out = stringBuilderAppend(out, ".body.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, ", ")
+  out = stringBuilderAppend(out, value)
+  out = stringBuilderAppend(out, "
 ")
-  out = stringBuilderAppend(out, "  %i.addr = alloca i32
+  out = stringBuilderAppend(out, "  br i1 %for.")
+  out = stringBuilderAppend(out, label)
+  out = stringBuilderAppend(out, ".")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, ", label %")
+  out = stringBuilderAppend(out, destination)
+  out = stringBuilderAppend(out, ", label %")
+  out = stringBuilderAppend(out, next)
+  out = stringBuilderAppend(out, "
 ")
-  out = stringBuilderAppend(out, "  store i32 0, ptr %total.addr
+  out = stringBuilderAppend(out, next)
+  out = stringBuilderAppend(out, ":
 ")
-  out = stringBuilderAppend(out, "  store i32 0, ptr %i.addr
+  return out
+}
+
+function forOperand(statement: IrStatement, symbols: string, value: string, slot: string): string {
+  if stringEquals(value, statement.bodyAssignName) {
+    return "%" + value + ".body." + slot
+  }
+  if stringEquals(value, statement.loopVariable) {
+    return "%" + value + ".body." + slot
+  }
+  return resolvedNumberAtom(symbols, value)
+}
+
+function emitForStatement(out: string, slot: string, symbols: string, statement: IrStatement): string {
+  let loopName = statement.loopVariable
+  let assignName = statement.bodyAssignName
+  let condition = llvmIntegerPredicate(statement.loopCompareOperator)
+  let bodyLabel = "for.body." + slot
+  let operationLabel = "for.operation." + slot
+  let updateLabel = "for.update." + slot
+  let endLabel = "for.end." + slot
+
+  out = stringBuilderAppend(out, "  %")
+  out = stringBuilderAppend(out, loopName)
+  out = stringBuilderAppend(out, ".addr = alloca i32
 ")
-  out = stringBuilderAppend(out, "  br label %for.cond
+  out = stringBuilderAppend(out, "  store i32 ")
+  out = stringBuilderAppend(out, statement.loopInitialValue)
+  out = stringBuilderAppend(out, ", ptr %")
+  out = stringBuilderAppend(out, loopName)
+  out = stringBuilderAppend(out, ".addr
 ")
-  out = stringBuilderAppend(out, "for.cond:
+  out = stringBuilderAppend(out, "  br label %for.cond.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, "
+for.cond.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, ":
+  %")
+  out = stringBuilderAppend(out, loopName)
+  out = stringBuilderAppend(out, ".cond.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, " = load i32, ptr %")
+  out = stringBuilderAppend(out, loopName)
+  out = stringBuilderAppend(out, ".addr
+  %for.keep.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, " = icmp ")
+  out = stringBuilderAppend(out, condition)
+  out = stringBuilderAppend(out, " i32 %")
+  out = stringBuilderAppend(out, loopName)
+  out = stringBuilderAppend(out, ".cond.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, ", ")
+  out = stringBuilderAppend(out, statement.loopBoundValue)
+  out = stringBuilderAppend(out, "
+  br i1 %for.keep.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, ", label %")
+  out = stringBuilderAppend(out, bodyLabel)
+  out = stringBuilderAppend(out, ", label %")
+  out = stringBuilderAppend(out, endLabel)
+  out = stringBuilderAppend(out, "
 ")
-  out = stringBuilderAppend(out, "  %i.cond = load i32, ptr %i.addr
-")
-  out = stringBuilderAppend(out, "  %loop.keep = icmp slt i32 %i.cond, 8
-")
-  out = stringBuilderAppend(out, "  br i1 %loop.keep, label %for.body, label %for.end
-")
-  out = stringBuilderAppend(out, "for.body:
-")
-  out = stringBuilderAppend(out, "  %i.body = load i32, ptr %i.addr
-")
-  out = stringBuilderAppend(out, "  %is.two = icmp eq i32 %i.body, 2
-")
-  out = stringBuilderAppend(out, "  br i1 %is.two, label %for.update, label %not.two
-")
-  out = stringBuilderAppend(out, "not.two:
-")
-  out = stringBuilderAppend(out, "  %is.six = icmp eq i32 %i.body, 6
-")
-  out = stringBuilderAppend(out, "  br i1 %is.six, label %for.end, label %add.total
-")
-  out = stringBuilderAppend(out, "add.total:
-")
-  out = stringBuilderAppend(out, "  %total.current = load i32, ptr %total.addr
-")
-  out = stringBuilderAppend(out, "  %total.next = add i32 %total.current, %i.body
-")
-  out = stringBuilderAppend(out, "  store i32 %total.next, ptr %total.addr
-")
-  out = stringBuilderAppend(out, "  br label %for.update
-")
-  out = stringBuilderAppend(out, "for.update:
-")
-  out = stringBuilderAppend(out, "  %i.update = load i32, ptr %i.addr
-")
-  out = stringBuilderAppend(out, "  %i.next = add i32 %i.update, 1
-")
-  out = stringBuilderAppend(out, "  store i32 %i.next, ptr %i.addr
-")
-  out = stringBuilderAppend(out, "  br label %for.cond
-")
-  out = stringBuilderAppend(out, "for.end:
-")
-  out = stringBuilderAppend(out, "  %total.done = load i32, ptr %total.addr
+  out = stringBuilderAppend(out, bodyLabel)
+  out = stringBuilderAppend(out, ":
+  %")
+  out = stringBuilderAppend(out, assignName)
+  out = stringBuilderAppend(out, ".body.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, " = load i32, ptr %")
+  out = stringBuilderAppend(out, assignName)
+  out = stringBuilderAppend(out, ".addr
+  %")
+  out = stringBuilderAppend(out, loopName)
+  out = stringBuilderAppend(out, ".body.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, " = load i32, ptr %")
+  out = stringBuilderAppend(out, loopName)
+  out = stringBuilderAppend(out, ".addr
 ")
 
+  out = emitLoopControl(out, slot, "continue", statement.continueOperator, statement.continueValue, loopName, updateLabel, "for.after.continue." + slot)
+  out = emitLoopControl(out, slot, "break", statement.breakOperator, statement.breakValue, loopName, endLabel, operationLabel)
+  if stringEquals(statement.breakOperator, "") {
+    if stringEquals(statement.continueOperator, "") {
+      out = stringBuilderAppend(out, "  br label %")
+      out = stringBuilderAppend(out, operationLabel)
+      out = stringBuilderAppend(out, "
+")
+    } else {
+      out = stringBuilderAppend(out, "  br label %")
+      out = stringBuilderAppend(out, operationLabel)
+      out = stringBuilderAppend(out, "
+")
+    }
+    out = stringBuilderAppend(out, operationLabel)
+    out = stringBuilderAppend(out, ":
+")
+  }
+
+  out = stringBuilderAppend(out, "  %")
+  out = stringBuilderAppend(out, assignName)
+  out = stringBuilderAppend(out, ".next.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, " = add i32 ")
+  out = stringBuilderAppend(out, forOperand(statement, symbols, statement.bodyAddLeft, slot))
+  out = stringBuilderAppend(out, ", ")
+  out = stringBuilderAppend(out, forOperand(statement, symbols, statement.bodyAddRight, slot))
+  out = stringBuilderAppend(out, "
+  store i32 %")
+  out = stringBuilderAppend(out, assignName)
+  out = stringBuilderAppend(out, ".next.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, ", ptr %")
+  out = stringBuilderAppend(out, assignName)
+  out = stringBuilderAppend(out, ".addr
+  br label %")
+  out = stringBuilderAppend(out, updateLabel)
+  out = stringBuilderAppend(out, "
+")
+  out = stringBuilderAppend(out, updateLabel)
+  out = stringBuilderAppend(out, ":
+  %")
+  out = stringBuilderAppend(out, loopName)
+  out = stringBuilderAppend(out, ".update.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, " = load i32, ptr %")
+  out = stringBuilderAppend(out, loopName)
+  out = stringBuilderAppend(out, ".addr
+  %")
+  out = stringBuilderAppend(out, loopName)
+  out = stringBuilderAppend(out, ".next.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, " = add i32 %")
+  out = stringBuilderAppend(out, loopName)
+  out = stringBuilderAppend(out, ".update.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, ", ")
+  out = stringBuilderAppend(out, statement.loopUpdateValue)
+  out = stringBuilderAppend(out, "
+  store i32 %")
+  out = stringBuilderAppend(out, loopName)
+  out = stringBuilderAppend(out, ".next.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, ", ptr %")
+  out = stringBuilderAppend(out, loopName)
+  out = stringBuilderAppend(out, ".addr
+  br label %for.cond.")
+  out = stringBuilderAppend(out, slot)
+  out = stringBuilderAppend(out, "
+")
+  out = stringBuilderAppend(out, endLabel)
+  out = stringBuilderAppend(out, ":
+  %")
+  out = stringBuilderAppend(out, assignName)
+  out = stringBuilderAppend(out, ".done = load i32, ptr %")
+  out = stringBuilderAppend(out, assignName)
+  out = stringBuilderAppend(out, ".addr
+  %")
+  out = stringBuilderAppend(out, loopName)
+  out = stringBuilderAppend(out, ".done = load i32, ptr %")
+  out = stringBuilderAppend(out, loopName)
+  out = stringBuilderAppend(out, ".addr
+")
   return out
 }
 
@@ -1607,10 +1653,6 @@ function emitStringGlobal(out: string, slot: string, value: string): string {
 }
 
 function emitPrint(out: string, slot: string, kind: string, value: string): string {
-  if stringEquals(value, "bad") {
-    return out
-  }
-
   if includes(kind, "string") {
     let rawSize = stringLen(value)
     let size = rawSize + 1

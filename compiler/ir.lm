@@ -19,6 +19,18 @@ struct IrStatement {
   bodyAddLeft: string
   bodyAddRight: string
   bodyIncrementName: string
+  loopVariable: string
+  loopInitialValue: string
+  loopCompareLeft: string
+  loopCompareOperator: string
+  loopBoundValue: string
+  loopUpdateValue: string
+  continueLeft: string
+  continueOperator: string
+  continueValue: string
+  breakLeft: string
+  breakOperator: string
+  breakValue: string
 }
 
 struct IrFunction {
@@ -75,7 +87,19 @@ function irStatement(kind: string): IrStatement {
     bodyAssignName: "",
     bodyAddLeft: "",
     bodyAddRight: "",
-    bodyIncrementName: ""
+    bodyIncrementName: "",
+    loopVariable: "",
+    loopInitialValue: "",
+    loopCompareLeft: "",
+    loopCompareOperator: "",
+    loopBoundValue: "",
+    loopUpdateValue: "",
+    continueLeft: "",
+    continueOperator: "",
+    continueValue: "",
+    breakLeft: "",
+    breakOperator: "",
+    breakValue: ""
   }
 
   statement.kind = kind
@@ -169,6 +193,18 @@ function irStatementFromProgram(program: string, index: i32): IrStatement {
   statement.bodyAddLeft = mapGet(program, prefix + "BodyAddLeft")
   statement.bodyAddRight = mapGet(program, prefix + "BodyAddRight")
   statement.bodyIncrementName = mapGet(program, prefix + "BodyIncrementName")
+  statement.loopVariable = mapGet(program, prefix + "LoopVariable")
+  statement.loopInitialValue = mapGet(program, prefix + "LoopInitialValue")
+  statement.loopCompareLeft = mapGet(program, prefix + "LoopCompareLeft")
+  statement.loopCompareOperator = mapGet(program, prefix + "LoopCompareOperator")
+  statement.loopBoundValue = mapGet(program, prefix + "LoopBoundValue")
+  statement.loopUpdateValue = mapGet(program, prefix + "LoopUpdateValue")
+  statement.continueLeft = mapGet(program, prefix + "ContinueLeft")
+  statement.continueOperator = mapGet(program, prefix + "ContinueOperator")
+  statement.continueValue = mapGet(program, prefix + "ContinueValue")
+  statement.breakLeft = mapGet(program, prefix + "BreakLeft")
+  statement.breakOperator = mapGet(program, prefix + "BreakOperator")
+  statement.breakValue = mapGet(program, prefix + "BreakValue")
   return statement
 }
 
