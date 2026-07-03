@@ -1,0 +1,46 @@
+import { DiagnosticArena } from "../../compiler/containers.lm"
+import { AstProgram, astCountKind } from "../../compiler/ast.lm"
+import { CompilerImport, CompilerModule, ModuleGraph, loadModuleGraph, loadModuleGraphWithPackageRoot, moduleCanonicalPath, moduleGraphFindModule, moduleGraphImportAt, moduleGraphModuleAt } from "../../compiler/modules.lm"
+
+function main(): i32 {
+  let root = "tests/runtime/module-fixtures"
+  assert(stringEquals(moduleCanonicalPath("one/../../two.lm"), "../two.lm"), "canonical path must retain leading parent")
+  assert(stringEquals(moduleCanonicalPath("/one/../two.lm"), "/two.lm"), "canonical path must preserve root")
+  let graph = loadModuleGraph(root + "/entry.lm")
+  assert(graph.ok, "valid module graph must load")
+  assert(graph.moduleCount == 4, "diamond graph must load each module once")
+  assert(graph.importCount == 4, "graph must retain typed import edges")
+  assert(astCountKind(graph.program, "FunctionDeclaration") == 4, "linked AST must contain every module")
+
+  let sharedPath = moduleCanonicalPath(root + "/nested/../shared.lm")
+  let sharedId = moduleGraphFindModule(graph, sharedPath)
+  assert(sharedId >= 0, "canonical relative path must find shared module")
+  let shared = moduleGraphModuleAt(graph, sharedId)
+  assert(shared.state == 2, "shared module must finish loading")
+  assert(shared.astNodeCount > 0, "each module must be parsed separately")
+
+  let edge = moduleGraphImportAt(graph, 0)
+  assert(edge.importer >= 0, "import edge must retain importer")
+  assert(edge.target >= 0, "relative import edge must retain target")
+  assert(listLen(edge.names) == 1, "import edge must retain names")
+
+  let stringGraph = loadModuleGraph(root + "/string-import.lm")
+  assert(stringGraph.ok, "import text inside string must not be scanned")
+  assert(stringGraph.moduleCount == 1, "string import text must not create module")
+
+  let cycle = loadModuleGraph(root + "/cycle-a.lm")
+  assert(!cycle.ok, "cycle must fail")
+  assert(includes(cycle.message, "cycle-a.lm -> cycle-b.lm -> cycle-a.lm"), "cycle must show chain")
+
+  let packageRoot = root + "/packages"
+  let packageGraph = loadModuleGraphWithPackageRoot(root + "/package-entry.lm", packageRoot)
+  assert(packageGraph.ok, "allowed Photon export must load")
+  assert(packageGraph.moduleCount == 2, "Photon package must be a graph module")
+
+  let hiddenGraph = loadModuleGraphWithPackageRoot(root + "/package-hidden.lm", packageRoot)
+  assert(!hiddenGraph.ok, "hidden Photon export must fail")
+  assert(includes(hiddenGraph.message, 'has no export "hidden"'), "export diagnostic must name symbol")
+
+  println("bootstrap modules")
+  return 0
+}

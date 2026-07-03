@@ -49,9 +49,10 @@ Finished" section so the project's progress is visible.
   calling that IR-based path. Internals still delegate through the legacy
   statement bridge for supported code generation.
 
-- **Self-host module loader** — `compiler/modules.lm` recursively loads local
-  imports and bare package `main.lm` files, skips duplicate loads, removes
-  handled import declarations, and feeds flattened source into the parser.
+- **Self-host module graph** — `compiler/modules.lm` parses files separately,
+  discovers imports from typed AST nodes, resolves canonical local and Photon
+  paths, checks exports, rejects cycles, and loads shared dependencies once.
+  A token projection still feeds the later compatibility passes.
 
 - **Stage-1 compiler checkpoint path** — the old C fallback has been removed.
   Compiler-mode emission returns the LLVM image embedded by the JavaScript
@@ -146,7 +147,7 @@ generated into [the support matrix](support-matrix.md).
 - Strengthen semantic checks to match JS compiler diagnostic coverage
 - Strengthen type checks beyond simple annotated initializers and
   first-argument calls
-- Grow module loading beyond local/package source concatenation
+- Replace the linked token projection with module-aware semantic and IR passes
 
 ## P1 — Runtime And Portability
 

@@ -63,7 +63,7 @@ copy embedded stage-1 LLVM instead of compiling the Lumen source.
 
 ## P2 - Resolve and check programs
 
-- [ ] Build a real module graph in Lumen.
+- [x] Build a real module graph in Lumen.
   Parse modules separately, resolve canonical relative and Photon paths,
   preserve export boundaries, detect cycles, and load each module once. Stop
   concatenating imported source text and scanning import lines as strings.

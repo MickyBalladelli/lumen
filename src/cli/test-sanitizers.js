@@ -35,6 +35,12 @@ const cases = [
     stdout: 'bootstrap AST\n'
   },
   {
+    name: 'bootstrap modules',
+    source: 'tests/runtime/bootstrap-modules.lm',
+    code: 0,
+    stdout: 'bootstrap modules\n'
+  },
+  {
     name: 'array bounds',
     source: 'tests/runtime/array-out-of-bounds.lm',
     code: 1,

@@ -1,0 +1,5 @@
+{
+  "name": "demo",
+  "main": "main.lm",
+  "exports": ["shown"]
+}

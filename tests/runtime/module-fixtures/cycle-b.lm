@@ -1,0 +1,5 @@
+import { fromA } from "./cycle-a.lm"
+
+function fromB(): i32 {
+  return fromA()
+}

@@ -1,3 +1,226 @@
+import { AstProgram, astChildAt, astNodeAt } from "./ast.lm"
+import { CompilerDiagnostic, CompilerToken, DiagnosticArena, TokenArena, diagnosticArena, diagnosticArenaGet, diagnosticArenaPush, tokenArena, tokenArenaGet, tokenArenaPush } from "./containers.lm"
+import { parseProgram } from "./parser.lm"
+import { tokenizeFile } from "./tokenizer.lm"
+
+struct CompilerModule {
+  id: i32
+  path: string
+  source: string
+  state: i32
+  parent: i32
+  importCount: i32
+  tokenCount: i32
+  astNodeCount: i32
+}
+
+struct CompilerImport {
+  importer: i32
+  target: i32
+  specifier: string
+  names: string
+  allowedExports: string
+  file: string
+  offset: i32
+  line: i32
+  column: i32
+}
+
+struct ModuleGraph {
+  ok: bool
+  message: string
+  entryPath: string
+  entrySource: string
+  packageRoot: string
+  moduleStorage: string
+  importStorage: string
+  moduleIds: string
+  declarations: string
+  moduleCount: i32
+  importCount: i32
+  entry: i32
+  lastModule: i32
+  resolvedPath: string
+  resolvedExports: string
+  resolvedBuiltin: bool
+  linkedTokens: TokenArena
+  program: AstProgram
+  diagnostics: DiagnosticArena
+}
+
+function moduleEmptyTokens(): TokenArena {
+  let tokens = tokenArena()
+  let eof = CompilerToken {
+    kind: "eof",
+    lexeme: "",
+    literal: "",
+    file: "",
+    offset: 0,
+    line: 1,
+    column: 1
+  }
+  return tokenArenaPush(tokens, eof)
+}
+
+function moduleGraph(packageRoot: string): ModuleGraph {
+  let empty = moduleEmptyTokens()
+  return ModuleGraph {
+    ok: true,
+    message: "",
+    entryPath: "",
+    entrySource: "",
+    packageRoot: moduleCanonicalPath(packageRoot),
+    moduleStorage: arenaNew(),
+    importStorage: arenaNew(),
+    moduleIds: map("unused", "unused"),
+    declarations: map("unused", "unused"),
+    moduleCount: 0,
+    importCount: 0,
+    entry: -1,
+    lastModule: -1,
+    resolvedPath: "",
+    resolvedExports: "",
+    resolvedBuiltin: false,
+    linkedTokens: tokenArena(),
+    program: parseProgram(empty),
+    diagnostics: diagnosticArena()
+  }
+}
+
+function moduleGraphAddModule(graph: ModuleGraph, module: CompilerModule): ModuleGraph {
+  let index = arenaAppend(graph.moduleStorage)
+  arenaSetString(graph.moduleStorage, index, 0, module.path)
+  arenaSetString(graph.moduleStorage, index, 1, module.source)
+  arenaSetI32(graph.moduleStorage, index, 2, module.state)
+  arenaSetI32(graph.moduleStorage, index, 3, module.parent)
+  arenaSetI32(graph.moduleStorage, index, 4, module.importCount)
+  arenaSetI32(graph.moduleStorage, index, 5, module.tokenCount)
+  arenaSetI32(graph.moduleStorage, index, 6, module.astNodeCount)
+  graph.moduleCount = arenaLen(graph.moduleStorage)
+  graph.lastModule = index
+  graph.moduleIds = mapSet(graph.moduleIds, module.path, intToString(index))
+  return graph
+}
+
+function moduleGraphModuleAt(graph: ModuleGraph, index: i32): CompilerModule {
+  return CompilerModule {
+    id: index,
+    path: arenaGetString(graph.moduleStorage, index, 0),
+    source: arenaGetString(graph.moduleStorage, index, 1),
+    state: arenaGetI32(graph.moduleStorage, index, 2),
+    parent: arenaGetI32(graph.moduleStorage, index, 3),
+    importCount: arenaGetI32(graph.moduleStorage, index, 4),
+    tokenCount: arenaGetI32(graph.moduleStorage, index, 5),
+    astNodeCount: arenaGetI32(graph.moduleStorage, index, 6)
+  }
+}
+
+function moduleGraphSetModuleState(graph: ModuleGraph, index: i32, state: i32): ModuleGraph {
+  arenaSetI32(graph.moduleStorage, index, 2, state)
+  return graph
+}
+
+function moduleGraphIncrementImports(graph: ModuleGraph, index: i32): ModuleGraph {
+  let count = arenaGetI32(graph.moduleStorage, index, 4)
+  arenaSetI32(graph.moduleStorage, index, 4, count + 1)
+  return graph
+}
+
+function moduleGraphAddImport(graph: ModuleGraph, edge: CompilerImport): ModuleGraph {
+  let index = arenaAppend(graph.importStorage)
+  arenaSetI32(graph.importStorage, index, 0, edge.importer)
+  arenaSetI32(graph.importStorage, index, 1, edge.target)
+  arenaSetString(graph.importStorage, index, 2, edge.specifier)
+  arenaSetString(graph.importStorage, index, 3, edge.names)
+  arenaSetString(graph.importStorage, index, 4, edge.allowedExports)
+  arenaSetString(graph.importStorage, index, 5, edge.file)
+  arenaSetI32(graph.importStorage, index, 6, edge.offset)
+  arenaSetI32(graph.importStorage, index, 7, edge.line)
+  arenaSetI32(graph.importStorage, index, 8, edge.column)
+  graph.importCount = arenaLen(graph.importStorage)
+  graph = moduleGraphIncrementImports(graph, edge.importer)
+  return graph
+}
+
+function moduleGraphImportAt(graph: ModuleGraph, index: i32): CompilerImport {
+  return CompilerImport {
+    importer: arenaGetI32(graph.importStorage, index, 0),
+    target: arenaGetI32(graph.importStorage, index, 1),
+    specifier: arenaGetString(graph.importStorage, index, 2),
+    names: arenaGetString(graph.importStorage, index, 3),
+    allowedExports: arenaGetString(graph.importStorage, index, 4),
+    file: arenaGetString(graph.importStorage, index, 5),
+    offset: arenaGetI32(graph.importStorage, index, 6),
+    line: arenaGetI32(graph.importStorage, index, 7),
+    column: arenaGetI32(graph.importStorage, index, 8)
+  }
+}
+
+function moduleGraphFindModule(graph: ModuleGraph, path: string): i32 {
+  let canonical = moduleCanonicalPath(path)
+  if !mapHas(graph.moduleIds, canonical) {
+    return -1
+  }
+  return stringToInt(mapGet(graph.moduleIds, canonical))
+}
+
+function moduleGraphFail(
+  graph: ModuleGraph,
+  message: string,
+  file: string,
+  offset: i32,
+  line: i32,
+  column: i32,
+  length: i32
+): ModuleGraph {
+  let diagnosticLength = length
+  if diagnosticLength < 1 {
+    diagnosticLength = 1
+  }
+  let diagnostic = CompilerDiagnostic {
+    severity: "error",
+    message: message,
+    file: file,
+    offset: offset,
+    line: line,
+    column: column,
+    length: diagnosticLength
+  }
+  graph.ok = false
+  if stringEquals(graph.message, "") {
+    graph.message = message
+  }
+  graph.diagnostics = diagnosticArenaPush(graph.diagnostics, diagnostic)
+  return graph
+}
+
+function moduleGraphCopyDiagnostics(graph: ModuleGraph, diagnostics: DiagnosticArena): ModuleGraph {
+  let index: i32 = 0
+  while index < diagnostics.count do {
+    let diagnostic = diagnosticArenaGet(diagnostics, index)
+    graph = moduleGraphFail(
+      graph,
+      diagnostic.message,
+      diagnostic.file,
+      diagnostic.offset,
+      diagnostic.line,
+      diagnostic.column,
+      diagnostic.length
+    )
+    index = index + 1
+  }
+  return graph
+}
+
+function moduleStartsWith(value: string, prefix: string): bool {
+  let valueLength = stringLen(value)
+  let prefixLength = stringLen(prefix)
+  if valueLength < prefixLength {
+    return false
+  }
+  return stringEquals(value[0..prefixLength], prefix)
+}
+
 function moduleDirname(path: string): string {
   let length = stringLen(path)
   let index = length - 1
@@ -7,156 +230,495 @@ function moduleDirname(path: string): string {
     if stringEquals(ch, "/") {
       return path[0..index]
     }
-
     index = index - 1
   }
 
   return "."
 }
 
-function moduleJoin(base: string, child: string): string {
-  if stringEquals(base, ".") {
-    return child
+function moduleBasename(path: string): string {
+  let length = stringLen(path)
+  let index = length - 1
+
+  while index >= 0 do {
+    let ch = path[index..index + 1]
+    if stringEquals(ch, "/") {
+      return path[index + 1..length]
+    }
+    index = index - 1
   }
 
+  return path
+}
+
+function moduleJoin(base: string, child: string): string {
+  if moduleStartsWith(child, "/") {
+    return child
+  }
+  if stringEquals(base, ".") || stringEquals(base, "") {
+    return child
+  }
+  if stringEquals(base, "/") {
+    return "/" + child
+  }
   return base + "/" + child
 }
 
-function moduleResolve(base: string, specifier: string): string {
-  if includes(specifier, "./") {
-    let length = stringLen(specifier)
-    return moduleJoin(base, specifier[2..length])
-  }
+function moduleCanonicalPath(path: string): string {
+  let segments = arenaNew()
+  let segmentCount: i32 = 0
+  let length = stringLen(path)
+  let absolute = moduleStartsWith(path, "/")
+  let start: i32 = 0
+  let index: i32 = 0
 
-  if includes(specifier, "../") {
-    let length = stringLen(specifier)
-    let parent = moduleDirname(base)
-    return moduleJoin(parent, specifier[3..length])
-  }
-
-  return "packages/" + specifier + "/main.lm"
-}
-
-function moduleFindFrom(source: string, index: i32): i32 {
-  let length = stringLen(source)
-
-  while index + 4 <= length do {
-    let ch = source[index..index + 1]
-    if includes('
-', ch) {
-      return length
+  while index <= length do {
+    let boundary = index == length
+    if !boundary {
+      boundary = stringEquals(path[index..index + 1], "/")
     }
 
-    if stringEquals(source[index..index + 4], "from") {
-      return index
+    if boundary {
+      let segment = path[start..index]
+      if stringEquals(segment, "..") {
+        let canPop = segmentCount > 0
+        if canPop {
+          canPop = !stringEquals(arenaGetString(segments, segmentCount - 1, 0), "..")
+        }
+        if canPop {
+          segmentCount = segmentCount - 1
+        } else if !absolute {
+          let slot = segmentCount
+          if slot >= arenaLen(segments) {
+            slot = arenaAppend(segments)
+          }
+          arenaSetString(segments, slot, 0, segment)
+          segmentCount = segmentCount + 1
+        }
+      } else if !stringEquals(segment, "") && !stringEquals(segment, ".") {
+        let slot = segmentCount
+        if slot >= arenaLen(segments) {
+          slot = arenaAppend(segments)
+        }
+        arenaSetString(segments, slot, 0, segment)
+        segmentCount = segmentCount + 1
+      }
+      start = index + 1
     }
 
     index = index + 1
   }
 
-  return length
+  let out = stringBuilder()
+  if absolute {
+    out = stringBuilderAppend(out, "/")
+  }
+  index = 0
+  while index < segmentCount do {
+    if index > 0 {
+      out = stringBuilderAppend(out, "/")
+    }
+    out = stringBuilderAppend(out, arenaGetString(segments, index, 0))
+    index = index + 1
+  }
+
+  let canonical = out
+  if stringEquals(canonical, "") {
+    if absolute {
+      return "/"
+    }
+    return "."
+  }
+  return canonical
 }
 
-function moduleImportSpecifier(source: string, index: i32): string {
-  let cursor = moduleFindFrom(source, index)
-  let length = stringLen(source)
-  if cursor >= length {
-    return ""
-  }
+function moduleIsBuiltin(specifier: string): bool {
+  return stringEquals(specifier, "system") ||
+    stringEquals(specifier, "fs") ||
+    stringEquals(specifier, "http") ||
+    stringEquals(specifier, "thread")
+}
 
-  while cursor < length do {
-    let ch = source[cursor..cursor + 1]
-    if stringEquals(ch, '"') {
-      let start = cursor + 1
-      cursor = start
-
-      while cursor < length do {
-        let next = source[cursor..cursor + 1]
-        if stringEquals(next, '"') {
-          return source[start..cursor]
-        }
-
-        cursor = cursor + 1
-      }
+function modulePackageName(specifier: string): string {
+  let length = stringLen(specifier)
+  let index: i32 = 0
+  while index < length do {
+    if stringEquals(specifier[index..index + 1], "/") {
+      return specifier[0..index]
     }
-
-    cursor = cursor + 1
+    index = index + 1
   }
+  return specifier
+}
 
+function modulePackageSubpath(specifier: string): string {
+  let length = stringLen(specifier)
+  let index: i32 = 0
+  while index < length do {
+    if stringEquals(specifier[index..index + 1], "/") {
+      return specifier[index + 1..length]
+    }
+    index = index + 1
+  }
   return ""
 }
 
-function moduleNextLine(source: string, index: i32): i32 {
-  let length = stringLen(source)
+function moduleResolveImport(graph: ModuleGraph, base: string, specifier: string): ModuleGraph {
+  graph.resolvedPath = ""
+  graph.resolvedExports = ""
+  graph.resolvedBuiltin = false
 
-  while index < length do {
-    let ch = source[index..index + 1]
-    index = index + 1
-    if includes('
-', ch) {
-      return index
+  if moduleStartsWith(specifier, "./") || moduleStartsWith(specifier, "../") {
+    graph.resolvedPath = moduleCanonicalPath(moduleJoin(base, specifier))
+    return graph
+  }
+
+  if moduleIsBuiltin(specifier) {
+    graph.resolvedBuiltin = true
+    return graph
+  }
+
+  let name = modulePackageName(specifier)
+  let packagePath = moduleCanonicalPath(moduleJoin(graph.packageRoot, name))
+  let subpath = modulePackageSubpath(specifier)
+  if !stringEquals(subpath, "") {
+    graph.resolvedPath = moduleCanonicalPath(moduleJoin(packagePath, subpath))
+    return graph
+  }
+
+  let main = "main.lm"
+  let manifestPath = moduleJoin(packagePath, "photon.json")
+  let manifestResult = readFile(manifestPath)
+  if isOk(manifestResult) {
+    let documentResult = json(resultValue(manifestResult))
+    if !isOk(documentResult) {
+      graph = moduleGraphFail(graph, "Invalid Photon manifest", manifestPath, 0, 1, 1, 1)
+      return graph
+    }
+    let document: json = resultValue(documentResult)
+    let mainResult = jsonGet(document, "main")
+    if isOk(mainResult) {
+      main = resultValue(mainResult)
+    }
+    let exportsResult = jsonGetRaw(document, "exports")
+    if isOk(exportsResult) {
+      graph.resolvedExports = resultValue(exportsResult)
     }
   }
 
-  return index
+  graph.resolvedPath = moduleCanonicalPath(moduleJoin(packagePath, main))
+  return graph
 }
 
-function moduleLoadFile(path: string, seen: string): Result<string> {
-  if stringEquals(path, "packages/system/main.lm") ||
-    stringEquals(path, "packages/fs/main.lm") ||
-    stringEquals(path, "packages/http/main.lm") ||
-    stringEquals(path, "packages/thread/main.lm") {
-    return ok("")
-  }
+function moduleDeclarationKey(moduleId: i32, name: string): string {
+  return intToString(moduleId) + ":" + name
+}
 
-  if mapHas(seen, path) {
-    return ok("")
-  }
+function moduleIsDeclarationKind(kind: string): bool {
+  return stringEquals(kind, "FunctionDeclaration") ||
+    stringEquals(kind, "ExternFunctionDeclaration") ||
+    stringEquals(kind, "StructDeclaration") ||
+    stringEquals(kind, "EnumDeclaration")
+}
 
-  seen = mapSet(seen, path, "1")
+function moduleCollectDeclarations(graph: ModuleGraph, moduleId: i32, ast: AstProgram): ModuleGraph {
+  let root = astNodeAt(ast, ast.root)
+  let childIndex: i32 = 0
+  while childIndex < root.childCount do {
+    let nodeId = astChildAt(ast, ast.root, childIndex)
+    let node = astNodeAt(ast, nodeId)
+    if moduleIsDeclarationKind(node.kind) {
+      graph.declarations = mapSet(
+        graph.declarations,
+        moduleDeclarationKey(moduleId, node.name),
+        node.kind
+      )
+    }
+    childIndex = childIndex + 1
+  }
+  return graph
+}
+
+function moduleImportNames(ast: AstProgram, importNodeId: i32): string {
+  let names = list()
+  let node = astNodeAt(ast, importNodeId)
+  let childIndex: i32 = 0
+  while childIndex < node.childCount do {
+    let childId = astChildAt(ast, importNodeId, childIndex)
+    let child = astNodeAt(ast, childId)
+    if stringEquals(child.kind, "Identifier") {
+      names = listPush(names, child.name)
+    }
+    childIndex = childIndex + 1
+  }
+  return names
+}
+
+function moduleExportAllowed(allowedExports: string, name: string): bool {
+  if stringEquals(allowedExports, "") {
+    return true
+  }
+  return includes(allowedExports, '"' + name + '"')
+}
+
+function moduleValidateImport(
+  graph: ModuleGraph,
+  target: i32,
+  names: string,
+  allowedExports: string,
+  specifier: string,
+  file: string,
+  offset: i32,
+  line: i32,
+  column: i32
+): ModuleGraph {
+  let index: i32 = 0
+  while index < listLen(names) do {
+    let name = listGet(names, index)
+    if !moduleExportAllowed(allowedExports, name) {
+      graph = moduleGraphFail(
+        graph,
+        'Module "' + specifier + '" has no export "' + name + '"',
+        file,
+        offset,
+        line,
+        column,
+        stringLen(name)
+      )
+    } else if !mapHas(graph.declarations, moduleDeclarationKey(target, name)) {
+      graph = moduleGraphFail(
+        graph,
+        'Module "' + specifier + '" has no export "' + name + '"',
+        file,
+        offset,
+        line,
+        column,
+        stringLen(name)
+      )
+    }
+    index = index + 1
+  }
+  return graph
+}
+
+function moduleAppendNodeTokens(
+  graph: ModuleGraph,
+  tokens: TokenArena,
+  start: i32,
+  end: i32
+): ModuleGraph {
+  let index = start
+  while index <= end do {
+    graph.linkedTokens = tokenArenaPush(graph.linkedTokens, tokenArenaGet(tokens, index))
+    index = index + 1
+  }
+  if end + 1 < tokens.count {
+    let next = tokenArenaGet(tokens, end + 1)
+    if stringEquals(next.kind, "semicolon") {
+      graph.linkedTokens = tokenArenaPush(graph.linkedTokens, next)
+    }
+  }
+  return graph
+}
+
+function moduleAppendProgramTokens(
+  graph: ModuleGraph,
+  tokens: TokenArena,
+  ast: AstProgram
+): ModuleGraph {
+  let root = astNodeAt(ast, ast.root)
+  let childIndex: i32 = 0
+  while childIndex < root.childCount do {
+    let nodeId = astChildAt(ast, ast.root, childIndex)
+    let node = astNodeAt(ast, nodeId)
+    if !stringEquals(node.kind, "ImportDeclaration") {
+      graph = moduleAppendNodeTokens(graph, tokens, node.tokenStart, node.tokenEnd)
+    }
+    childIndex = childIndex + 1
+  }
+  return graph
+}
+
+function moduleGraphLoad(
+  graph: ModuleGraph,
+  requestedPath: string,
+  parent: i32,
+  chain: string,
+  importFile: string,
+  importOffset: i32,
+  importLine: i32,
+  importColumn: i32
+): ModuleGraph {
+  let path = moduleCanonicalPath(requestedPath)
+  if mapHas(graph.moduleIds, path) {
+    let cachedId = stringToInt(mapGet(graph.moduleIds, path))
+    let cached = moduleGraphModuleAt(graph, cachedId)
+    if cached.state == 1 {
+      graph = moduleGraphFail(
+        graph,
+        "Circular import: " + chain,
+        importFile,
+        importOffset,
+        importLine,
+        importColumn,
+        1
+      )
+    }
+    graph.lastModule = cachedId
+    return graph
+  }
 
   let sourceResult = readFile(path)
   if !isOk(sourceResult) {
-    return err(errorMessage(sourceResult))
+    graph = moduleGraphFail(
+      graph,
+      'Cannot resolve module "' + path + '"',
+      importFile,
+      importOffset,
+      importLine,
+      importColumn,
+      1
+    )
+    return graph
   }
+
   let source = resultValue(sourceResult)
-  let base = moduleDirname(path)
-  let prefix = stringBuilder()
-  let body = stringBuilder()
-  let index: i32 = 0
-  let length = stringLen(source)
-
-  while index < length do {
-    let lineEnd = moduleNextLine(source, index)
-    let line = source[index..lineEnd]
-
-    if includes(line, "import") {
-      if includes(line, "from") {
-        let specifier = moduleImportSpecifier(source, index)
-        let child = moduleResolve(base, specifier)
-        let loadedResult = moduleLoadFile(child, seen)
-        if !isOk(loadedResult) {
-          return err(errorMessage(loadedResult))
-        }
-        let loaded = resultValue(loadedResult)
-        prefix = stringBuilderAppend(prefix, loaded)
-        prefix = stringBuilderAppend(prefix, "
-")
-      } else {
-        body = stringBuilderAppend(body, line)
-      }
-    } else {
-      body = stringBuilderAppend(body, line)
-    }
-
-    index = lineEnd
+  let tokens = tokenizeFile(source, path)
+  if !tokens.ok {
+    return moduleGraphCopyDiagnostics(graph, tokens.diagnostics)
+  }
+  let ast = parseProgram(tokens)
+  if !ast.ok {
+    return moduleGraphCopyDiagnostics(graph, ast.diagnostics)
   }
 
-  prefix = stringBuilderAppend(prefix, body)
-  return ok(prefix)
+  let moduleId = graph.moduleCount
+  let module = CompilerModule {
+    id: moduleId,
+    path: path,
+    source: source,
+    state: 1,
+    parent: parent,
+    importCount: 0,
+    tokenCount: tokens.count,
+    astNodeCount: ast.nodes.count
+  }
+  graph = moduleGraphAddModule(graph, module)
+  graph = moduleCollectDeclarations(graph, moduleId, ast)
+
+  let root = astNodeAt(ast, ast.root)
+  let childIndex: i32 = 0
+  while childIndex < root.childCount do {
+    let nodeId = astChildAt(ast, ast.root, childIndex)
+    let node = astNodeAt(ast, nodeId)
+    if stringEquals(node.kind, "ImportDeclaration") {
+      let specifier = node.value
+      let names = moduleImportNames(ast, nodeId)
+      graph = moduleResolveImport(graph, moduleDirname(path), specifier)
+      if !graph.ok {
+        return graph
+      }
+
+      let target: i32 = -1
+      let allowedExports = graph.resolvedExports
+      if !graph.resolvedBuiltin {
+        let resolvedPath = graph.resolvedPath
+        let nextChain = chain + " -> " + moduleBasename(resolvedPath)
+        graph = moduleGraphLoad(
+          graph,
+          resolvedPath,
+          moduleId,
+          nextChain,
+          node.file,
+          node.offset,
+          node.line,
+          node.column
+        )
+        if !graph.ok {
+          return graph
+        }
+        target = moduleGraphFindModule(graph, resolvedPath)
+        graph = moduleValidateImport(
+          graph,
+          target,
+          names,
+          allowedExports,
+          specifier,
+          node.file,
+          node.offset,
+          node.line,
+          node.column
+        )
+        if !graph.ok {
+          return graph
+        }
+      }
+
+      let edge = CompilerImport {
+        importer: moduleId,
+        target: target,
+        specifier: specifier,
+        names: names,
+        allowedExports: allowedExports,
+        file: node.file,
+        offset: node.offset,
+        line: node.line,
+        column: node.column
+      }
+      graph = moduleGraphAddImport(graph, edge)
+    }
+    childIndex = childIndex + 1
+  }
+
+  graph = moduleAppendProgramTokens(graph, tokens, ast)
+  graph = moduleGraphSetModuleState(graph, moduleId, 2)
+  graph.lastModule = moduleId
+  if parent < 0 {
+    graph.entry = moduleId
+    graph.entryPath = path
+    graph.entrySource = source
+  }
+  return graph
 }
 
-function loadModuleSource(path: string): Result<string> {
-  let seen = map("unused", "unused")
-  return moduleLoadFile(path, seen)
+function moduleGraphFinish(graph: ModuleGraph): ModuleGraph {
+  if !graph.ok {
+    return graph
+  }
+  let entry = moduleGraphModuleAt(graph, graph.entry)
+  let eof = CompilerToken {
+    kind: "eof",
+    lexeme: "",
+    literal: "",
+    file: entry.path,
+    offset: stringLen(entry.source),
+    line: 1,
+    column: 1
+  }
+  graph.linkedTokens = tokenArenaPush(graph.linkedTokens, eof)
+  graph.program = parseProgram(graph.linkedTokens)
+  if !graph.program.ok {
+    graph = moduleGraphCopyDiagnostics(graph, graph.program.diagnostics)
+  }
+  return graph
+}
+
+function loadModuleGraphWithPackageRoot(path: string, packageRoot: string): ModuleGraph {
+  let graph = moduleGraph(packageRoot)
+  let canonical = moduleCanonicalPath(path)
+  graph = moduleGraphLoad(
+    graph,
+    canonical,
+    -1,
+    moduleBasename(canonical),
+    canonical,
+    0,
+    1,
+    1
+  )
+  return moduleGraphFinish(graph)
+}
+
+function loadModuleGraph(path: string): ModuleGraph {
+  return loadModuleGraphWithPackageRoot(path, ".photon/packages")
 }

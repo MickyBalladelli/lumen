@@ -59,9 +59,9 @@ const diagnostics = [
   ['throw-type-mismatch', join('tests', 'negative', 'throw-type-mismatch.lm'), 'compile error: throw expects string or error, got i32 at line 2 near throw\n'],
   ['for-of-non-array', join('tests', 'negative', 'for-of-non-array.lm'), 'compile error: for-of needs an array at line 3 near of\n'],
   ['switch-case-mismatch', join('tests', 'negative', 'switch-case-mismatch.lm'), 'compile error: cannot compare switch i32 with case string at line 4 near case\n'],
-  ['unterminated-string', join('tests', 'bootstrap', 'unterminated-string.lm'), 'compile error: Unterminated string literal at line 2\n'],
-  ['unterminated-comment', join('tests', 'bootstrap', 'unterminated-comment.lm'), 'compile error: Unterminated block comment at line 2\n'],
-  ['unexpected-character', join('tests', 'bootstrap', 'unexpected-character.lm'), 'compile error: Unexpected character "@" at line 2\n']
+  ['unterminated-string', join('tests', 'bootstrap', 'unterminated-string.lm'), 'compile error: Unterminated string literal at tests/bootstrap/unterminated-string.lm:2:11\n'],
+  ['unterminated-comment', join('tests', 'bootstrap', 'unterminated-comment.lm'), 'compile error: Unterminated block comment at tests/bootstrap/unterminated-comment.lm:2:3\n'],
+  ['unexpected-character', join('tests', 'bootstrap', 'unexpected-character.lm'), 'compile error: Unexpected character "@" at tests/bootstrap/unexpected-character.lm:2:3\n']
 ]
 
 await suite.test('build stage-1 compiler', async () => {

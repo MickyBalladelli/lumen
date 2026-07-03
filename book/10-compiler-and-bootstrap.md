@@ -214,13 +214,19 @@ The module graph in `src/modules/` manages import resolution:
 
 ### Module Loading In The Self-Host Path
 
-The self-host module loader (`compiler/modules.lm`) recursively loads:
+The self-host module graph (`compiler/modules.lm`) now follows the same shape:
 
-- **Local imports** — files on disk relative to the importing file
-- **Bare package `main.lm`** — packages that have a `main.lm` entry point
-- **Duplicate skipping** — already-loaded paths are not reloaded
-- **Import removal** — handled import declarations are stripped from the source
-  before feeding the flattened program to the parser
+- **Separate parsing** — imports come from each module's typed AST
+- **Canonical resolution** — normalized relative paths and Photon package
+  entry points become graph module identities
+- **Typed nodes and edges** — modules retain source, parse counts, state, and
+  named import edges
+- **Export checks** — Photon manifest exports and target declarations are
+  validated before linking
+- **Cycle and diamond handling** — loading-state cycles fail with their chain;
+  canonical modules are loaded once
+- **Compatibility linking** — non-import token ranges are projected from the
+  parsed modules into one linked AST for the current semantic and IR passes
 
 ## Bootstrap Compiler
 
@@ -239,7 +245,7 @@ growing subset of the language. The exact tested subset lives in the
 | `compiler/typechecker.lm` | | `TypeResult` — checks annotated variable initializers and first-argument function calls including `none()` and `ok(...)` shapes |
 | `compiler/ir.lm` | | `IrModule` — lowers AST/statement bridge into module facts, instruction counts, return values, print counts, call/binary/loop flags |
 | `compiler/emitter.lm` | | LLVM emission with `emitIr(...)` entry point. Internals still delegate through the legacy statement bridge |
-| `compiler/modules.lm` | | Recursive module loader for local imports and package `main.lm` files |
+| `compiler/modules.lm` | | Typed module graph with AST import discovery, canonical local and Photon resolution, export checks, cycle detection, and load-once caching |
 | `compiler/main.lm` | | CLI entry point — reads source, runs pipeline, writes LLVM IR |
 
 ### Parser Coverage

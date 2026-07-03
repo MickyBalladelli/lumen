@@ -1,11 +1,10 @@
-import { tokenizeFile } from "./tokenizer.lm"
-import { loadModuleSource } from "./modules.lm"
-import { parseProgram } from "./parser.lm"
+import { TokenArena, diagnosticArenaGet, tokenArenaGet } from "./containers.lm"
+import { AstProgram } from "./ast.lm"
+import { loadModuleGraph } from "./modules.lm"
 import { analyzeSemantics } from "./semantics.lm"
 import { checkTypes } from "./typechecker.lm"
 import { buildIr } from "./ir.lm"
 import { emitIr } from "./emitter.lm"
-import { TokenArena, diagnosticArenaGet, tokenArenaGet } from "./containers.lm"
 
 function diagnosticTokenText(tokens: TokenArena, index: i32): string {
   let token = tokenArenaGet(tokens, index)
@@ -72,28 +71,11 @@ function diagnosticMessage(source: string, tokens: TokenArena, message: string, 
 }
 
 function compileTiny(input: string, output: string): i32 {
-  let sourceResult = loadModuleSource(input)
-  if !isOk(sourceResult) {
-    println(errorMessage(sourceResult))
-    return 1
-  }
-  let source = resultValue(sourceResult)
-  let tokens = tokenizeFile(source, input)
-  if !tokens.ok {
-    let diagnostic = diagnosticArenaGet(tokens.diagnostics, 0)
-    println(
-      "compile error: " +
-      diagnostic.message +
-      " at line " +
-      intToString(diagnostic.line)
-    )
-    return 1
-  }
-  let ast = parseProgram(tokens)
-  if !ast.ok {
+  let graph = loadModuleGraph(input)
+  if !graph.ok {
     let diagnosticIndex: i32 = 0
-    while diagnosticIndex < ast.diagnostics.count do {
-      let diagnostic = diagnosticArenaGet(ast.diagnostics, diagnosticIndex)
+    while diagnosticIndex < graph.diagnostics.count do {
+      let diagnostic = diagnosticArenaGet(graph.diagnostics, diagnosticIndex)
       println(
         "compile error: " +
         diagnostic.message +
@@ -108,6 +90,9 @@ function compileTiny(input: string, output: string): i32 {
     }
     return 1
   }
+  let source = graph.entrySource
+  let ast = graph.program
+  let tokens = ast.tokens
   let semanticResult = analyzeSemantics(ast)
 
   if semanticResult.ok {

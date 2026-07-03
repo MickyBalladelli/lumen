@@ -1,0 +1,6 @@
+import { left } from "./left.lm"
+import { right } from "./nested/../right.lm"
+
+function main(): i32 {
+  return left() + right()
+}
