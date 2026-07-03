@@ -1,19 +1,30 @@
-import { CompilerToken, TokenArena, tokenArena, tokenArenaPush } from "./containers.lm"
+import { CompilerDiagnostic, CompilerToken, TokenArena, diagnosticArenaPush, tokenArena, tokenArenaGet, tokenArenaPush } from "./containers.lm"
 
-function charAt(source: string, index: i32): string {
+function tokenizerChar(source: string, index: i32): string {
+  if index < 0 {
+    return ""
+  }
+
+  if index >= stringLen(source) {
+    return ""
+  }
+
   return source[index..index + 1]
 }
 
-function isWhitespace(ch: string): bool {
-  return includes(' 	
-', ch)
-}
+function tokenizerIsDigit(ch: string): bool {
+  if stringEquals(ch, "") {
+    return false
+  }
 
-function isDigit(ch: string): bool {
   return includes("0123456789", ch)
 }
 
-function isAlpha(ch: string): bool {
+function tokenizerIsAlpha(ch: string): bool {
+  if stringEquals(ch, "") {
+    return false
+  }
+
   if includes("abcdefghijklmnopqrstuvwxyz", ch) {
     return true
   }
@@ -22,23 +33,175 @@ function isAlpha(ch: string): bool {
     return true
   }
 
-  return includes("_", ch)
+  return stringEquals(ch, "_")
 }
 
-function isAlphaNumeric(ch: string): bool {
-  if isAlpha(ch) {
+function tokenizerIsAlphaNumeric(ch: string): bool {
+  if tokenizerIsAlpha(ch) {
     return true
   }
 
-  return isDigit(ch)
+  return tokenizerIsDigit(ch)
 }
 
-function addToken(tokens: TokenArena, kind: string, value: string, offset: i32, line: i32, column: i32): TokenArena {
+function tokenizerIsKeyword(value: string): bool {
+  let keywordsA = "|function|let|const|struct|enum|extern|for|of|in|import|match|if|else|switch|case|default|"
+  let keywordsB = "|from|defer|break|continue|while|do|until|try|catch|throw|async|await|return|true|false|null|"
+  let wrapped = "|" + value + "|"
+  if includes(keywordsA, wrapped) {
+    return true
+  }
+
+  return includes(keywordsB, wrapped)
+}
+
+function tokenizerIsContinuation(value: string): bool {
+  let continuations = "|+|-|*|/|%|=|==|===|!=|!==|<|<=|>|>=|&&||||.|,|?|:|"
+  return includes(continuations, "|" + value + "|")
+}
+
+function tokenizerCanEndStatement(token: CompilerToken): bool {
+  if stringEquals(token.kind, "identifier") {
+    return true
+  }
+
+  if stringEquals(token.kind, "number") {
+    return true
+  }
+
+  if stringEquals(token.kind, "string") {
+    return true
+  }
+
+  if stringEquals(token.kind, "keyword") {
+    if stringEquals(token.lexeme, "true") {
+      return true
+    }
+
+    if stringEquals(token.lexeme, "false") {
+      return true
+    }
+
+    if stringEquals(token.lexeme, "null") {
+      return true
+    }
+
+    if stringEquals(token.lexeme, "return") {
+      return true
+    }
+
+    if stringEquals(token.lexeme, "break") {
+      return true
+    }
+
+    if stringEquals(token.lexeme, "continue") {
+      return true
+    }
+  }
+
+  if stringEquals(token.kind, "operator") {
+    if stringEquals(token.lexeme, "++") {
+      return true
+    }
+
+    if stringEquals(token.lexeme, "--") {
+      return true
+    }
+  }
+
+  if stringEquals(token.kind, "punctuation") {
+    if stringEquals(token.lexeme, ")") {
+      return true
+    }
+
+    if stringEquals(token.lexeme, "]") {
+      return true
+    }
+
+    if stringEquals(token.lexeme, "}") {
+      return true
+    }
+  }
+
+  return false
+}
+
+function tokenizerPreviousSignificant(tokens: TokenArena): CompilerToken {
+  let index = tokens.count - 1
+
+  while index >= 0 do {
+    let token = tokenArenaGet(tokens, index)
+    if stringEquals(token.kind, "semicolon") {
+      index = index - 1
+      continue
+    }
+
+    return token
+  }
+
+  return CompilerToken {
+    kind: "",
+    lexeme: "",
+    literal: "",
+    file: "",
+    offset: 0,
+    line: 0,
+    column: 0
+  }
+}
+
+function tokenizerNextStartsContinuation(source: string, index: i32): bool {
+  let length = stringLen(source)
+
+  while index < length do {
+    let ch = tokenizerChar(source, index)
+    if stringEquals(ch, " ") {
+      index = index + 1
+      continue
+    }
+
+    if stringEquals(ch, "	") {
+      index = index + 1
+      continue
+    }
+
+    if stringEquals(ch, "\r") {
+      index = index + 1
+      continue
+    }
+
+    if stringEquals(ch, "
+") {
+      return false
+    }
+
+    let next = tokenizerChar(source, index + 1)
+    let two = ch + next
+    if tokenizerIsContinuation(two) {
+      return true
+    }
+
+    return tokenizerIsContinuation(ch)
+  }
+
+  return false
+}
+
+function tokenizerAdd(
+  tokens: TokenArena,
+  kind: string,
+  lexeme: string,
+  literal: string,
+  file: string,
+  offset: i32,
+  line: i32,
+  column: i32
+): TokenArena {
   let token = CompilerToken {
     kind: kind,
-    lexeme: value,
-    literal: value,
-    file: "",
+    lexeme: lexeme,
+    literal: literal,
+    file: file,
     offset: offset,
     line: line,
     column: column
@@ -46,37 +209,95 @@ function addToken(tokens: TokenArena, kind: string, value: string, offset: i32, 
   return tokenArenaPush(tokens, token)
 }
 
-function tokenize(source: string): TokenArena {
+function tokenizerError(
+  tokens: TokenArena,
+  message: string,
+  file: string,
+  offset: i32,
+  line: i32,
+  column: i32,
+  length: i32
+): TokenArena {
+  let diagnostic = CompilerDiagnostic {
+    severity: "error",
+    message: message,
+    file: file,
+    offset: offset,
+    line: line,
+    column: column,
+    length: length
+  }
+  tokens.ok = false
+  tokens.diagnostics = diagnosticArenaPush(tokens.diagnostics, diagnostic)
+  return tokens
+}
+
+function tokenizeFile(source: string, file: string): TokenArena {
   let tokens = tokenArena()
   let index: i32 = 0
-  let length = stringLen(source)
   let line: i32 = 1
   let column: i32 = 1
+  let length = stringLen(source)
+  let parenDepth: i32 = 0
+  let bracketDepth: i32 = 0
+  let braceDepth: i32 = 0
 
   while index < length do {
-    let ch = charAt(source, index)
+    let start = index
+    let tokenLine = line
+    let tokenColumn = column
+    let ch = tokenizerChar(source, index)
+    index = index + 1
 
-    if isWhitespace(ch) {
-      if includes('
-', ch) {
-        line = line + 1
-        column = 1
-      } else {
-        column = column + 1
+    if stringEquals(ch, "
+") {
+      line = line + 1
+      column = 1
+
+      if parenDepth > 0 {
+        continue
       }
-      index = index + 1
+
+      if bracketDepth > 0 {
+        continue
+      }
+
+      let previous = tokenizerPreviousSignificant(tokens)
+      if stringEquals(previous.kind, "") {
+        continue
+      }
+
+      if !tokenizerCanEndStatement(previous) {
+        continue
+      }
+
+      if tokenizerNextStartsContinuation(source, index) {
+        continue
+      }
+
+      tokens = tokenizerAdd(tokens, "semicolon", "
+", "", file, start, tokenLine, tokenColumn)
       continue
     }
 
-    if isAlpha(ch) {
-      let start = index
-      let startColumn = column
-      index = index + 1
-      column = column + 1
+    column = column + 1
 
+    if stringEquals(ch, " ") {
+      continue
+    }
+
+    if stringEquals(ch, "	") {
+      continue
+    }
+
+    if stringEquals(ch, "\r") {
+      continue
+    }
+
+    if tokenizerIsAlpha(ch) {
       while index < length do {
-        let next = charAt(source, index)
-        if isAlphaNumeric(next) {
+        let next = tokenizerChar(source, index)
+        if tokenizerIsAlphaNumeric(next) {
           index = index + 1
           column = column + 1
           continue
@@ -86,19 +307,18 @@ function tokenize(source: string): TokenArena {
       }
 
       let value = source[start..index]
-      tokens = addToken(tokens, "identifier", value, start, line, startColumn)
+      let kind = "identifier"
+      if tokenizerIsKeyword(value) {
+        kind = "keyword"
+      }
+      tokens = tokenizerAdd(tokens, kind, value, "", file, start, tokenLine, tokenColumn)
       continue
     }
 
-    if isDigit(ch) {
-      let start = index
-      let startColumn = column
-      index = index + 1
-      column = column + 1
-
+    if tokenizerIsDigit(ch) {
       while index < length do {
-        let next = charAt(source, index)
-        if isDigit(next) {
+        let next = tokenizerChar(source, index)
+        if tokenizerIsDigit(next) {
           index = index + 1
           column = column + 1
           continue
@@ -107,45 +327,224 @@ function tokenize(source: string): TokenArena {
         break
       }
 
+      if stringEquals(tokenizerChar(source, index), ".") {
+        if tokenizerIsDigit(tokenizerChar(source, index + 1)) {
+          index = index + 1
+          column = column + 1
+
+          while index < length do {
+            let next = tokenizerChar(source, index)
+            if tokenizerIsDigit(next) {
+              index = index + 1
+              column = column + 1
+              continue
+            }
+
+            break
+          }
+        }
+      }
+
       let value = source[start..index]
-      tokens = addToken(tokens, "number", value, start, line, startColumn)
+      tokens = tokenizerAdd(tokens, "number", value, value, file, start, tokenLine, tokenColumn)
       continue
     }
 
-    if includes('"', ch) {
-      let tokenOffset = index
-      let tokenLine = line
-      let tokenColumn = column
-      let start = index + 1
-      index = index + 1
-      column = column + 1
+    if stringEquals(ch, '"') || stringEquals(ch, "'") {
+      let quote = ch
 
       while index < length do {
-        if includes('"', charAt(source, index)) {
+        let next = tokenizerChar(source, index)
+        if stringEquals(next, quote) {
           break
         }
 
-        if includes('
-', charAt(source, index)) {
+        index = index + 1
+        if stringEquals(next, "
+") {
           line = line + 1
           column = 1
         } else {
           column = column + 1
         }
-        index = index + 1
       }
 
-      let value = source[start..index]
-      tokens = addToken(tokens, "string", value, tokenOffset, tokenLine, tokenColumn)
+      if index >= length {
+        return tokenizerError(
+          tokens,
+          "Unterminated string literal",
+          file,
+          start,
+          tokenLine,
+          tokenColumn,
+          index - start
+        )
+      }
+
       index = index + 1
       column = column + 1
+      let lexeme = source[start..index]
+      let value = source[start + 1..index - 1]
+      tokens = tokenizerAdd(tokens, "string", lexeme, value, file, start, tokenLine, tokenColumn)
       continue
     }
 
-    tokens = addToken(tokens, "symbol", ch, index, line, column)
-    index = index + 1
-    column = column + 1
+    if stringEquals(ch, "/") {
+      if stringEquals(tokenizerChar(source, index), "/") {
+        index = index + 1
+        column = column + 1
+
+        while index < length do {
+          if stringEquals(tokenizerChar(source, index), "
+") {
+            break
+          }
+
+          index = index + 1
+          column = column + 1
+        }
+
+        continue
+      }
+
+      if stringEquals(tokenizerChar(source, index), "*") {
+        index = index + 1
+        column = column + 1
+        let closed: bool = false
+
+        while index < length do {
+          let next = tokenizerChar(source, index)
+          if stringEquals(next, "*") {
+            if stringEquals(tokenizerChar(source, index + 1), "/") {
+              index = index + 2
+              column = column + 2
+              closed = true
+              break
+            }
+          }
+
+          index = index + 1
+          if stringEquals(next, "
+") {
+            line = line + 1
+            column = 1
+          } else {
+            column = column + 1
+          }
+        }
+
+        if !closed {
+          return tokenizerError(
+            tokens,
+            "Unterminated block comment",
+            file,
+            start,
+            tokenLine,
+            tokenColumn,
+            index - start
+          )
+        }
+
+        continue
+      }
+
+      tokens = tokenizerAdd(tokens, "operator", "/", "", file, start, tokenLine, tokenColumn)
+      continue
+    }
+
+    if stringEquals(ch, ";") {
+      tokens = tokenizerAdd(tokens, "semicolon", ";", "", file, start, tokenLine, tokenColumn)
+      continue
+    }
+
+    if stringEquals(ch, "(") {
+      parenDepth = parenDepth + 1
+      tokens = tokenizerAdd(tokens, "punctuation", ch, "", file, start, tokenLine, tokenColumn)
+      continue
+    }
+
+    if stringEquals(ch, ")") {
+      parenDepth = parenDepth - 1
+      tokens = tokenizerAdd(tokens, "punctuation", ch, "", file, start, tokenLine, tokenColumn)
+      continue
+    }
+
+    if stringEquals(ch, "[") {
+      bracketDepth = bracketDepth + 1
+      tokens = tokenizerAdd(tokens, "punctuation", ch, "", file, start, tokenLine, tokenColumn)
+      continue
+    }
+
+    if stringEquals(ch, "]") {
+      bracketDepth = bracketDepth - 1
+      tokens = tokenizerAdd(tokens, "punctuation", ch, "", file, start, tokenLine, tokenColumn)
+      continue
+    }
+
+    if stringEquals(ch, "{") {
+      braceDepth = braceDepth + 1
+      tokens = tokenizerAdd(tokens, "punctuation", ch, "", file, start, tokenLine, tokenColumn)
+      continue
+    }
+
+    if stringEquals(ch, "}") {
+      braceDepth = braceDepth - 1
+      tokens = tokenizerAdd(tokens, "punctuation", ch, "", file, start, tokenLine, tokenColumn)
+      continue
+    }
+
+    let next = tokenizerChar(source, index)
+    let afterNext = tokenizerChar(source, index + 1)
+    let two = ch + next
+    let three = two + afterNext
+
+    if stringEquals(three, "===") || stringEquals(three, "!==") {
+      index = index + 2
+      column = column + 2
+      tokens = tokenizerAdd(tokens, "operator", three, "", file, start, tokenLine, tokenColumn)
+      continue
+    }
+
+    if stringEquals(two, "==") ||
+      stringEquals(two, "!=") ||
+      stringEquals(two, "<=") ||
+      stringEquals(two, ">=") ||
+      stringEquals(two, "&&") ||
+      stringEquals(two, "||") ||
+      stringEquals(two, "++") ||
+      stringEquals(two, "--") ||
+      stringEquals(two, "=>") {
+      index = index + 1
+      column = column + 1
+      tokens = tokenizerAdd(tokens, "operator", two, "", file, start, tokenLine, tokenColumn)
+      continue
+    }
+
+    if includes("+-*%=!<>.&|?:", ch) {
+      tokens = tokenizerAdd(tokens, "operator", ch, "", file, start, tokenLine, tokenColumn)
+      continue
+    }
+
+    if includes(",.", ch) {
+      tokens = tokenizerAdd(tokens, "punctuation", ch, "", file, start, tokenLine, tokenColumn)
+      continue
+    }
+
+    return tokenizerError(
+      tokens,
+      "Unexpected character " + '"' + ch + '"',
+      file,
+      start,
+      tokenLine,
+      tokenColumn,
+      1
+    )
   }
 
+  tokens = tokenizerAdd(tokens, "eof", "", "", file, index, line, column)
   return tokens
+}
+
+function tokenize(source: string): TokenArena {
+  return tokenizeFile(source, "")
 }

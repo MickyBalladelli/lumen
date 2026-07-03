@@ -25,7 +25,10 @@ export const FeatureParityMatrix = Object.freeze([
   diagnostic('diagnostic-for-of-type', 'for-of iterable diagnostic', 'tests/negative/for-of-non-array.lm', 'for-of needs an array', 3),
   diagnostic('diagnostic-switch-type', 'switch case diagnostic', 'tests/negative/switch-case-mismatch.lm', 'cannot compare switch i32 with case string', 4),
   diagnostic('diagnostic-nullable-call', 'nullable call diagnostic', 'tests/negative/none-to-string.lm', 'cannot pass none to string', 6),
-  diagnostic('diagnostic-result-call', 'Result call diagnostic', 'tests/negative/result-type-mismatch.lm', 'cannot pass result<i32> to result<string>', 6)
+  diagnostic('diagnostic-result-call', 'Result call diagnostic', 'tests/negative/result-type-mismatch.lm', 'cannot pass result<i32> to result<string>', 6),
+  diagnostic('diagnostic-unterminated-string', 'unterminated string diagnostic', 'tests/bootstrap/unterminated-string.lm', 'unterminated string literal', 2),
+  diagnostic('diagnostic-unterminated-comment', 'unterminated comment diagnostic', 'tests/bootstrap/unterminated-comment.lm', 'unterminated block comment', 2),
+  diagnostic('diagnostic-unexpected-character', 'unexpected character diagnostic', 'tests/bootstrap/unexpected-character.lm', 'unexpected character @', 2)
 ])
 
 export const ParityDimensions = Object.freeze([

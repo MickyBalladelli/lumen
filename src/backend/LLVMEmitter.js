@@ -99,6 +99,7 @@ export class LLVMEmitter {
     this.temp = 0
     this.label = 0
     this.lines = this.createLineBuffer()
+    this.entryAllocas = []
     this.scopes = [new Map()]
     this.tryStack = []
     this.loopStack = []
@@ -137,6 +138,8 @@ export class LLVMEmitter {
       this.lines.push(this.defaultReturn(func.returnType))
     }
 
+    const entryIndex = this.lines.indexOf('entry:')
+    this.lines.splice(entryIndex + 1, 0, ...this.entryAllocas)
     this.lines.push('}')
     this.currentDebugScope = null
     this.currentDebugFile = null
@@ -244,7 +247,9 @@ export class LLVMEmitter {
     const storageType = this.typeSystem.isArray(type)
       ? this.typeSystem.llvmArray(type, length)
       : this.llvmType(type)
-    this.lines.push(`  ${pointer} = alloca ${storageType}`)
+    this.entryAllocas.push(
+      this.attachDebugLocation(`  ${pointer} = alloca ${storageType}`)
+    )
     this.emitDebugDeclare(name, pointer, type, debugLocation, {
       isParameter,
       argumentIndex

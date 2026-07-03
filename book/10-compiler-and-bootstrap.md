@@ -23,8 +23,7 @@ The tokenizer converts source text into a stream of tokens.
 Keywords recognized: `function`, `let`, `const`, `if`, `else`, `for`, `of`,
 `in`, `while`, `do`, `until`, `return`, `struct`, `enum`, `match`, `switch`,
 `case`, `default`, `break`, `continue`, `defer`, `throw`, `try`, `catch`,
-`import`, `from`, `extern`, `async`, `await`, `true`, `false`, `none`, `ok`,
-`err`, `some`.
+`import`, `from`, `extern`, `async`, `await`, `true`, `false`, and `null`.
 
 The tokenizer handles comments, string literals, numeric literals, identifiers,
 operators, and whitespace. It tracks line and column for error reporting.
@@ -233,7 +232,7 @@ growing subset of the language. The exact tested subset lives in the
 
 | File | Lines | Purpose |
 | --- | --- | --- |
-| `compiler/tokenizer.lm` | | Tokenizes a Lumen subset into tokens |
+| `compiler/tokenizer.lm` | | Produces typed tokens with primary-grammar keywords, comments, literals, operators, punctuation, newline termination, locations, and structured lexical errors |
 | `compiler/ast.lm` | | Typed AST entry point with `parseAst(...)` |
 | `compiler/parser.lm` | | Parses tokens into program model: functions, statements, calls, expressions |
 | `compiler/semantics.lm` | | `SemanticResult` — checks `main`, duplicate symbols, `while 1`, `break`/`continue` validity |

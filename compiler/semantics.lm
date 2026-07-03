@@ -31,6 +31,10 @@ function semanticError(message: string, symbolCount: i32, tokenIndex: i32): Sema
 }
 
 function semanticTokenValue(token: CompilerToken): string {
+  if stringEquals(token.kind, "string") {
+    return token.literal
+  }
+
   return token.lexeme
 }
 
@@ -183,7 +187,7 @@ function semanticSymbolName(tokens: TokenArena, index: i32): string {
 
 function semanticIsNamedDeclaration(tokens: TokenArena, index: i32): bool {
   let kind = semanticTokenKind(tokenArenaGet(tokens, index))
-  if stringEquals(kind, "identifier") {
+  if stringEquals(kind, "keyword") {
     let okKind = 1
   } else {
     return false
@@ -256,7 +260,7 @@ function analyzeSemantics(ast: AstProgram, tokens: TokenArena): SemanticResult {
     let currentKind = semanticTokenKind(tokenArenaGet(tokens, index))
     let current = semanticTokenValue(tokenArenaGet(tokens, index))
 
-    if stringEquals(currentKind, "identifier") {
+    if stringEquals(currentKind, "keyword") {
       if stringEquals(current, "for") {
         pendingLoop = true
       }
@@ -334,7 +338,7 @@ function analyzeSemantics(ast: AstProgram, tokens: TokenArena): SemanticResult {
       }
     }
 
-    if stringEquals(currentKind, "identifier") {
+    if stringEquals(currentKind, "keyword") {
       if stringEquals(current, "while") {
       let condition = semanticTokenValue(tokenArenaGet(tokens, index + 1))
       if stringEquals(condition, "1") {
@@ -343,7 +347,7 @@ function analyzeSemantics(ast: AstProgram, tokens: TokenArena): SemanticResult {
       }
     }
 
-    if stringEquals(currentKind, "identifier") {
+    if stringEquals(currentKind, "keyword") {
     if stringEquals(current, "break") {
       if loopDepth > 0 {
         let okLoopBreak = 1
@@ -355,7 +359,7 @@ function analyzeSemantics(ast: AstProgram, tokens: TokenArena): SemanticResult {
     }
     }
 
-    if stringEquals(currentKind, "identifier") {
+    if stringEquals(currentKind, "keyword") {
     if stringEquals(current, "continue") {
       if loopDepth > 0 {
         let okContinue = 1

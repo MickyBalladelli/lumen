@@ -42,7 +42,7 @@ copy embedded stage-1 LLVM instead of compiling the Lumen source.
   symbols, IR values, blocks, and diagnostics. Stop encoding compiler records
   and collections into delimiter-sensitive strings.
 
-- [ ] Replace the bootstrap tokenizer with a complete tokenizer.
+- [x] Replace the bootstrap tokenizer with a complete tokenizer.
   Emit typed tokens with kind, lexeme, literal value, file, offset, line, and
   column. Support the same keywords, comments, strings, numbers, multi-character
   operators, punctuation, and newline termination rules as the primary grammar.

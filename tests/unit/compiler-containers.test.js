@@ -50,7 +50,7 @@ test('arena builtins have typed mixed-value signatures', () => {
 test('bootstrap tokenizer stores records as typed tokens', async () => {
   const source = await readFile('compiler/tokenizer.lm', 'utf8')
 
-  assert.match(source, /function tokenize\(source: string\): TokenArena/)
+  assert.match(source, /function tokenizeFile\(source: string, file: string\): TokenArena/)
   assert.match(source, /CompilerToken \{/)
   assert.doesNotMatch(source, /listPush\(/)
   assert.doesNotMatch(source, /kind \+ ":" \+ value/)

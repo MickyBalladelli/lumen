@@ -1,12 +1,16 @@
+import { tokenArenaGet } from "../compiler/containers.lm"
 import { tokenize } from "../compiler/tokenizer.lm"
 
 function main(): i32 {
   let tokens = tokenize("function main(): i32 { return 7 }")
+  let first = tokenArenaGet(tokens, 0)
+  let second = tokenArenaGet(tokens, 1)
+  let number = tokenArenaGet(tokens, 8)
 
-  println(listLen(tokens))
-  println(listGet(tokens, 0))
-  println(listGet(tokens, 1))
-  println(listGet(tokens, 8))
+  println(tokens.count)
+  println(first.kind + ":" + first.lexeme)
+  println(second.kind + ":" + second.lexeme)
+  println(number.kind + ":" + number.lexeme)
 
   return 0
 }

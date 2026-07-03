@@ -1,0 +1,112 @@
+import { CompilerToken, TokenArena, diagnosticArenaGet, tokenArenaGet } from "../../compiler/containers.lm"
+import { tokenizeFile } from "../../compiler/tokenizer.lm"
+
+function findToken(tokens: TokenArena, lexeme: string): CompilerToken {
+  let index: i32 = 0
+  while index < tokens.count do {
+    let token = tokenArenaGet(tokens, index)
+    if stringEquals(token.lexeme, lexeme) {
+      return token
+    }
+    index = index + 1
+  }
+
+  return CompilerToken {
+    kind: "",
+    lexeme: "",
+    literal: "",
+    file: "",
+    offset: 0,
+    line: 0,
+    column: 0
+  }
+}
+
+function countKind(tokens: TokenArena, kind: string): i32 {
+  let count: i32 = 0
+  let index: i32 = 0
+  while index < tokens.count do {
+    let token = tokenArenaGet(tokens, index)
+    if stringEquals(token.kind, kind) {
+      count = count + 1
+    }
+    index = index + 1
+  }
+  return count
+}
+
+function main(): i32 {
+  let keywordSource = "function let const struct enum extern for of in import from match if else switch case default defer break continue while do until try catch throw async await return true false null"
+  let keywords = tokenizeFile(keywordSource, "keywords.lm")
+  assert(keywords.ok, "keyword source must tokenize")
+  assert(countKind(keywords, "keyword") == 32, "all primary keywords must be recognized")
+
+  let source = "function sample(value: f32) {
+  // line comment
+  let text = 'ok'
+  let number = 12.5
+  let continued = number
+    + 1
+  if number !== 0 && true || false {
+    number++
+  }
+  /* block
+     comment */
+  return (
+    number
+  )
+}"
+
+  let tokens = tokenizeFile(source, "features.lm")
+  assert(tokens.ok, "valid source must tokenize")
+
+  let keyword = findToken(tokens, "function")
+  assert(stringEquals(keyword.kind, "keyword"), "function must be keyword")
+  assert(stringEquals(keyword.file, "features.lm"), "token must keep file")
+  assert(keyword.offset == 0, "token must keep offset")
+  assert(keyword.line == 1, "token must keep line")
+  assert(keyword.column == 1, "token must keep column")
+  assert(stringEquals(keyword.literal, ""), "keyword has no literal")
+
+  let text = findToken(tokens, "'ok'")
+  assert(stringEquals(text.kind, "string"), "single quoted string must tokenize")
+  assert(stringEquals(text.literal, "ok"), "string literal value must exclude quotes")
+  assert(text.line == 3, "string line must be tracked")
+
+  let number = findToken(tokens, "12.5")
+  assert(stringEquals(number.kind, "number"), "float must tokenize")
+  assert(stringEquals(number.literal, "12.5"), "number literal must be retained")
+
+  let strictInequality = findToken(tokens, "!==")
+  let logicalAnd = findToken(tokens, "&&")
+  let logicalOr = findToken(tokens, "||")
+  let increment = findToken(tokens, "++")
+  assert(stringEquals(strictInequality.kind, "operator"), "strict inequality must be one token")
+  assert(stringEquals(logicalAnd.kind, "operator"), "and must be one token")
+  assert(stringEquals(logicalOr.kind, "operator"), "or must be one token")
+  assert(stringEquals(increment.kind, "operator"), "increment must be one token")
+  assert(countKind(tokens, "semicolon") == 6, "newline termination must match grammar")
+  assert(countKind(tokens, "eof") == 1, "token stream must end with EOF")
+
+  let badString = tokenizeFile("'unfinished", "bad-string.lm")
+  assert(!badString.ok, "unterminated string must fail")
+  let stringError = diagnosticArenaGet(badString.diagnostics, 0)
+  assert(stringEquals(stringError.message, "Unterminated string literal"), "string error must be structured")
+  assert(stringEquals(stringError.file, "bad-string.lm"), "string error must keep file")
+  assert(stringError.offset == 0, "string error must keep offset")
+  assert(stringError.line == 1, "string error must keep line")
+  assert(stringError.column == 1, "string error must keep column")
+
+  let badComment = tokenizeFile("/* unfinished", "bad-comment.lm")
+  assert(!badComment.ok, "unterminated comment must fail")
+  let commentError = diagnosticArenaGet(badComment.diagnostics, 0)
+  assert(stringEquals(commentError.message, "Unterminated block comment"), "comment error must be structured")
+
+  let badCharacter = tokenizeFile("@", "bad-character.lm")
+  assert(!badCharacter.ok, "unexpected character must fail")
+  let characterError = diagnosticArenaGet(badCharacter.diagnostics, 0)
+  assert(stringEquals(characterError.message, 'Unexpected character "@"'), "character error must be structured")
+
+  println("bootstrap tokenizer")
+  return 0
+}

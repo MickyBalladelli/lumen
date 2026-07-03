@@ -23,6 +23,12 @@ const cases = [
     stdout: 'lossless containers\n'
   },
   {
+    name: 'bootstrap tokenizer',
+    source: 'tests/runtime/bootstrap-tokenizer.lm',
+    code: 0,
+    stdout: 'bootstrap tokenizer\n'
+  },
+  {
     name: 'array bounds',
     source: 'tests/runtime/array-out-of-bounds.lm',
     code: 1,

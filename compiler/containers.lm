@@ -61,11 +61,6 @@ struct CompilerDiagnostic {
   length: i32
 }
 
-struct TokenArena {
-  storage: string
-  count: i32
-}
-
 struct AstArena {
   storage: string
   count: i32
@@ -96,6 +91,13 @@ struct DiagnosticArena {
   count: i32
 }
 
+struct TokenArena {
+  storage: string
+  count: i32
+  ok: bool
+  diagnostics: DiagnosticArena
+}
+
 struct CompilerContainers {
   tokens: TokenArena
   ast: AstArena
@@ -109,7 +111,9 @@ struct CompilerContainers {
 function tokenArena(): TokenArena {
   return TokenArena {
     storage: arenaNew(),
-    count: 0
+    count: 0,
+    ok: true,
+    diagnostics: diagnosticArena()
   }
 }
 

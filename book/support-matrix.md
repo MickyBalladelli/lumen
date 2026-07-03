@@ -57,6 +57,9 @@ Each row is exercised across diagnostics, llvm, executable.
 | switch case diagnostic | Parity-tested subset | `tests/negative/switch-case-mismatch.lm` |
 | nullable call diagnostic | Parity-tested subset | `tests/negative/none-to-string.lm` |
 | Result call diagnostic | Parity-tested subset | `tests/negative/result-type-mismatch.lm` |
+| unterminated string diagnostic | Parity-tested subset | `tests/bootstrap/unterminated-string.lm` |
+| unterminated comment diagnostic | Parity-tested subset | `tests/bootstrap/unterminated-comment.lm` |
+| unexpected character diagnostic | Parity-tested subset | `tests/bootstrap/unexpected-character.lm` |
 
 Rows absent from the two parity tables are not claimed as bootstrap-compiler
 support. The primary JavaScript compiler supports more language and runtime

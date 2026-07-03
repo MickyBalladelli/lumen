@@ -2,6 +2,10 @@ import { AstProgram, astProgram, astRecordFunction, astRecordReturn, astRecordSt
 import { CompilerToken, TokenArena, tokenArenaGet } from "./containers.lm"
 
 function tokenValue(token: CompilerToken): string {
+  if stringEquals(token.kind, "string") {
+    return token.literal
+  }
+
   return token.lexeme
 }
 
@@ -785,10 +789,8 @@ function runWhile(tokens: TokenArena, index: i32, variables: string): string {
       }
     }
 
-    if stringEquals(tokenValue(tokenArenaGet(tokens, scan + 1)), "+") {
-      if stringEquals(tokenValue(tokenArenaGet(tokens, scan + 2)), "+") {
-        incrementName = tokenValue(tokenArenaGet(tokens, scan))
-      }
+    if stringEquals(tokenValue(tokenArenaGet(tokens, scan + 1)), "++") {
+      incrementName = tokenValue(tokenArenaGet(tokens, scan))
     }
 
     scan = scan + 1
@@ -820,10 +822,6 @@ function runWhile(tokens: TokenArena, index: i32, variables: string): string {
 function setForControl(program: string, prefix: string, kind: string, tokens: TokenArena, index: i32, variables: string): string {
   let operator = tokenValue(tokenArenaGet(tokens, index + 2))
   let valueIndex = index + 3
-  if stringEquals(tokenValue(tokenArenaGet(tokens, valueIndex)), "=") {
-    operator = operator + "="
-    valueIndex = valueIndex + 1
-  }
 
   program = mapSet(program, prefix + kind + "Left", tokenValue(tokenArenaGet(tokens, index + 1)))
   program = mapSet(program, prefix + kind + "Operator", operator)
@@ -842,10 +840,6 @@ function setForStatement(program: string, statement: i32, tokens: TokenArena, in
   let conditionLeft = tokenValue(tokenArenaGet(tokens, firstSeparator + 1))
   let conditionOperator = tokenValue(tokenArenaGet(tokens, firstSeparator + 2))
   let conditionValueIndex = firstSeparator + 3
-  if stringEquals(tokenValue(tokenArenaGet(tokens, conditionValueIndex)), "=") {
-    conditionOperator = conditionOperator + "="
-    conditionValueIndex = conditionValueIndex + 1
-  }
   let conditionRight = evalNumber(tokens, conditionValueIndex, variables)
   let updateValue: i32 = 1
   let bodyStart = findNext(tokens, secondSeparator, "{")
@@ -1265,7 +1259,7 @@ function parseProgram(tokens: TokenArena): string {
       program = setStatement(program, statements, "if", "", "compare", "==")
       let prefix = parserStatementPrefix(statements)
       program = mapSet(program, prefix + "ExprLeftValue", tokenValue(tokenArenaGet(tokens, index + 1)))
-      program = mapSet(program, prefix + "ExprRightValue", tokenValue(tokenArenaGet(tokens, index + 4)))
+      program = mapSet(program, prefix + "ExprRightValue", tokenValue(tokenArenaGet(tokens, index + 3)))
 
       let bodyStart = findNext(tokens, index, "{")
       let bodyValue = readValue(tokens, bodyStart + 3, variables)
@@ -1336,10 +1330,8 @@ function parseProgram(tokens: TokenArena): string {
           }
         }
 
-        if stringEquals(tokenValue(tokenArenaGet(tokens, scan + 1)), "+") {
-          if stringEquals(tokenValue(tokenArenaGet(tokens, scan + 2)), "+") {
-            program = mapSet(program, prefix + "BodyIncrementName", tokenValue(tokenArenaGet(tokens, scan)))
-          }
+        if stringEquals(tokenValue(tokenArenaGet(tokens, scan + 1)), "++") {
+          program = mapSet(program, prefix + "BodyIncrementName", tokenValue(tokenArenaGet(tokens, scan)))
         }
 
         scan = scan + 1

@@ -31,6 +31,10 @@ function typeError(message: string, checkedCount: i32, tokenIndex: i32): TypeRes
 }
 
 function typeTokenValue(token: CompilerToken): string {
+  if stringEquals(token.kind, "string") {
+    return token.literal
+  }
+
   return token.lexeme
 }
 

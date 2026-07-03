@@ -1,11 +1,11 @@
-import { tokenize } from "./tokenizer.lm"
+import { tokenizeFile } from "./tokenizer.lm"
 import { loadModuleSource } from "./modules.lm"
 import { parseAst, parseProgram } from "./parser.lm"
 import { analyzeSemantics } from "./semantics.lm"
 import { checkTypes } from "./typechecker.lm"
 import { buildIr, irToProgram } from "./ir.lm"
 import { emitIr } from "./emitter.lm"
-import { TokenArena, tokenArenaGet } from "./containers.lm"
+import { TokenArena, diagnosticArenaGet, tokenArenaGet } from "./containers.lm"
 
 function diagnosticTokenText(tokens: TokenArena, index: i32): string {
   let token = tokenArenaGet(tokens, index)
@@ -78,7 +78,17 @@ function compileTiny(input: string, output: string): i32 {
     return 1
   }
   let source = resultValue(sourceResult)
-  let tokens = tokenize(source)
+  let tokens = tokenizeFile(source, input)
+  if !tokens.ok {
+    let diagnostic = diagnosticArenaGet(tokens.diagnostics, 0)
+    println(
+      "compile error: " +
+      diagnostic.message +
+      " at line " +
+      intToString(diagnostic.line)
+    )
+    return 1
+  }
   let ast = parseAst(tokens)
   let semanticResult = analyzeSemantics(ast, tokens)
 
