@@ -15,7 +15,7 @@ copy embedded stage-1 LLVM instead of compiling the Lumen source.
   `compiler/main.lm` module graph into stage 2, then use stage 2 to build stage
   3. Run each compiler against the same positive and negative corpus.
 
-- [ ] Make the bootstrap test reject every delegation shortcut.
+- [x] Make the bootstrap test reject every delegation shortcut.
   Fail if generated LLVM or binaries reference `compilerImage`,
   `lumen_compiler_image`, an embedded compiler image, JavaScript, Node, or a
   subprocess compiler. Also reject behavior selected by the input filename.

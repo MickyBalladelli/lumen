@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Compiler } from '../../compiler/Compiler.js'
+import { findBootstrapDelegation } from '../../testing/BootstrapDelegationGuard.js'
 import { TestSuite } from '../../testing/TestSuite.js'
 import {
   runCommand,
@@ -142,12 +143,12 @@ if (requireRealBootstrap) {
     })
   }
 
-  await suite.test('stage-1 compiles compiler source instead of copying a checkpoint', async () => {
-    const stageTwoLLVM = await readFile(`${stageTwoCompiler}.ll`, 'utf8')
-    assert.doesNotMatch(
-      stageTwoLLVM,
-      /@lumen_compiler_image/,
-      'real bootstrap is red: stage-2 copied the embedded stage-1 compiler image'
+  await suite.test('bootstrap contains no compiler delegation shortcuts', async () => {
+    const findings = await bootstrapDelegationFindings()
+    assert.deepEqual(
+      findings,
+      [],
+      `real bootstrap is red:\n${findings.join('\n')}`
     )
   })
 }
@@ -194,4 +195,50 @@ function hasCompilerDelegation(llvm) {
   return llvm.includes('self-host compiler delegate') ||
     llvm.includes('compiler.self.unsupported') ||
     llvm.includes('call i32 @lumen_exec')
+}
+
+async function bootstrapDelegationFindings() {
+  const findings = []
+  const llvmArtifacts = [
+    ['stage-1 LLVM', join(outputDir, 'lumen-compiler.ll')],
+    ['stage-2 LLVM', `${stageTwoCompiler}.ll`],
+    ['stage-3 LLVM', `${stageThreeCompiler}.ll`]
+  ]
+  const binaryArtifacts = [
+    ['stage-1 binary', stageOneCompiler],
+    ['stage-2 binary', stageTwoCompiler],
+    ['stage-3 binary', stageThreeCompiler]
+  ]
+  const sourceFiles = (await readdir('compiler'))
+    .filter(file => file.endsWith('.lm'))
+    .sort()
+
+  for (const [label, path] of llvmArtifacts) {
+    findings.push(...findBootstrapDelegation(
+      await readFile(path, 'utf8'),
+      { kind: 'llvm', label }
+    ))
+  }
+
+  for (const [label, path] of binaryArtifacts) {
+    findings.push(...findBootstrapDelegation(
+      (await readFile(path)).toString('latin1'),
+      { kind: 'binary', label }
+    ))
+    const symbols = await runCommand('nm', [path])
+    assert.equal(symbols.code, 0, symbols.stderr)
+    findings.push(...findBootstrapDelegation(
+      symbols.stdout,
+      { kind: 'symbols', label: `${label} symbols` }
+    ))
+  }
+
+  for (const file of sourceFiles) {
+    findings.push(...findBootstrapDelegation(
+      await readFile(join('compiler', file), 'utf8'),
+      { kind: 'source', label: `compiler/${file}` }
+    ))
+  }
+
+  return [...new Set(findings)]
 }
