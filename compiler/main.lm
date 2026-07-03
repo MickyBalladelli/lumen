@@ -90,6 +90,24 @@ function compileTiny(input: string, output: string): i32 {
     return 1
   }
   let ast = parseProgram(tokens)
+  if !ast.ok {
+    let diagnosticIndex: i32 = 0
+    while diagnosticIndex < ast.diagnostics.count do {
+      let diagnostic = diagnosticArenaGet(ast.diagnostics, diagnosticIndex)
+      println(
+        "compile error: " +
+        diagnostic.message +
+        " at " +
+        diagnostic.file +
+        ":" +
+        intToString(diagnostic.line) +
+        ":" +
+        intToString(diagnostic.column)
+      )
+      diagnosticIndex = diagnosticIndex + 1
+    }
+    return 1
+  }
   let semanticResult = analyzeSemantics(ast)
 
   if semanticResult.ok {

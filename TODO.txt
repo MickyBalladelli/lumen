@@ -57,7 +57,7 @@ copy embedded stage-1 LLVM instead of compiling the Lumen source.
   one typed AST consumed by every later pass, with no fixed statement,
   parameter, function, or nesting limits.
 
-- [ ] Add parser recovery and structured diagnostics.
+- [x] Add parser recovery and structured diagnostics.
   Collect multiple syntax errors with source ranges and guarantee progress on
   invalid input.
 

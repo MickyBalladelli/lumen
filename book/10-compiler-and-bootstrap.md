@@ -459,9 +459,11 @@ and UBSan (UndefinedBehaviorSanitizer) to verify memory safety.
 
 ### Diagnostics
 
-- **Module-aware errors** — file/range data is not preserved through parsing,
-  module loading, IR, and LLVM emission
-- **Multiple diagnostics** — only the first error is reported per compilation
+- **Module-aware errors** — parser diagnostics preserve file/range data, but
+  later bootstrap passes do not preserve it through module loading, IR, and
+  LLVM emission
+- **Multiple diagnostics** — syntax errors are collected with recovery;
+  semantic and type errors still stop after the first failure
 - **Snippets** — errors include source line and caret but no notes or related
   file paths
 

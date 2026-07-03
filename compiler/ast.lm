@@ -1,4 +1,4 @@
-import { AstArena, CompilerAstNode, CompilerToken, TokenArena, astArena, astArenaGet, astArenaPush, astArenaSet, tokenArenaGet } from "./containers.lm"
+import { AstArena, CompilerAstNode, CompilerToken, DiagnosticArena, TokenArena, astArena, astArenaGet, astArenaPush, astArenaSet, diagnosticArena, tokenArenaGet } from "./containers.lm"
 
 struct AstNodeSpec {
   kind: string
@@ -16,6 +16,8 @@ struct AstProgram {
   kind: string
   tokens: TokenArena
   nodes: AstArena
+  ok: bool
+  diagnostics: DiagnosticArena
   childStorage: string
   childCount: i32
   root: i32
@@ -144,6 +146,8 @@ function astProgram(tokens: TokenArena): AstProgram {
     kind: "Program",
     tokens: tokens,
     nodes: astArena(),
+    ok: true,
+    diagnostics: diagnosticArena(),
     childStorage: arenaNew(),
     childCount: 0,
     root: 0,

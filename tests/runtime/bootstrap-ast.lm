@@ -1,6 +1,7 @@
 import { tokenizeFile } from "../../compiler/tokenizer.lm"
 import { parseProgram } from "../../compiler/parser.lm"
 import { AstProgram, astChildAt, astCountKind, astFindKind, astMaxDepth, astNodeAt } from "../../compiler/ast.lm"
+import { diagnosticArenaGet } from "../../compiler/containers.lm"
 
 function requireKind(program: AstProgram, kind: string): i32 {
   assert(astCountKind(program, kind) > 0, "missing typed AST node")
@@ -133,6 +134,32 @@ function main(): i32 {
   assert(astCountKind(wideProgram, "FunctionDeclaration") == 32, "function count must not be fixed")
   assert(astCountKind(wideProgram, "VariableDeclaration") == 2048, "statement count must not be fixed")
   assert(astCountKind(wideProgram, "VariableDeclarator") == 2816, "parameter count must not be fixed")
+
+  let invalid = "function broken(): i32 {
+  let first: = 1
+  let second: = 2
+  return 0
+}
+function recovered(): i32 {
+  return 1
+}"
+  let invalidProgram = parseProgram(tokenizeFile(invalid, "invalid.lm"))
+  assert(!invalidProgram.ok, "invalid syntax must fail parsing")
+  assert(invalidProgram.diagnostics.count == 2, "parser must collect independent syntax errors")
+  let firstError = diagnosticArenaGet(invalidProgram.diagnostics, 0)
+  let secondError = diagnosticArenaGet(invalidProgram.diagnostics, 1)
+  assert(stringEquals(firstError.message, "Expected type name"), "parser diagnostic must explain error")
+  assert(stringEquals(firstError.file, "invalid.lm"), "parser diagnostic must retain file")
+  assert(firstError.line == 2, "parser diagnostic must retain start line")
+  assert(firstError.column > 0, "parser diagnostic must retain start column")
+  assert(firstError.offset >= 0, "parser diagnostic must retain start offset")
+  assert(firstError.length > 0, "parser diagnostic must retain source range")
+  assert(secondError.line == 3, "parser recovery must reach next invalid statement")
+  assert(astCountKind(invalidProgram, "FunctionDeclaration") == 2, "parser recovery must retain later declarations")
+  assert(astCountKind(invalidProgram, "ReturnStatement") == 2, "parser recovery must retain later valid statements")
+
+  let closingProgram = parseProgram(tokenizeFile("} } }", "closing.lm"))
+  assert(closingProgram.diagnostics.count == 3, "parser must always advance on invalid tokens")
 
   println("bootstrap AST")
   return 0

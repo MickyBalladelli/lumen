@@ -1,5 +1,12 @@
 import { AstProgram, astAdd, astNodeSpec, astProgram } from "./ast.lm"
-import { CompilerToken, TokenArena, tokenArenaGet } from "./containers.lm"
+import { CompilerDiagnostic, CompilerToken, TokenArena, diagnosticArenaPush, tokenArenaGet } from "./containers.lm"
+
+struct ParserCheck {
+  ok: bool
+  message: string
+  errorToken: i32
+  nextToken: i32
+}
 
 function tokenValue(token: CompilerToken): string {
   if stringEquals(token.kind, "string") {
@@ -80,8 +87,11 @@ function findNext(tokens: TokenArena, index: i32, wanted: string): i32 {
   let count = tokens.count
 
   while index < count do {
-    if stringEquals(tokenValue(tokenArenaGet(tokens, index)), wanted) {
-      return index
+    let token = tokenArenaGet(tokens, index)
+    if !stringEquals(tokenKind(token), "string") {
+      if stringEquals(tokenValue(token), wanted) {
+        return index
+      }
     }
 
     index = index + 1
@@ -896,18 +906,21 @@ function findBlockEnd(tokens: TokenArena, index: i32): i32 {
   let seen: bool = false
 
   while index < count do {
-    let value = tokenValue(tokenArenaGet(tokens, index))
+    let token = tokenArenaGet(tokens, index)
+    let value = tokenValue(token)
 
-    if stringEquals(value, "{") {
-      depth = depth + 1
-      seen = true
-    }
+    if !stringEquals(tokenKind(token), "string") {
+      if stringEquals(value, "{") {
+        depth = depth + 1
+        seen = true
+      }
 
-    if stringEquals(value, "}") {
-      depth = depth - 1
-      if seen {
-        if depth == 0 {
-          return index
+      if stringEquals(value, "}") {
+        depth = depth - 1
+        if seen {
+          if depth == 0 {
+            return index
+          }
         }
       }
     }
@@ -998,14 +1011,17 @@ function astFindMatching(tokens: TokenArena, open: i32, end: i32, left: string, 
   let index = open
 
   while index < end do {
-    let value = tokenValue(tokenArenaGet(tokens, index))
-    if stringEquals(value, left) {
-      depth = depth + 1
-    }
-    if stringEquals(value, right) {
-      depth = depth - 1
-      if depth == 0 {
-        return index
+    let token = tokenArenaGet(tokens, index)
+    if !stringEquals(tokenKind(token), "string") {
+      let value = tokenValue(token)
+      if stringEquals(value, left) {
+        depth = depth + 1
+      }
+      if stringEquals(value, right) {
+        depth = depth - 1
+        if depth == 0 {
+          return index
+        }
       }
     }
     index = index + 1
@@ -1021,22 +1037,25 @@ function astFindStatementEnd(tokens: TokenArena, start: i32, end: i32): i32 {
   let index = start
 
   while index < end do {
-    let value = tokenValue(tokenArenaGet(tokens, index))
-    if stringEquals(value, "(") {
-      parens = parens + 1
-    } else if stringEquals(value, ")") {
-      parens = parens - 1
-    } else if stringEquals(value, "[") {
-      brackets = brackets + 1
-    } else if stringEquals(value, "]") {
-      brackets = brackets - 1
-    } else if stringEquals(value, "{") {
-      braces = braces + 1
-    } else if stringEquals(value, "}") {
-      if braces == 0 {
-        return index - 1
+    let token = tokenArenaGet(tokens, index)
+    if !stringEquals(tokenKind(token), "string") {
+      let value = tokenValue(token)
+      if stringEquals(value, "(") {
+        parens = parens + 1
+      } else if stringEquals(value, ")") {
+        parens = parens - 1
+      } else if stringEquals(value, "[") {
+        brackets = brackets + 1
+      } else if stringEquals(value, "]") {
+        brackets = brackets - 1
+      } else if stringEquals(value, "{") {
+        braces = braces + 1
+      } else if stringEquals(value, "}") {
+        if braces == 0 {
+          return index - 1
+        }
+        braces = braces - 1
       }
-      braces = braces - 1
     }
 
     if parens == 0 && brackets == 0 && braces == 0 {
@@ -1058,23 +1077,26 @@ function astFindTopLevel(tokens: TokenArena, start: i32, end: i32, wanted: strin
   let index = start
 
   while index <= end do {
-    let value = tokenValue(tokenArenaGet(tokens, index))
-    if stringEquals(value, wanted) && parens == 0 && brackets == 0 && braces == 0 {
-      return index
-    }
+    let token = tokenArenaGet(tokens, index)
+    if !stringEquals(tokenKind(token), "string") {
+      let value = tokenValue(token)
+      if stringEquals(value, wanted) && parens == 0 && brackets == 0 && braces == 0 {
+        return index
+      }
 
-    if stringEquals(value, "(") {
-      parens = parens + 1
-    } else if stringEquals(value, ")") {
-      parens = parens - 1
-    } else if stringEquals(value, "[") {
-      brackets = brackets + 1
-    } else if stringEquals(value, "]") {
-      brackets = brackets - 1
-    } else if stringEquals(value, "{") {
-      braces = braces + 1
-    } else if stringEquals(value, "}") {
-      braces = braces - 1
+      if stringEquals(value, "(") {
+        parens = parens + 1
+      } else if stringEquals(value, ")") {
+        parens = parens - 1
+      } else if stringEquals(value, "[") {
+        brackets = brackets + 1
+      } else if stringEquals(value, "]") {
+        brackets = brackets - 1
+      } else if stringEquals(value, "{") {
+        braces = braces + 1
+      } else if stringEquals(value, "}") {
+        braces = braces - 1
+      }
     }
 
     index = index + 1
@@ -1091,23 +1113,26 @@ function astFindLastTopLevel(tokens: TokenArena, start: i32, end: i32, wanted: s
   let index = start
 
   while index <= end do {
-    let value = tokenValue(tokenArenaGet(tokens, index))
-    if stringEquals(value, wanted) && parens == 0 && brackets == 0 && braces == 0 {
-      found = index
-    }
+    let token = tokenArenaGet(tokens, index)
+    if !stringEquals(tokenKind(token), "string") {
+      let value = tokenValue(token)
+      if stringEquals(value, wanted) && parens == 0 && brackets == 0 && braces == 0 {
+        found = index
+      }
 
-    if stringEquals(value, "(") {
-      parens = parens + 1
-    } else if stringEquals(value, ")") {
-      parens = parens - 1
-    } else if stringEquals(value, "[") {
-      brackets = brackets + 1
-    } else if stringEquals(value, "]") {
-      brackets = brackets - 1
-    } else if stringEquals(value, "{") {
-      braces = braces + 1
-    } else if stringEquals(value, "}") {
-      braces = braces - 1
+      if stringEquals(value, "(") {
+        parens = parens + 1
+      } else if stringEquals(value, ")") {
+        parens = parens - 1
+      } else if stringEquals(value, "[") {
+        brackets = brackets + 1
+      } else if stringEquals(value, "]") {
+        brackets = brackets - 1
+      } else if stringEquals(value, "{") {
+        braces = braces + 1
+      } else if stringEquals(value, "}") {
+        braces = braces - 1
+      }
     }
     index = index + 1
   }
@@ -1152,25 +1177,28 @@ function astFindBinary(tokens: TokenArena, start: i32, end: i32): i32 {
   let index = start
 
   while index <= end do {
-    let value = tokenValue(tokenArenaGet(tokens, index))
-    if stringEquals(value, "(") {
-      parens = parens + 1
-    } else if stringEquals(value, ")") {
-      parens = parens - 1
-    } else if stringEquals(value, "[") {
-      brackets = brackets + 1
-    } else if stringEquals(value, "]") {
-      brackets = brackets - 1
-    } else if stringEquals(value, "{") {
-      braces = braces + 1
-    } else if stringEquals(value, "}") {
-      braces = braces - 1
-    } else if parens == 0 && brackets == 0 && braces == 0 {
-      let precedence = astOperatorPrecedence(value)
-      if precedence > 0 && index > start {
-        if precedence <= bestPrecedence {
-          best = index
-          bestPrecedence = precedence
+    let token = tokenArenaGet(tokens, index)
+    if !stringEquals(tokenKind(token), "string") {
+      let value = tokenValue(token)
+      if stringEquals(value, "(") {
+        parens = parens + 1
+      } else if stringEquals(value, ")") {
+        parens = parens - 1
+      } else if stringEquals(value, "[") {
+        brackets = brackets + 1
+      } else if stringEquals(value, "]") {
+        brackets = brackets - 1
+      } else if stringEquals(value, "{") {
+        braces = braces + 1
+      } else if stringEquals(value, "}") {
+        braces = braces - 1
+      } else if parens == 0 && brackets == 0 && braces == 0 {
+        let precedence = astOperatorPrecedence(value)
+        if precedence > 0 && index > start {
+          if precedence <= bestPrecedence {
+            best = index
+            bestPrecedence = precedence
+          }
         }
       }
     }
@@ -1473,20 +1501,24 @@ function astParseFunction(program: AstProgram, tokens: TokenArena, index: i32, e
     if cursor >= close {
       break
     }
-    let colon = findNext(tokens, cursor, ":")
-    let comma = astFindTopLevel(tokens, colon + 1, close - 1, ",")
+    let comma = astFindTopLevel(tokens, cursor, close - 1, ",")
     let paramEnd = close - 1
     if comma >= 0 {
       paramEnd = comma - 1
     }
+    let colon = astFindTopLevel(tokens, cursor, paramEnd, ":")
     let parameter = astNodeSpec("VariableDeclarator", cursor, paramEnd)
     parameter.name = tokenValue(tokenArenaGet(tokens, cursor))
-    parameter.typeName = astTokenText(tokens, colon + 1, paramEnd)
+    if colon >= 0 {
+      parameter.typeName = astTokenText(tokens, colon + 1, paramEnd)
+    }
     parameter.text = astTokenText(tokens, cursor, paramEnd)
     program = astAdd(program, tokens, functionId, parameter)
     let parameterId = program.lastNode
     program = astAddIdentifier(program, tokens, parameterId, cursor)
-    program = astAddType(program, tokens, parameterId, colon + 1, paramEnd)
+    if colon >= 0 {
+      program = astAddType(program, tokens, parameterId, colon + 1, paramEnd)
+    }
     if comma < 0 {
       break
     }
@@ -1611,6 +1643,375 @@ function astParseExpressionStatement(program: AstProgram, tokens: TokenArena, in
   return program
 }
 
+function parserCheckOk(): ParserCheck {
+  return ParserCheck {
+    ok: true,
+    message: "",
+    errorToken: -1,
+    nextToken: -1
+  }
+}
+
+function parserIsRecoveryStart(value: string): bool {
+  return stringEquals(value, "import") || stringEquals(value, "extern") ||
+    stringEquals(value, "enum") || stringEquals(value, "struct") ||
+    stringEquals(value, "async") || stringEquals(value, "function") ||
+    stringEquals(value, "let") || stringEquals(value, "const") ||
+    stringEquals(value, "if") || stringEquals(value, "switch") ||
+    stringEquals(value, "for") || stringEquals(value, "while") ||
+    stringEquals(value, "do") || stringEquals(value, "try") ||
+    stringEquals(value, "throw") || stringEquals(value, "return") ||
+    stringEquals(value, "break") || stringEquals(value, "continue")
+}
+
+function parserRecoveryToken(tokens: TokenArena, start: i32, end: i32): i32 {
+  let index = start + 1
+  let startToken = tokenArenaGet(tokens, start)
+  let startLine = startToken.line
+  let parens: i32 = 0
+  let brackets: i32 = 0
+  let braces: i32 = 0
+
+  while index < end do {
+    let token = tokenArenaGet(tokens, index)
+    let value = tokenValue(token)
+
+    if token.line > startLine {
+      if parserIsRecoveryStart(value) {
+        return index
+      }
+    }
+
+    if !stringEquals(tokenKind(token), "string") {
+      if stringEquals(value, "(") {
+        parens = parens + 1
+      } else if stringEquals(value, ")") {
+        if parens > 0 {
+          parens = parens - 1
+        }
+      } else if stringEquals(value, "[") {
+        brackets = brackets + 1
+      } else if stringEquals(value, "]") {
+        if brackets > 0 {
+          brackets = brackets - 1
+        }
+      } else if stringEquals(value, "{") {
+        braces = braces + 1
+      } else if stringEquals(value, "}") {
+        if braces == 0 && parens == 0 && brackets == 0 {
+          return index
+        }
+        if braces > 0 {
+          braces = braces - 1
+        }
+      }
+    }
+
+    if astIsTerminator(tokens, index) {
+      if parens == 0 && brackets == 0 && braces == 0 {
+        return index + 1
+      }
+    }
+
+    index = index + 1
+  }
+
+  return end
+}
+
+function parserCheckError(tokens: TokenArena, start: i32, end: i32, errorToken: i32, message: string): ParserCheck {
+  let tokenIndex = errorToken
+  if tokenIndex < 0 {
+    tokenIndex = start
+  }
+  if tokenIndex >= tokens.count {
+    tokenIndex = tokens.count - 1
+  }
+
+  let next = parserRecoveryToken(tokens, start, end)
+  if next <= start {
+    next = start + 1
+  }
+
+  return ParserCheck {
+    ok: false,
+    message: message,
+    errorToken: tokenIndex,
+    nextToken: next
+  }
+}
+
+function parserAddError(program: AstProgram, tokens: TokenArena, check: ParserCheck): AstProgram {
+  let token = tokenArenaGet(tokens, check.errorToken)
+  let length = stringLen(token.lexeme)
+  if length < 1 {
+    length = 1
+  }
+  let diagnostic = CompilerDiagnostic {
+    severity: "error",
+    message: check.message,
+    file: token.file,
+    offset: token.offset,
+    line: token.line,
+    column: token.column,
+    length: length
+  }
+  program.ok = false
+  program.diagnostics = diagnosticArenaPush(program.diagnostics, diagnostic)
+  return program
+}
+
+function parserCheckExpression(tokens: TokenArena, start: i32, end: i32, scopeEnd: i32): ParserCheck {
+  if end < start {
+    return parserCheckError(tokens, start, scopeEnd, start, "Expected expression")
+  }
+
+  let parens: i32 = 0
+  let brackets: i32 = 0
+  let braces: i32 = 0
+  let index = start
+
+  while index <= end do {
+    let token = tokenArenaGet(tokens, index)
+    if !stringEquals(tokenKind(token), "string") {
+      let value = tokenValue(token)
+      if stringEquals(value, "(") {
+        parens = parens + 1
+      } else if stringEquals(value, ")") {
+        if parens == 0 {
+          return parserCheckError(tokens, start, scopeEnd, index, "Unexpected closing parenthesis")
+        }
+        parens = parens - 1
+      } else if stringEquals(value, "[") {
+        brackets = brackets + 1
+      } else if stringEquals(value, "]") {
+        if brackets == 0 {
+          return parserCheckError(tokens, start, scopeEnd, index, "Unexpected closing bracket")
+        }
+        brackets = brackets - 1
+      } else if stringEquals(value, "{") {
+        braces = braces + 1
+      } else if stringEquals(value, "}") {
+        if braces == 0 {
+          return parserCheckError(tokens, start, scopeEnd, index, "Unexpected closing brace")
+        }
+        braces = braces - 1
+      }
+    }
+    index = index + 1
+  }
+
+  if parens > 0 {
+    return parserCheckError(tokens, start, scopeEnd, end, "Expected closing parenthesis")
+  }
+  if brackets > 0 {
+    return parserCheckError(tokens, start, scopeEnd, end, "Expected closing bracket")
+  }
+  if braces > 0 {
+    return parserCheckError(tokens, start, scopeEnd, end, "Expected closing brace")
+  }
+
+  let last = tokenArenaGet(tokens, end)
+  if stringEquals(last.kind, "operator") {
+    if !stringEquals(last.lexeme, "++") && !stringEquals(last.lexeme, "--") {
+      return parserCheckError(tokens, start, scopeEnd, end, "Expected expression after operator")
+    }
+  }
+
+  return parserCheckOk()
+}
+
+function parserCheckImport(tokens: TokenArena, index: i32, end: i32): ParserCheck {
+  let statementEnd = astFindStatementEnd(tokens, index, end)
+  if !stringEquals(tokenValue(tokenArenaGet(tokens, index + 1)), "{") {
+    return parserCheckError(tokens, index, end, index + 1, "Expected opening brace after import")
+  }
+  let close = astFindMatching(tokens, index + 1, statementEnd + 1, "{", "}")
+  if close > statementEnd {
+    return parserCheckError(tokens, index, end, statementEnd, "Expected closing brace after import names")
+  }
+  if !stringEquals(tokenValue(tokenArenaGet(tokens, close + 1)), "from") {
+    return parserCheckError(tokens, index, end, close + 1, "Expected module source keyword after import names")
+  }
+  if !stringEquals(tokenKind(tokenArenaGet(tokens, close + 2)), "string") {
+    return parserCheckError(tokens, index, end, close + 2, "Expected module string")
+  }
+  return parserCheckOk()
+}
+
+function parserCheckStruct(tokens: TokenArena, index: i32, end: i32): ParserCheck {
+  if !stringEquals(tokenKind(tokenArenaGet(tokens, index + 1)), "identifier") {
+    return parserCheckError(tokens, index, end, index + 1, "Expected struct name")
+  }
+  if !stringEquals(tokenValue(tokenArenaGet(tokens, index + 2)), "{") {
+    return parserCheckError(tokens, index, end, index + 2, "Expected opening brace after struct name")
+  }
+  let close = astFindMatching(tokens, index + 2, end, "{", "}")
+  if close >= end {
+    return parserCheckError(tokens, index, end, end - 1, "Expected closing brace after struct fields")
+  }
+
+  let cursor = index + 3
+  while cursor < close do {
+    cursor = astSkipTerminators(tokens, cursor, close)
+    if cursor >= close {
+      break
+    }
+    if !stringEquals(tokenKind(tokenArenaGet(tokens, cursor)), "identifier") {
+      return parserCheckError(tokens, index, end, cursor, "Expected struct field name")
+    }
+    if !stringEquals(tokenValue(tokenArenaGet(tokens, cursor + 1)), ":") {
+      return parserCheckError(tokens, index, end, cursor + 1, "Expected colon after struct field name")
+    }
+    if !stringEquals(tokenKind(tokenArenaGet(tokens, cursor + 2)), "identifier") {
+      return parserCheckError(tokens, index, end, cursor + 2, "Expected type name")
+    }
+    let fieldEnd = astFindStatementEnd(tokens, cursor + 2, close)
+    cursor = fieldEnd + 1
+  }
+
+  return parserCheckOk()
+}
+
+function parserCheckFunction(tokens: TokenArena, index: i32, end: i32): ParserCheck {
+  let functionIndex = index
+  if stringEquals(tokenValue(tokenArenaGet(tokens, index)), "async") {
+    if !stringEquals(tokenValue(tokenArenaGet(tokens, index + 1)), "function") {
+      return parserCheckError(tokens, index, end, index + 1, "Expected function after async")
+    }
+    functionIndex = index + 1
+  }
+
+  if !stringEquals(tokenKind(tokenArenaGet(tokens, functionIndex + 1)), "identifier") {
+    return parserCheckError(tokens, index, end, functionIndex + 1, "Expected function name")
+  }
+  if !stringEquals(tokenValue(tokenArenaGet(tokens, functionIndex + 2)), "(") {
+    return parserCheckError(tokens, index, end, functionIndex + 2, "Expected opening parenthesis after function name")
+  }
+
+  let open = functionIndex + 2
+  let close = astFindMatching(tokens, open, end, "(", ")")
+  if close >= end {
+    return parserCheckError(tokens, index, end, end - 1, "Expected closing parenthesis after function parameters")
+  }
+
+  let cursor = open + 1
+  while cursor < close do {
+    if !stringEquals(tokenKind(tokenArenaGet(tokens, cursor)), "identifier") {
+      return parserCheckError(tokens, index, end, cursor, "Expected parameter name")
+    }
+    let comma = astFindTopLevel(tokens, cursor, close - 1, ",")
+    let parameterEnd = close - 1
+    if comma >= 0 {
+      parameterEnd = comma - 1
+    }
+    if stringEquals(tokenValue(tokenArenaGet(tokens, cursor + 1)), ":") {
+      if !stringEquals(tokenKind(tokenArenaGet(tokens, cursor + 2)), "identifier") {
+        return parserCheckError(tokens, index, end, cursor + 2, "Expected parameter type")
+      }
+    } else if parameterEnd > cursor {
+      return parserCheckError(tokens, index, end, cursor + 1, "Expected comma after parameter")
+    }
+    if comma < 0 {
+      cursor = close
+    } else {
+      cursor = comma + 1
+    }
+  }
+
+  cursor = close + 1
+  if stringEquals(tokenValue(tokenArenaGet(tokens, cursor)), ":") {
+    cursor = cursor + 1
+    if !stringEquals(tokenKind(tokenArenaGet(tokens, cursor)), "identifier") {
+      return parserCheckError(tokens, index, end, cursor, "Expected return type")
+    }
+    while cursor < end do {
+      if stringEquals(tokenValue(tokenArenaGet(tokens, cursor)), "{") {
+        break
+      }
+      cursor = cursor + 1
+    }
+  }
+
+  if !stringEquals(tokenValue(tokenArenaGet(tokens, cursor)), "{") {
+    return parserCheckError(tokens, index, end, cursor, "Expected opening brace before function body")
+  }
+  let bodyClose = astFindMatching(tokens, cursor, end, "{", "}")
+  if bodyClose >= end {
+    return parserCheckError(tokens, index, end, end - 1, "Expected closing brace after function body")
+  }
+  return parserCheckOk()
+}
+
+function parserCheckVariable(tokens: TokenArena, index: i32, end: i32): ParserCheck {
+  let statementEnd = astFindStatementEnd(tokens, index, end)
+  if !stringEquals(tokenKind(tokenArenaGet(tokens, index + 1)), "identifier") {
+    return parserCheckError(tokens, index, end, index + 1, "Expected variable name")
+  }
+
+  let equals = astFindTopLevel(tokens, index + 2, statementEnd, "=")
+  let colon = astFindTopLevel(tokens, index + 2, statementEnd, ":")
+  if colon >= 0 {
+    if colon + 1 > statementEnd {
+      return parserCheckError(tokens, index, end, colon, "Expected type name")
+    }
+    if !stringEquals(tokenKind(tokenArenaGet(tokens, colon + 1)), "identifier") {
+      return parserCheckError(tokens, index, end, colon + 1, "Expected type name")
+    }
+  }
+  if equals >= 0 {
+    return parserCheckExpression(tokens, equals + 1, statementEnd, end)
+  }
+  return parserCheckOk()
+}
+
+function parserCheckBlockStatement(tokens: TokenArena, index: i32, end: i32): ParserCheck {
+  let open = findNext(tokens, index, "{")
+  if open >= end {
+    return parserCheckError(tokens, index, end, end - 1, "Expected opening brace")
+  }
+  if open == index + 1 {
+    return parserCheckError(tokens, index, end, open, "Expected condition before opening brace")
+  }
+  let close = astFindMatching(tokens, open, end, "{", "}")
+  if close >= end {
+    return parserCheckError(tokens, index, end, end - 1, "Expected closing brace")
+  }
+  return parserCheckExpression(tokens, index + 1, open - 1, end)
+}
+
+function parserCheckStatement(tokens: TokenArena, index: i32, end: i32): ParserCheck {
+  let current = tokenValue(tokenArenaGet(tokens, index))
+  if stringEquals(current, "import") {
+    return parserCheckImport(tokens, index, end)
+  }
+  if stringEquals(current, "struct") {
+    return parserCheckStruct(tokens, index, end)
+  }
+  if stringEquals(current, "function") || stringEquals(current, "async") {
+    return parserCheckFunction(tokens, index, end)
+  }
+  if stringEquals(current, "let") || stringEquals(current, "const") {
+    return parserCheckVariable(tokens, index, end)
+  }
+  if stringEquals(current, "if") || stringEquals(current, "while") {
+    return parserCheckBlockStatement(tokens, index, end)
+  }
+  if stringEquals(current, "return") {
+    let statementEnd = astFindStatementEnd(tokens, index, end)
+    if statementEnd == index {
+      return parserCheckOk()
+    }
+    return parserCheckExpression(tokens, index + 1, statementEnd, end)
+  }
+  if stringEquals(current, "}") {
+    return parserCheckError(tokens, index, end, index, "Unexpected closing brace")
+  }
+
+  let statementEnd = astFindStatementEnd(tokens, index, end)
+  return parserCheckExpression(tokens, index, statementEnd, end)
+}
+
 function astParseScope(program: AstProgram, tokens: TokenArena, start: i32, end: i32, parent: i32): AstProgram {
   let index = start
 
@@ -1620,6 +2021,17 @@ function astParseScope(program: AstProgram, tokens: TokenArena, start: i32, end:
       break
     }
     let current = tokenValue(tokenArenaGet(tokens, index))
+    let check = parserCheckStatement(tokens, index, end)
+
+    if !check.ok {
+      program = parserAddError(program, tokens, check)
+      if check.nextToken <= index {
+        index = index + 1
+      } else {
+        index = check.nextToken
+      }
+      continue
+    }
 
     if stringEquals(current, "import") {
       program = astParseImport(program, tokens, index, end, parent)

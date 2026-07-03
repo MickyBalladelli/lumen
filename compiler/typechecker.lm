@@ -390,6 +390,10 @@ function checkReturnType(tokens: TokenArena, index: i32, variables: string, func
     return typeOk(0)
   }
 
+  if !stringEquals(expected, "string") && !stringEquals(expected, "bool") {
+    return typeOk(0)
+  }
+
   if canAssignType(expected, actual) {
     return typeOk(1)
   }
@@ -498,7 +502,9 @@ function checkTypes(ast: AstProgram): TypeResult {
   index = 0
 
   while index < count do {
-    let current = typeTokenValue(tokenArenaGet(tokens, index))
+    let scannedToken = tokenArenaGet(tokens, index)
+    let current = typeTokenValue(scannedToken)
+    let isSyntaxToken = !stringEquals(typeTokenKind(scannedToken), "string")
 
     if stringEquals(current, "function") {
       let close = typeFindNext(tokens, index, ")")
@@ -530,7 +536,9 @@ function checkTypes(ast: AstProgram): TypeResult {
       }
     }
 
-    if stringEquals(typeTokenValue(tokenArenaGet(tokens, index + 1)), "=") {
+    let followingToken = tokenArenaGet(tokens, index + 1)
+    if !stringEquals(typeTokenKind(followingToken), "string") &&
+      stringEquals(typeTokenValue(followingToken), "=") {
       let assignResult = checkAssignment(tokens, index, variables, functions)
       checked = checked + assignResult.checkedCount
       if assignResult.ok {
@@ -540,7 +548,7 @@ function checkTypes(ast: AstProgram): TypeResult {
       }
     }
 
-    if stringEquals(current, "return") {
+    if isSyntaxToken && stringEquals(current, "return") {
       let returnResult = checkReturnType(tokens, index, variables, functions, currentReturnType)
       checked = checked + returnResult.checkedCount
       if returnResult.ok {
@@ -580,7 +588,8 @@ function checkTypes(ast: AstProgram): TypeResult {
       }
     }
 
-    if stringEquals(typeTokenValue(tokenArenaGet(tokens, index + 1)), "(") {
+    if !stringEquals(typeTokenKind(followingToken), "string") &&
+      stringEquals(typeTokenValue(followingToken), "(") {
       let callResult = checkFunctionCall(tokens, index, variables, functions)
       checked = checked + callResult.checkedCount
       if callResult.ok {
