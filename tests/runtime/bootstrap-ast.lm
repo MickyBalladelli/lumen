@@ -1,5 +1,5 @@
 import { tokenizeFile } from "../../compiler/tokenizer.lm"
-import { parseAst } from "../../compiler/parser.lm"
+import { parseProgram } from "../../compiler/parser.lm"
 import { AstProgram, astChildAt, astCountKind, astFindKind, astMaxDepth, astNodeAt } from "../../compiler/ast.lm"
 
 function requireKind(program: AstProgram, kind: string): i32 {
@@ -39,7 +39,7 @@ function main(): i32 {
 
   let tokens = tokenizeFile(source, "typed-ast.lm")
   assert(tokens.ok, "AST fixture must tokenize")
-  let program = parseAst(tokens)
+  let program = parseProgram(tokens)
 
   requireKind(program, "Program")
   requireKind(program, "ImportDeclaration")
@@ -99,9 +99,40 @@ function main(): i32 {
   deep = stringBuilderAppend(deep, "}")
 
   let deepTokens = tokenizeFile(deep, "deep.lm")
-  let deepProgram = parseAst(deepTokens)
+  let deepProgram = parseProgram(deepTokens)
   assert(astCountKind(deepProgram, "IfStatement") == 40, "AST nesting must not be fixed")
   assert(astMaxDepth(deepProgram) >= 40, "AST parent links must preserve nesting")
+
+  let wide = stringBuilder()
+  let functionIndex: i32 = 0
+  while functionIndex < 32 do {
+    wide = stringBuilderAppend(wide, "function fn" + intToString(functionIndex) + "(")
+    let parameterIndex: i32 = 0
+    while parameterIndex < 24 do {
+      if parameterIndex > 0 {
+        wide = stringBuilderAppend(wide, ", ")
+      }
+      wide = stringBuilderAppend(wide, "p" + intToString(parameterIndex) + ": i32")
+      parameterIndex = parameterIndex + 1
+    }
+    wide = stringBuilderAppend(wide, "): i32 {
+")
+    let statementIndex: i32 = 0
+    while statementIndex < 64 do {
+      wide = stringBuilderAppend(wide, "let value" + intToString(statementIndex) + " = " + intToString(statementIndex) + "
+")
+      statementIndex = statementIndex + 1
+    }
+    wide = stringBuilderAppend(wide, "return 0
+}
+")
+    functionIndex = functionIndex + 1
+  }
+
+  let wideProgram = parseProgram(tokenizeFile(wide, "wide.lm"))
+  assert(astCountKind(wideProgram, "FunctionDeclaration") == 32, "function count must not be fixed")
+  assert(astCountKind(wideProgram, "VariableDeclaration") == 2048, "statement count must not be fixed")
+  assert(astCountKind(wideProgram, "VariableDeclarator") == 2816, "parameter count must not be fixed")
 
   println("bootstrap AST")
   return 0

@@ -28,3 +28,20 @@ test('AstProgram stores nodes and edges instead of summary counters', async () =
   assert.doesNotMatch(source, /\b(?:syntax|function|statement|import|struct|if|while)Count:/)
   assert.doesNotMatch(source, /mainReturn(?:Kind|Value):/)
 })
+
+test('bootstrap pipeline parses once into the typed AST', async () => {
+  const [parser, main, semantics, typechecker, ir] = await Promise.all([
+    readFile('compiler/parser.lm', 'utf8'),
+    readFile('compiler/main.lm', 'utf8'),
+    readFile('compiler/semantics.lm', 'utf8'),
+    readFile('compiler/typechecker.lm', 'utf8'),
+    readFile('compiler/ir.lm', 'utf8')
+  ])
+
+  assert.doesNotMatch(parser, /function parseAst\(/)
+  assert.match(parser, /function parseProgram\(tokens: TokenArena\): AstProgram/)
+  assert.equal((main.match(/parseProgram\(/g) || []).length, 1)
+  assert.match(semantics, /function analyzeSemantics\(ast: AstProgram\)/)
+  assert.match(typechecker, /function checkTypes\(ast: AstProgram\)/)
+  assert.match(ir, /function buildIr\(ast: AstProgram\)/)
+})

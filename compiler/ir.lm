@@ -1,4 +1,5 @@
 import { AstProgram } from "./ast.lm"
+import { astToProgram } from "./parser.lm"
 
 struct IrStatement {
   kind: string
@@ -47,6 +48,7 @@ struct IrFunction {
 struct IrModule {
   kind: string
   mode: string
+  program: string
   functionCount: i32
   statementCount: i32
   instructionCount: i32
@@ -125,6 +127,7 @@ function irModule(): IrModule {
   let module = IrModule {
     kind: "IRModule",
     mode: "",
+    program: "",
     functionCount: 0,
     statementCount: 0,
     instructionCount: 0,
@@ -261,13 +264,15 @@ function irCountInstruction(module: IrModule, statement: IrStatement): IrModule 
   return module
 }
 
-function buildIr(ast: AstProgram, program: string): IrModule {
+function buildIr(ast: AstProgram): IrModule {
+  let program = astToProgram(ast)
   let module = irModule()
   let statementCount = stringToInt(mapGet(program, "statementCount"))
   let functionCount = stringToInt(mapGet(program, "functionCount"))
   let index: i32 = 0
 
   module.mode = mapGet(program, "mode")
+  module.program = program
   module.functionCount = functionCount
   module.statementCount = statementCount
   module.returnKind = mapGet(program, "mainReturnKind")

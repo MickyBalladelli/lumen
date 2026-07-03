@@ -28,9 +28,9 @@ Finished" section so the project's progress is visible.
 
 - **Typed self-host AST** — `compiler/ast.lm` stores declarations, statements,
   type annotations, and expressions in growable node and child arenas.
-  `parseAst(...)` preserves arbitrary nesting, parent links, and source ranges
-  for every syntax kind used by the compiler closure. The separate program-map
-  compatibility parser remains until the parser-unification milestone.
+  `parseProgram(...)` is the single bootstrap parser. It preserves arbitrary
+  nesting, parent links, and source ranges, and its typed AST is passed to
+  semantic analysis, type checking, and IR lowering.
 
 - **Self-host semantic analyzer** — `SemanticResult` with checks for `main`,
   duplicate top-level symbols, unsupported bootstrap `while 1`, and
@@ -42,7 +42,8 @@ Finished" section so the project's progress is visible.
 
 - **Bootstrap IR summary** — typed `IrModule` structures hold module facts,
   instruction counts, return values, print counts, and call/binary/loop flags.
-  The program-map and statement bridge remain part of emission.
+  AST lowering still creates the program-map and statement bridge used by
+  emission.
 
 - **Self-host LLVM emitter** — `emitIr(...)` entry point with the compiler
   calling that IR-based path. Internals still delegate through the legacy

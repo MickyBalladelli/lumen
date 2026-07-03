@@ -1658,12 +1658,13 @@ function astParseScope(program: AstProgram, tokens: TokenArena, start: i32, end:
   return program
 }
 
-function parseAst(tokens: TokenArena): AstProgram {
+function parseProgram(tokens: TokenArena): AstProgram {
   let program = astProgram(tokens)
   return astParseScope(program, tokens, 0, tokens.count, program.root)
 }
 
-function parseProgram(tokens: TokenArena): string {
+function astToProgram(ast: AstProgram): string {
+  let tokens = ast.tokens
   let program = map("kind", "program", "mainReturnKind", "number", "mainReturnValue", "0", "printCount", "0", "statementCount", "0", "functionCount", "0", "syntaxCount", "0")
   let variables = map("unused", "unused")
   let index: i32 = 0

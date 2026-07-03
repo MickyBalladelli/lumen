@@ -1,5 +1,5 @@
 import { tokenize } from "../compiler/tokenizer.lm"
-import { parseAst, parseProgram } from "../compiler/parser.lm"
+import { astToProgram, parseProgram } from "../compiler/parser.lm"
 import { analyzeSemantics } from "../compiler/semantics.lm"
 import { checkTypes } from "../compiler/typechecker.lm"
 import { buildIr, irToProgram } from "../compiler/ir.lm"
@@ -8,11 +8,11 @@ import { astCountKind, astMaxDepth } from "../compiler/ast.lm"
 
 function main(): i32 {
   let tokens = tokenize("function main(): i32 { let value = 7 println(value) return value }")
-  let ast = parseAst(tokens)
-  let program = parseProgram(tokens)
-  let ir = buildIr(ast, program)
+  let ast = parseProgram(tokens)
+  let program = astToProgram(ast)
+  let ir = buildIr(ast)
   program = irToProgram(ir, program)
-  let llvm = emitIr(ir, program)
+  let llvm = emitIr(ir)
 
   println(mapGet(program, "mainReturnValue"))
   println(mapGet(program, "statementCount"))
@@ -51,9 +51,9 @@ function main(): i32 {
   return value
 }'
   let syntaxTokens = tokenize(syntaxSource)
-  let syntaxAst = parseAst(syntaxTokens)
-  let syntaxSemantics = analyzeSemantics(syntaxAst, syntaxTokens)
-  let syntaxTypes = checkTypes(syntaxAst, syntaxTokens)
+  let syntaxAst = parseProgram(syntaxTokens)
+  let syntaxSemantics = analyzeSemantics(syntaxAst)
+  let syntaxTypes = checkTypes(syntaxAst)
 
   println(astCountKind(syntaxAst, "Program"))
   println(astCountKind(syntaxAst, "ImportDeclaration"))
@@ -73,14 +73,14 @@ function main(): i32 {
   println(syntaxTypes.checkedCount)
 
   let badTokens = tokenize("function main(): i32 { break return 0 }")
-  let badAst = parseAst(badTokens)
-  let badSemantics = analyzeSemantics(badAst, badTokens)
+  let badAst = parseProgram(badTokens)
+  let badSemantics = analyzeSemantics(badAst)
   println(badSemantics.ok)
   println(badSemantics.message)
 
   let badTypeTokens = tokenize("function main(): i32 { let value: string = 7 return 0 }")
-  let badTypeAst = parseAst(badTypeTokens)
-  let badTypes = checkTypes(badTypeAst, badTypeTokens)
+  let badTypeAst = parseProgram(badTypeTokens)
+  let badTypes = checkTypes(badTypeAst)
   println(badTypes.ok)
   println(badTypes.message)
 

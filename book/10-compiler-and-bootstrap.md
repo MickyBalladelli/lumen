@@ -234,7 +234,7 @@ growing subset of the language. The exact tested subset lives in the
 | --- | --- | --- |
 | `compiler/tokenizer.lm` | | Produces typed tokens with primary-grammar keywords, comments, literals, operators, punctuation, newline termination, locations, and structured lexical errors |
 | `compiler/ast.lm` | | Growable typed node and child arenas with parent links and complete source ranges |
-| `compiler/parser.lm` | | Builds a recursively nested typed AST for the compiler closure and retains the temporary program-map compatibility parser |
+| `compiler/parser.lm` | | Builds one recursively nested typed AST for the compiler closure; later compatibility lowering derives emitter facts from that AST |
 | `compiler/semantics.lm` | | `SemanticResult` — checks `main`, duplicate symbols, `while 1`, `break`/`continue` validity |
 | `compiler/typechecker.lm` | | `TypeResult` — checks annotated variable initializers and first-argument function calls including `none()` and `ok(...)` shapes |
 | `compiler/ir.lm` | | `IrModule` — lowers AST/statement bridge into module facts, instruction counts, return values, print counts, call/binary/loop flags |

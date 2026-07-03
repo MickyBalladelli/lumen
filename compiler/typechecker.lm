@@ -476,7 +476,8 @@ function checkSwitchCases(tokens: TokenArena, index: i32, variables: string, fun
   return typeOk(1)
 }
 
-function checkTypes(ast: AstProgram, tokens: TokenArena): TypeResult {
+function checkTypes(ast: AstProgram): TypeResult {
+  let tokens = ast.tokens
   let variables = map("unused", "unused")
   let functions = map("unused", "unused")
   let count = tokens.count

@@ -14,6 +14,7 @@ struct AstNodeSpec {
 
 struct AstProgram {
   kind: string
+  tokens: TokenArena
   nodes: AstArena
   childStorage: string
   childCount: i32
@@ -141,6 +142,7 @@ function astAdd(program: AstProgram, tokens: TokenArena, parent: i32, spec: AstN
 function astProgram(tokens: TokenArena): AstProgram {
   let program = AstProgram {
     kind: "Program",
+    tokens: tokens,
     nodes: astArena(),
     childStorage: arenaNew(),
     childCount: 0,

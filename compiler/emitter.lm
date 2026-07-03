@@ -1,11 +1,11 @@
 import { IrModule, IrStatement, IrFunction, irStatementFromProgram, irFunctionFromProgram } from "./ir.lm"
 
-function emitIr(ir: IrModule, program: string): string {
+function emitIr(ir: IrModule): string {
   if stringEquals(ir.mode, "compiler-main") {
     return emitCompilerMainIr(ir)
   }
 
-  return emitStatementMainIr(ir, program)
+  return emitStatementMainIr(ir, ir.program)
 }
 
 function emitMain(program: string): string {

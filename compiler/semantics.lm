@@ -243,7 +243,8 @@ function semanticCheckDuplicateParameters(tokens: TokenArena, functionIndex: i32
   return semanticOk(symbolCount)
 }
 
-function analyzeSemantics(ast: AstProgram, tokens: TokenArena): SemanticResult {
+function analyzeSemantics(ast: AstProgram): SemanticResult {
+  let tokens = ast.tokens
   let symbols = map("unused", "unused")
   let scopes = ""
   let count = tokens.count

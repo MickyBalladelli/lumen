@@ -1,9 +1,9 @@
 import { tokenizeFile } from "./tokenizer.lm"
 import { loadModuleSource } from "./modules.lm"
-import { parseAst, parseProgram } from "./parser.lm"
+import { parseProgram } from "./parser.lm"
 import { analyzeSemantics } from "./semantics.lm"
 import { checkTypes } from "./typechecker.lm"
-import { buildIr, irToProgram } from "./ir.lm"
+import { buildIr } from "./ir.lm"
 import { emitIr } from "./emitter.lm"
 import { TokenArena, diagnosticArenaGet, tokenArenaGet } from "./containers.lm"
 
@@ -89,8 +89,8 @@ function compileTiny(input: string, output: string): i32 {
     )
     return 1
   }
-  let ast = parseAst(tokens)
-  let semanticResult = analyzeSemantics(ast, tokens)
+  let ast = parseProgram(tokens)
+  let semanticResult = analyzeSemantics(ast)
 
   if semanticResult.ok {
     let checked = 1
@@ -99,7 +99,7 @@ function compileTiny(input: string, output: string): i32 {
     return 1
   }
 
-  let typeResult = checkTypes(ast, tokens)
+  let typeResult = checkTypes(ast)
   if typeResult.ok {
     let checkedTypes = 1
   } else {
@@ -107,14 +107,11 @@ function compileTiny(input: string, output: string): i32 {
     return 1
   }
 
-  let program = parseProgram(tokens)
+  let ir = buildIr(ast)
   if includes(input, "compiler/main.lm") {
-    program = mapSet(program, "mode", "compiler-main")
+    ir.mode = "compiler-main"
   }
-
-  let ir = buildIr(ast, program)
-  program = irToProgram(ir, program)
-  let llvm = emitIr(ir, program)
+  let llvm = emitIr(ir)
 
   let writeResult = writeFile(output, llvm)
   if !isOk(writeResult) {

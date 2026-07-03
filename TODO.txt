@@ -52,7 +52,7 @@ copy embedded stage-1 LLVM instead of compiling the Lumen source.
   Represent every declaration, statement, type annotation, and expression used
   by the compiler source. Preserve arbitrary nesting and source ranges.
 
-- [ ] Replace the two bootstrap parsers with one parser.
+- [x] Replace the two bootstrap parsers with one parser.
   Remove the `parseAst` summary plus `parseProgram` string-map split. Produce
   one typed AST consumed by every later pass, with no fixed statement,
   parameter, function, or nesting limits.
