@@ -3,7 +3,7 @@ import { readdir, readFile, unlink } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { Compiler } from '../../compiler/Compiler.js'
 import { TestSuite } from '../../testing/TestSuite.js'
-import { runExecutable } from '../../testing/TestProcess.js'
+import { runCommand, runExecutable } from '../../testing/TestProcess.js'
 import {
   compileOnlyExamples,
   exampleExpectations
@@ -13,6 +13,12 @@ const examplesDir = 'examples'
 const outputDir = 'build'
 const compiler = new Compiler()
 const suite = new TestSuite('example')
+const install = await runCommand(process.execPath, [
+  'src/cli/photon.js',
+  'install',
+  '--frozen-lock'
+])
+assert.equal(install.code, 0, install.stderr)
 const dataText = await readFile(join(examplesDir, 'data.txt'), 'utf8')
 const expectations = exampleExpectations(dataText)
 const files = (await readdir(examplesDir))
