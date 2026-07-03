@@ -11,6 +11,7 @@ import {
 const outputDir = 'build'
 const compiler = new Compiler()
 const suite = new TestSuite('bootstrap')
+const requireRealBootstrap = process.argv.includes('--real')
 const stageOneCompiler = join(outputDir, 'lumen-compiler')
 const stageTwoCompiler = join(outputDir, 'lumen-compiler-self')
 const stageThreeCompiler = join(outputDir, 'lumen-compiler-self2')
@@ -127,6 +128,29 @@ await suite.test('stage-3 output matches stage-2', async () => {
     await readFile(programLLVM('tiny', 2), 'utf8')
   )
 })
+
+if (requireRealBootstrap) {
+  for (const program of programs) {
+    await suite.test(`stage-3 ${program[0]}`, () => {
+      return testProgram(stageThreeCompiler, 3, program)
+    })
+  }
+
+  for (const diagnostic of diagnostics) {
+    await suite.test(`stage-3 diagnostic ${diagnostic[0]}`, () => {
+      return testDiagnostic(stageThreeCompiler, 3, diagnostic)
+    })
+  }
+
+  await suite.test('stage-1 compiles compiler source instead of copying a checkpoint', async () => {
+    const stageTwoLLVM = await readFile(`${stageTwoCompiler}.ll`, 'utf8')
+    assert.doesNotMatch(
+      stageTwoLLVM,
+      /@lumen_compiler_image/,
+      'real bootstrap is red: stage-2 copied the embedded stage-1 compiler image'
+    )
+  })
+}
 
 suite.finish()
 

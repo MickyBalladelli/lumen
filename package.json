@@ -72,6 +72,7 @@
     "test:negative": "node ./src/cli/test-suites/negative.js",
     "test:lsp": "node ./src/cli/test-suites/lsp.js",
     "test:bootstrap": "node ./src/cli/test-suites/bootstrap.js",
+    "test:bootstrap:real": "node ./src/cli/test-suites/bootstrap.js --real",
     "test:parity": "node ./src/cli/test-parity.js",
     "test:sanitizers": "node ./src/cli/test-sanitizers.js",
     "test:http-runtime": "node ./src/cli/test-http-runtime.js",
