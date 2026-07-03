@@ -1,0 +1,108 @@
+import { tokenizeFile } from "../../compiler/tokenizer.lm"
+import { parseAst } from "../../compiler/parser.lm"
+import { AstProgram, astChildAt, astCountKind, astFindKind, astMaxDepth, astNodeAt } from "../../compiler/ast.lm"
+
+function requireKind(program: AstProgram, kind: string): i32 {
+  assert(astCountKind(program, kind) > 0, "missing typed AST node")
+  return 0
+}
+
+function main(): i32 {
+  let source = "import { println } from 'system'
+struct Point {
+  x: i32
+  label: string
+}
+function add(left: i32, right: i32): i32 {
+  return left + right
+}
+function main(): i32 {
+  let text: string = 'abc'
+  let point: Point = Point {
+    x: 2,
+    label: text[0..1]
+  }
+  let value = add(point.x, 1)
+  let ready = !false
+  while value < 8 do {
+    if ready {
+      if value == 4 {
+        break
+      }
+      value = value + 1
+      continue
+    }
+  }
+  println(point.label)
+  return value
+}"
+
+  let tokens = tokenizeFile(source, "typed-ast.lm")
+  assert(tokens.ok, "AST fixture must tokenize")
+  let program = parseAst(tokens)
+
+  requireKind(program, "Program")
+  requireKind(program, "ImportDeclaration")
+  requireKind(program, "StructDeclaration")
+  requireKind(program, "StructField")
+  requireKind(program, "FunctionDeclaration")
+  requireKind(program, "VariableDeclaration")
+  requireKind(program, "VariableDeclarator")
+  requireKind(program, "TypeAnnotation")
+  requireKind(program, "BlockStatement")
+  requireKind(program, "IfStatement")
+  requireKind(program, "WhileStatement")
+  requireKind(program, "BreakStatement")
+  requireKind(program, "ContinueStatement")
+  requireKind(program, "ReturnStatement")
+  requireKind(program, "ExpressionStatement")
+  requireKind(program, "RawExpression")
+  requireKind(program, "AssignmentExpression")
+  requireKind(program, "BinaryExpression")
+  requireKind(program, "UnaryExpression")
+  requireKind(program, "CallExpression")
+  requireKind(program, "MemberExpression")
+  requireKind(program, "SliceExpression")
+  requireKind(program, "StructExpression")
+  requireKind(program, "StructProperty")
+  requireKind(program, "Identifier")
+  requireKind(program, "IdentifierExpression")
+  requireKind(program, "LiteralExpression")
+
+  let structExpressionId = astFindKind(program, "StructExpression", 0)
+  let structExpression = astNodeAt(program, structExpressionId)
+  assert(structExpression.parent >= 0, "AST node must retain parent")
+  assert(stringEquals(structExpression.file, "typed-ast.lm"), "AST node must retain file")
+  assert(structExpression.offset > 0, "AST node must retain offset")
+  assert(structExpression.endOffset > structExpression.offset, "AST node must retain end offset")
+  assert(structExpression.line > 0, "AST node must retain line")
+  assert(structExpression.column > 0, "AST node must retain column")
+  assert(structExpression.endLine >= structExpression.line, "AST node must retain end line")
+  assert(structExpression.childCount == 2, "struct properties must be children")
+  let firstProperty = astNodeAt(program, astChildAt(program, structExpressionId, 0))
+  let secondProperty = astNodeAt(program, astChildAt(program, structExpressionId, 1))
+  assert(stringEquals(firstProperty.name, "x"), "AST children must retain source order")
+  assert(stringEquals(secondProperty.name, "label"), "AST children must retain source order")
+
+  let deep = stringBuilder()
+  deep = stringBuilderAppend(deep, "function main(): i32 {")
+  let depth: i32 = 0
+  while depth < 40 do {
+    deep = stringBuilderAppend(deep, "if true {")
+    depth = depth + 1
+  }
+  deep = stringBuilderAppend(deep, "return 0")
+  while depth > 0 do {
+    deep = stringBuilderAppend(deep, "}")
+    depth = depth - 1
+  }
+  deep = stringBuilderAppend(deep, "}")
+
+  let deepTokens = tokenizeFile(deep, "deep.lm")
+  let deepProgram = parseAst(deepTokens)
+  assert(astCountKind(deepProgram, "IfStatement") == 40, "AST nesting must not be fixed")
+  assert(astMaxDepth(deepProgram) >= 40, "AST parent links must preserve nesting")
+
+  println("bootstrap AST")
+  return 0
+}

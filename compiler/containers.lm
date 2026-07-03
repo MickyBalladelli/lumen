@@ -17,6 +17,18 @@ struct CompilerAstNode {
   tokenEnd: i32
   typeId: i32
   text: string
+  name: string
+  value: string
+  operator: string
+  typeName: string
+  file: string
+  offset: i32
+  line: i32
+  column: i32
+  endOffset: i32
+  endLine: i32
+  endColumn: i32
+  flags: i32
 }
 
 struct CompilerType {
@@ -159,7 +171,43 @@ function astArenaPush(arena: AstArena, node: CompilerAstNode): AstArena {
   arenaSetI32(arena.storage, index, 5, node.tokenEnd)
   arenaSetI32(arena.storage, index, 6, node.typeId)
   arenaSetString(arena.storage, index, 7, node.text)
+  arenaSetString(arena.storage, index, 8, node.name)
+  arenaSetString(arena.storage, index, 9, node.value)
+  arenaSetString(arena.storage, index, 10, node.operator)
+  arenaSetString(arena.storage, index, 11, node.typeName)
+  arenaSetString(arena.storage, index, 12, node.file)
+  arenaSetI32(arena.storage, index, 13, node.offset)
+  arenaSetI32(arena.storage, index, 14, node.line)
+  arenaSetI32(arena.storage, index, 15, node.column)
+  arenaSetI32(arena.storage, index, 16, node.endOffset)
+  arenaSetI32(arena.storage, index, 17, node.endLine)
+  arenaSetI32(arena.storage, index, 18, node.endColumn)
+  arenaSetI32(arena.storage, index, 19, node.flags)
   arena.count = arenaLen(arena.storage)
+  return arena
+}
+
+function astArenaSet(arena: AstArena, index: i32, node: CompilerAstNode): AstArena {
+  arenaSetString(arena.storage, index, 0, node.kind)
+  arenaSetI32(arena.storage, index, 1, node.parent)
+  arenaSetI32(arena.storage, index, 2, node.firstChild)
+  arenaSetI32(arena.storage, index, 3, node.childCount)
+  arenaSetI32(arena.storage, index, 4, node.tokenStart)
+  arenaSetI32(arena.storage, index, 5, node.tokenEnd)
+  arenaSetI32(arena.storage, index, 6, node.typeId)
+  arenaSetString(arena.storage, index, 7, node.text)
+  arenaSetString(arena.storage, index, 8, node.name)
+  arenaSetString(arena.storage, index, 9, node.value)
+  arenaSetString(arena.storage, index, 10, node.operator)
+  arenaSetString(arena.storage, index, 11, node.typeName)
+  arenaSetString(arena.storage, index, 12, node.file)
+  arenaSetI32(arena.storage, index, 13, node.offset)
+  arenaSetI32(arena.storage, index, 14, node.line)
+  arenaSetI32(arena.storage, index, 15, node.column)
+  arenaSetI32(arena.storage, index, 16, node.endOffset)
+  arenaSetI32(arena.storage, index, 17, node.endLine)
+  arenaSetI32(arena.storage, index, 18, node.endColumn)
+  arenaSetI32(arena.storage, index, 19, node.flags)
   return arena
 }
 
@@ -172,7 +220,19 @@ function astArenaGet(arena: AstArena, index: i32): CompilerAstNode {
     tokenStart: arenaGetI32(arena.storage, index, 4),
     tokenEnd: arenaGetI32(arena.storage, index, 5),
     typeId: arenaGetI32(arena.storage, index, 6),
-    text: arenaGetString(arena.storage, index, 7)
+    text: arenaGetString(arena.storage, index, 7),
+    name: arenaGetString(arena.storage, index, 8),
+    value: arenaGetString(arena.storage, index, 9),
+    operator: arenaGetString(arena.storage, index, 10),
+    typeName: arenaGetString(arena.storage, index, 11),
+    file: arenaGetString(arena.storage, index, 12),
+    offset: arenaGetI32(arena.storage, index, 13),
+    line: arenaGetI32(arena.storage, index, 14),
+    column: arenaGetI32(arena.storage, index, 15),
+    endOffset: arenaGetI32(arena.storage, index, 16),
+    endLine: arenaGetI32(arena.storage, index, 17),
+    endColumn: arenaGetI32(arena.storage, index, 18),
+    flags: arenaGetI32(arena.storage, index, 19)
   }
 }
 

@@ -26,11 +26,11 @@ Finished" section so the project's progress is visible.
   and are then freed. Native ASan+UBSan tests cover safe allocation plus array
   read/write, string, and slice bounds failures.
 
-- **Self-host parser** — real typed AST entry point in `compiler/ast.lm` with
-  `parseAst(...)`. Recognizes imports, extern declarations, structs, enums,
-  async functions, `let`/`const`, `if`, classic `for`, for-of, range loops,
-  `while`, do-until, `switch`, `defer`, `break`, `continue`, `try`/`catch`,
-  `throw`, `return`, and match-expression initializers.
+- **Typed self-host AST** — `compiler/ast.lm` stores declarations, statements,
+  type annotations, and expressions in growable node and child arenas.
+  `parseAst(...)` preserves arbitrary nesting, parent links, and source ranges
+  for every syntax kind used by the compiler closure. The separate program-map
+  compatibility parser remains until the parser-unification milestone.
 
 - **Self-host semantic analyzer** — `SemanticResult` with checks for `main`,
   duplicate top-level symbols, unsupported bootstrap `while 1`, and

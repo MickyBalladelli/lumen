@@ -1,4 +1,4 @@
-import { AstProgram, astProgram, astRecordFunction, astRecordReturn, astRecordStatement, astRecordSyntax } from "./ast.lm"
+import { AstProgram, astAdd, astNodeSpec, astProgram } from "./ast.lm"
 import { CompilerToken, TokenArena, tokenArenaGet } from "./containers.lm"
 
 function tokenValue(token: CompilerToken): string {
@@ -948,215 +948,722 @@ function setFunction(program: string, index: i32, tokens: TokenArena, functionIn
   return program
 }
 
-function parseAst(tokens: TokenArena): AstProgram {
-  let program = astProgram()
-  let variables = map("unused", "unused")
-  let index: i32 = 0
-  let count = tokens.count
+function astTokenText(tokens: TokenArena, start: i32, end: i32): string {
+  let out = stringBuilder()
+  let index = start
 
-  while index < count do {
-    let current = tokenValue(tokenArenaGet(tokens, index))
+  while index <= end do {
+    out = stringBuilderAppend(out, tokenValue(tokenArenaGet(tokens, index)))
+    index = index + 1
+  }
 
-    if stringEquals(current, "import") {
-      program = astRecordSyntax(program, "import")
-      index = findAfterImport(tokens, index)
-      continue
-    }
+  return out
+}
 
-    if stringEquals(current, "extern") {
-      program = astRecordSyntax(program, "extern")
-      index = findAfterExtern(tokens, index)
-      continue
-    }
+function astIsTerminator(tokens: TokenArena, index: i32): bool {
+  let kind = tokenKind(tokenArenaGet(tokens, index))
+  if stringEquals(kind, "semicolon") {
+    return true
+  }
 
-    if stringEquals(current, "struct") {
-      program = astRecordSyntax(program, "struct")
-      let end = findBlockEnd(tokens, index)
-      index = end + 1
-      continue
-    }
+  return stringEquals(kind, "eof")
+}
 
-    if stringEquals(current, "enum") {
-      program = astRecordSyntax(program, "enum")
-      let end = findBlockEnd(tokens, index)
-      index = end + 1
-      continue
-    }
-
-    if stringEquals(current, "async") {
-      program = astRecordSyntax(program, "asyncFunction")
+function astSkipTerminators(tokens: TokenArena, index: i32, end: i32): i32 {
+  while index < end do {
+    if astIsTerminator(tokens, index) {
       index = index + 1
       continue
     }
+    break
+  }
 
-    if stringEquals(current, "function") {
-      let name = tokenValue(tokenArenaGet(tokens, index + 1))
+  return index
+}
 
-      if stringEquals(name, "main") {
-        let start = findNext(tokens, index, "{")
-        index = start + 1
-        continue
+function astTrimExpressionEnd(tokens: TokenArena, start: i32, end: i32): i32 {
+  while end >= start do {
+    if astIsTerminator(tokens, end) {
+      end = end - 1
+      continue
+    }
+    break
+  }
+
+  return end
+}
+
+function astFindMatching(tokens: TokenArena, open: i32, end: i32, left: string, right: string): i32 {
+  let depth: i32 = 0
+  let index = open
+
+  while index < end do {
+    let value = tokenValue(tokenArenaGet(tokens, index))
+    if stringEquals(value, left) {
+      depth = depth + 1
+    }
+    if stringEquals(value, right) {
+      depth = depth - 1
+      if depth == 0 {
+        return index
       }
-
-      program = astRecordFunction(program)
-      let end = findBlockEnd(tokens, index)
-      index = end + 1
-      continue
     }
+    index = index + 1
+  }
 
-    if stringEquals(current, "let") {
-      if isMatchInitializer(tokens, index) {
-        program = astRecordSyntax(program, "match")
+  return end
+}
+
+function astFindStatementEnd(tokens: TokenArena, start: i32, end: i32): i32 {
+  let parens: i32 = 0
+  let brackets: i32 = 0
+  let braces: i32 = 0
+  let index = start
+
+  while index < end do {
+    let value = tokenValue(tokenArenaGet(tokens, index))
+    if stringEquals(value, "(") {
+      parens = parens + 1
+    } else if stringEquals(value, ")") {
+      parens = parens - 1
+    } else if stringEquals(value, "[") {
+      brackets = brackets + 1
+    } else if stringEquals(value, "]") {
+      brackets = brackets - 1
+    } else if stringEquals(value, "{") {
+      braces = braces + 1
+    } else if stringEquals(value, "}") {
+      if braces == 0 {
+        return index - 1
       }
-
-      let name = tokenValue(tokenArenaGet(tokens, index + 1))
-      let value = readInitializer(tokens, index, variables)
-      variables = mapSet(variables, name, value)
-      program = astRecordStatement(program)
-      let equals = findNext(tokens, index, "=")
-      index = equals + 2
-      continue
+      braces = braces - 1
     }
 
-    if stringEquals(current, "const") {
-      if isMatchInitializer(tokens, index) {
-        program = astRecordSyntax(program, "match")
+    if parens == 0 && brackets == 0 && braces == 0 {
+      if astIsTerminator(tokens, index) {
+        return index - 1
       }
-
-      let name = tokenValue(tokenArenaGet(tokens, index + 1))
-      let value = readInitializer(tokens, index, variables)
-      variables = mapSet(variables, name, value)
-      program = astRecordStatement(program)
-      let equals = findNext(tokens, index, "=")
-      index = equals + 2
-      continue
-    }
-
-    if stringEquals(current, "if") {
-      program = astRecordSyntax(program, "if")
-      program = astRecordStatement(program)
-      let end = findBlockEnd(tokens, index)
-      if stringEquals(tokenValue(tokenArenaGet(tokens, end + 1)), "else") {
-        let elseEnd = findBlockEnd(tokens, end + 1)
-        index = elseEnd + 1
-        continue
-      }
-
-      index = end + 1
-      continue
-    }
-
-    if stringEquals(current, "for") {
-      if isRangeLoop(tokens, index) {
-        program = astRecordSyntax(program, "forRange")
-        let end = findBlockEnd(tokens, index)
-        index = end + 1
-        continue
-      }
-
-      if isForOfLoop(tokens, index) {
-        program = astRecordSyntax(program, "forOf")
-        let end = findBlockEnd(tokens, index)
-        index = end + 1
-        continue
-      }
-
-      program = astRecordSyntax(program, "for")
-      program = astRecordStatement(program)
-      let end = findBlockEnd(tokens, index)
-      index = end + 1
-      continue
-    }
-
-    if stringEquals(current, "while") {
-      program = astRecordSyntax(program, "while")
-      program = astRecordStatement(program)
-      let end = findBlockEnd(tokens, index)
-      index = end + 1
-      continue
-    }
-
-    if stringEquals(current, "do") {
-      program = astRecordSyntax(program, "doUntil")
-      let end = findBlockEnd(tokens, index)
-      index = end + 2
-      continue
-    }
-
-    if stringEquals(current, "switch") {
-      program = astRecordSyntax(program, "switch")
-      let end = findBlockEnd(tokens, index)
-      index = end + 1
-      continue
-    }
-
-    if stringEquals(current, "try") {
-      program = astRecordSyntax(program, "tryCatch")
-      let tryEnd = findBlockEnd(tokens, index)
-      if stringEquals(tokenValue(tokenArenaGet(tokens, tryEnd + 1)), "catch") {
-        let catchEnd = findBlockEnd(tokens, tryEnd + 1)
-        index = catchEnd + 1
-        continue
-      }
-
-      index = tryEnd + 1
-      continue
-    }
-
-    if stringEquals(current, "throw") {
-      program = astRecordSyntax(program, "throw")
-      index = index + 1
-      continue
-    }
-
-    if stringEquals(current, "defer") {
-      program = astRecordSyntax(program, "defer")
-      index = index + 1
-      continue
-    }
-
-    if stringEquals(current, "break") {
-      program = astRecordSyntax(program, "break")
-      index = index + 1
-      continue
-    }
-
-    if stringEquals(current, "continue") {
-      program = astRecordSyntax(program, "continue")
-      index = index + 1
-      continue
-    }
-
-    if stringEquals(current, "println") {
-      program = astRecordStatement(program)
-      index = index + 1
-      continue
-    }
-
-    if stringEquals(current, "return") {
-      let value = readValue(tokens, index + 1, variables)
-      program = astRecordReturn(program, mapValueKind(value), mapValueBody(value))
-      index = index + 1
-      continue
-    }
-
-    if stringEquals(tokenValue(tokenArenaGet(tokens, index + 1)), "=") {
-      let number = evalNumber(tokens, index + 2, variables)
-      let text = intToString(number)
-      let value = "number:" + text
-      variables = mapSet(variables, current, value)
-      index = index + 1
-      continue
     }
 
     index = index + 1
   }
 
+  return end - 1
+}
+
+function astFindTopLevel(tokens: TokenArena, start: i32, end: i32, wanted: string): i32 {
+  let parens: i32 = 0
+  let brackets: i32 = 0
+  let braces: i32 = 0
+  let index = start
+
+  while index <= end do {
+    let value = tokenValue(tokenArenaGet(tokens, index))
+    if stringEquals(value, wanted) && parens == 0 && brackets == 0 && braces == 0 {
+      return index
+    }
+
+    if stringEquals(value, "(") {
+      parens = parens + 1
+    } else if stringEquals(value, ")") {
+      parens = parens - 1
+    } else if stringEquals(value, "[") {
+      brackets = brackets + 1
+    } else if stringEquals(value, "]") {
+      brackets = brackets - 1
+    } else if stringEquals(value, "{") {
+      braces = braces + 1
+    } else if stringEquals(value, "}") {
+      braces = braces - 1
+    }
+
+    index = index + 1
+  }
+
+  return -1
+}
+
+function astFindLastTopLevel(tokens: TokenArena, start: i32, end: i32, wanted: string): i32 {
+  let parens: i32 = 0
+  let brackets: i32 = 0
+  let braces: i32 = 0
+  let found: i32 = -1
+  let index = start
+
+  while index <= end do {
+    let value = tokenValue(tokenArenaGet(tokens, index))
+    if stringEquals(value, wanted) && parens == 0 && brackets == 0 && braces == 0 {
+      found = index
+    }
+
+    if stringEquals(value, "(") {
+      parens = parens + 1
+    } else if stringEquals(value, ")") {
+      parens = parens - 1
+    } else if stringEquals(value, "[") {
+      brackets = brackets + 1
+    } else if stringEquals(value, "]") {
+      brackets = brackets - 1
+    } else if stringEquals(value, "{") {
+      braces = braces + 1
+    } else if stringEquals(value, "}") {
+      braces = braces - 1
+    }
+    index = index + 1
+  }
+
+  return found
+}
+
+function astOperatorPrecedence(operator: string): i32 {
+  if stringEquals(operator, "=") {
+    return 1
+  }
+  if stringEquals(operator, "||") {
+    return 2
+  }
+  if stringEquals(operator, "&&") {
+    return 3
+  }
+  if stringEquals(operator, "==") || stringEquals(operator, "!=") ||
+    stringEquals(operator, "===") || stringEquals(operator, "!==") {
+    return 4
+  }
+  if stringEquals(operator, "<") || stringEquals(operator, "<=") ||
+    stringEquals(operator, ">") || stringEquals(operator, ">=") {
+    return 5
+  }
+  if stringEquals(operator, "+") || stringEquals(operator, "-") {
+    return 6
+  }
+  if stringEquals(operator, "*") || stringEquals(operator, "/") ||
+    stringEquals(operator, "%") {
+    return 7
+  }
+  return 0
+}
+
+function astFindBinary(tokens: TokenArena, start: i32, end: i32): i32 {
+  let parens: i32 = 0
+  let brackets: i32 = 0
+  let braces: i32 = 0
+  let best: i32 = -1
+  let bestPrecedence: i32 = 100
+  let index = start
+
+  while index <= end do {
+    let value = tokenValue(tokenArenaGet(tokens, index))
+    if stringEquals(value, "(") {
+      parens = parens + 1
+    } else if stringEquals(value, ")") {
+      parens = parens - 1
+    } else if stringEquals(value, "[") {
+      brackets = brackets + 1
+    } else if stringEquals(value, "]") {
+      brackets = brackets - 1
+    } else if stringEquals(value, "{") {
+      braces = braces + 1
+    } else if stringEquals(value, "}") {
+      braces = braces - 1
+    } else if parens == 0 && brackets == 0 && braces == 0 {
+      let precedence = astOperatorPrecedence(value)
+      if precedence > 0 && index > start {
+        if precedence <= bestPrecedence {
+          best = index
+          bestPrecedence = precedence
+        }
+      }
+    }
+
+    index = index + 1
+  }
+
+  return best
+}
+
+function astAddIdentifier(program: AstProgram, tokens: TokenArena, parent: i32, index: i32): AstProgram {
+  let spec = astNodeSpec("Identifier", index, index)
+  spec.name = tokenValue(tokenArenaGet(tokens, index))
+  spec.text = spec.name
+  return astAdd(program, tokens, parent, spec)
+}
+
+function astAddType(program: AstProgram, tokens: TokenArena, parent: i32, start: i32, end: i32): AstProgram {
+  if end < start {
+    return program
+  }
+
+  let spec = astNodeSpec("TypeAnnotation", start, end)
+  spec.typeName = astTokenText(tokens, start, end)
+  spec.text = spec.typeName
+  return astAdd(program, tokens, parent, spec)
+}
+
+function astParseExpressionNode(program: AstProgram, tokens: TokenArena, start: i32, end: i32, parent: i32): AstProgram {
+  end = astTrimExpressionEnd(tokens, start, end)
+  if end < start {
+    return program
+  }
+
+  if stringEquals(tokenValue(tokenArenaGet(tokens, start)), "(") {
+    let close = astFindMatching(tokens, start, end + 1, "(", ")")
+    if close == end {
+      return astParseExpressionNode(program, tokens, start + 1, end - 1, parent)
+    }
+  }
+
+  let binary = astFindBinary(tokens, start, end)
+  if binary >= 0 {
+    let operator = tokenValue(tokenArenaGet(tokens, binary))
+    let kind = "BinaryExpression"
+    if stringEquals(operator, "=") {
+      kind = "AssignmentExpression"
+    }
+    let spec = astNodeSpec(kind, start, end)
+    spec.operator = operator
+    spec.text = astTokenText(tokens, start, end)
+    program = astAdd(program, tokens, parent, spec)
+    let nodeId = program.lastNode
+    program = astParseExpressionNode(program, tokens, start, binary - 1, nodeId)
+    program = astParseExpressionNode(program, tokens, binary + 1, end, nodeId)
+    return program
+  }
+
+  let first = tokenValue(tokenArenaGet(tokens, start))
+  if stringEquals(first, "!") || stringEquals(first, "-") || stringEquals(first, "+") {
+    let spec = astNodeSpec("UnaryExpression", start, end)
+    spec.operator = first
+    spec.text = astTokenText(tokens, start, end)
+    program = astAdd(program, tokens, parent, spec)
+    let nodeId = program.lastNode
+    return astParseExpressionNode(program, tokens, start + 1, end, nodeId)
+  }
+
+  if stringEquals(tokenValue(tokenArenaGet(tokens, end)), "++") ||
+    stringEquals(tokenValue(tokenArenaGet(tokens, end)), "--") {
+    let spec = astNodeSpec("AssignmentExpression", start, end)
+    spec.operator = tokenValue(tokenArenaGet(tokens, end))
+    spec.text = astTokenText(tokens, start, end)
+    program = astAdd(program, tokens, parent, spec)
+    let nodeId = program.lastNode
+    return astParseExpressionNode(program, tokens, start, end - 1, nodeId)
+  }
+
+  if start + 1 <= end {
+    if stringEquals(tokenValue(tokenArenaGet(tokens, start + 1)), "{") {
+      let close = astFindMatching(tokens, start + 1, end + 1, "{", "}")
+      if close == end {
+        let spec = astNodeSpec("StructExpression", start, end)
+        spec.name = first
+        spec.typeName = first
+        spec.text = astTokenText(tokens, start, end)
+        program = astAdd(program, tokens, parent, spec)
+        let nodeId = program.lastNode
+        let cursor = start + 2
+
+        while cursor < end do {
+          cursor = astSkipTerminators(tokens, cursor, end)
+          if cursor >= end {
+            break
+          }
+
+          let colon = astFindTopLevel(tokens, cursor, end - 1, ":")
+          if colon < 0 {
+            break
+          }
+          let propertyEnd = astFindStatementEnd(tokens, colon + 1, end)
+          let comma = astFindTopLevel(tokens, colon + 1, propertyEnd, ",")
+          if comma >= 0 {
+            propertyEnd = comma - 1
+          }
+          let property = astNodeSpec("StructProperty", cursor, propertyEnd)
+          property.name = tokenValue(tokenArenaGet(tokens, cursor))
+          property.text = astTokenText(tokens, cursor, propertyEnd)
+          program = astAdd(program, tokens, nodeId, property)
+          let propertyId = program.lastNode
+          program = astParseExpressionNode(program, tokens, colon + 1, propertyEnd, propertyId)
+          cursor = propertyEnd + 1
+          if stringEquals(tokenValue(tokenArenaGet(tokens, cursor)), ",") {
+            cursor = cursor + 1
+          }
+        }
+
+        return program
+      }
+    }
+  }
+
+  let callOpen = astFindTopLevel(tokens, start, end, "(")
+  if callOpen > start {
+    let callClose = astFindMatching(tokens, callOpen, end + 1, "(", ")")
+    if callClose == end {
+      let spec = astNodeSpec("CallExpression", start, end)
+      spec.name = tokenValue(tokenArenaGet(tokens, start))
+      spec.text = astTokenText(tokens, start, end)
+      program = astAdd(program, tokens, parent, spec)
+      let callId = program.lastNode
+      program = astParseExpressionNode(program, tokens, start, callOpen - 1, callId)
+      let cursor = callOpen + 1
+
+      while cursor < callClose do {
+        let comma = astFindTopLevel(tokens, cursor, callClose - 1, ",")
+        let argumentEnd = callClose - 1
+        if comma >= 0 {
+          argumentEnd = comma - 1
+        }
+        program = astParseExpressionNode(program, tokens, cursor, argumentEnd, callId)
+        if comma < 0 {
+          break
+        }
+        cursor = comma + 1
+      }
+
+      return program
+    }
+  }
+
+  let bracket = astFindTopLevel(tokens, start, end, "[")
+  if bracket > start {
+    let close = astFindMatching(tokens, bracket, end + 1, "[", "]")
+    if close == end {
+      let firstDot = astFindTopLevel(tokens, bracket + 1, close - 1, ".")
+      let kind = "MemberExpression"
+      if firstDot >= 0 {
+        if stringEquals(tokenValue(tokenArenaGet(tokens, firstDot + 1)), ".") {
+          kind = "SliceExpression"
+        }
+      }
+      let spec = astNodeSpec(kind, start, end)
+      spec.flags = 1
+      spec.text = astTokenText(tokens, start, end)
+      program = astAdd(program, tokens, parent, spec)
+      let memberId = program.lastNode
+      program = astParseExpressionNode(program, tokens, start, bracket - 1, memberId)
+      if stringEquals(kind, "SliceExpression") {
+        program = astParseExpressionNode(program, tokens, bracket + 1, firstDot - 1, memberId)
+        program = astParseExpressionNode(program, tokens, firstDot + 2, close - 1, memberId)
+      } else {
+        program = astParseExpressionNode(program, tokens, bracket + 1, close - 1, memberId)
+      }
+      return program
+    }
+  }
+
+  let dot = astFindLastTopLevel(tokens, start, end, ".")
+  if dot > start {
+    let spec = astNodeSpec("MemberExpression", start, end)
+    spec.name = tokenValue(tokenArenaGet(tokens, dot + 1))
+    spec.text = astTokenText(tokens, start, end)
+    program = astAdd(program, tokens, parent, spec)
+    let memberId = program.lastNode
+    program = astParseExpressionNode(program, tokens, start, dot - 1, memberId)
+    return astAddIdentifier(program, tokens, memberId, dot + 1)
+  }
+
+  let token = tokenArenaGet(tokens, start)
+  if stringEquals(token.kind, "number") || stringEquals(token.kind, "string") ||
+    stringEquals(first, "true") || stringEquals(first, "false") ||
+    stringEquals(first, "null") {
+    let literal = astNodeSpec("LiteralExpression", start, end)
+    literal.value = tokenValue(token)
+    literal.text = astTokenText(tokens, start, end)
+    return astAdd(program, tokens, parent, literal)
+  }
+
+  let identifier = astNodeSpec("IdentifierExpression", start, end)
+  identifier.name = first
+  identifier.text = astTokenText(tokens, start, end)
+  return astAdd(program, tokens, parent, identifier)
+}
+
+function astParseExpression(program: AstProgram, tokens: TokenArena, start: i32, end: i32, parent: i32): AstProgram {
+  end = astTrimExpressionEnd(tokens, start, end)
+  if end < start {
+    return program
+  }
+
+  let raw = astNodeSpec("RawExpression", start, end)
+  raw.text = astTokenText(tokens, start, end)
+  program = astAdd(program, tokens, parent, raw)
+  let rawId = program.lastNode
+  return astParseExpressionNode(program, tokens, start, end, rawId)
+}
+
+function astParseImport(program: AstProgram, tokens: TokenArena, index: i32, end: i32, parent: i32): AstProgram {
+  let statementEnd = astFindStatementEnd(tokens, index, end)
+  let spec = astNodeSpec("ImportDeclaration", index, statementEnd)
+  let fromIndex = findNext(tokens, index, "from")
+  spec.value = tokenValue(tokenArenaGet(tokens, fromIndex + 1))
+  spec.text = astTokenText(tokens, index, statementEnd)
+  program = astAdd(program, tokens, parent, spec)
+  let importId = program.lastNode
+  let cursor = index + 2
+
+  while cursor < fromIndex do {
+    if stringEquals(tokenKind(tokenArenaGet(tokens, cursor)), "identifier") {
+      program = astAddIdentifier(program, tokens, importId, cursor)
+    }
+    cursor = cursor + 1
+  }
+
+  let source = astNodeSpec("LiteralExpression", fromIndex + 1, fromIndex + 1)
+  source.value = tokenValue(tokenArenaGet(tokens, fromIndex + 1))
+  source.text = source.value
+  program = astAdd(program, tokens, importId, source)
+  program.nextToken = statementEnd + 1
   return program
 }
 
+function astParseStruct(program: AstProgram, tokens: TokenArena, index: i32, end: i32, parent: i32): AstProgram {
+  let close = findBlockEnd(tokens, index)
+  let spec = astNodeSpec("StructDeclaration", index, close)
+  spec.name = tokenValue(tokenArenaGet(tokens, index + 1))
+  spec.text = spec.name
+  program = astAdd(program, tokens, parent, spec)
+  let structId = program.lastNode
+  program = astAddIdentifier(program, tokens, structId, index + 1)
+  let open = findNext(tokens, index, "{")
+  let cursor = open + 1
+
+  while cursor < close do {
+    cursor = astSkipTerminators(tokens, cursor, close)
+    if cursor >= close {
+      break
+    }
+    let colon = findNext(tokens, cursor, ":")
+    let fieldEnd = astFindStatementEnd(tokens, colon + 1, close)
+    let field = astNodeSpec("StructField", cursor, fieldEnd)
+    field.name = tokenValue(tokenArenaGet(tokens, cursor))
+    field.typeName = astTokenText(tokens, colon + 1, fieldEnd)
+    field.text = astTokenText(tokens, cursor, fieldEnd)
+    program = astAdd(program, tokens, structId, field)
+    let fieldId = program.lastNode
+    program = astAddIdentifier(program, tokens, fieldId, cursor)
+    program = astAddType(program, tokens, fieldId, colon + 1, fieldEnd)
+    cursor = fieldEnd + 1
+  }
+
+  program.nextToken = close + 1
+  return program
+}
+
+function astParseFunction(program: AstProgram, tokens: TokenArena, index: i32, end: i32, parent: i32): AstProgram {
+  let functionIndex = index
+  let flags: i32 = 0
+  if stringEquals(tokenValue(tokenArenaGet(tokens, index)), "async") {
+    flags = 1
+    functionIndex = index + 1
+  }
+
+  let open = findNext(tokens, functionIndex, "(")
+  let close = astFindMatching(tokens, open, end, "(", ")")
+  let bodyOpen = findNext(tokens, close, "{")
+  let bodyClose = findBlockEnd(tokens, bodyOpen)
+  let spec = astNodeSpec("FunctionDeclaration", index, bodyClose)
+  spec.name = tokenValue(tokenArenaGet(tokens, functionIndex + 1))
+  spec.flags = flags
+  spec.text = spec.name
+  program = astAdd(program, tokens, parent, spec)
+  let functionId = program.lastNode
+  program = astAddIdentifier(program, tokens, functionId, functionIndex + 1)
+  let cursor = open + 1
+
+  while cursor < close do {
+    cursor = astSkipTerminators(tokens, cursor, close)
+    if cursor >= close {
+      break
+    }
+    let colon = findNext(tokens, cursor, ":")
+    let comma = astFindTopLevel(tokens, colon + 1, close - 1, ",")
+    let paramEnd = close - 1
+    if comma >= 0 {
+      paramEnd = comma - 1
+    }
+    let parameter = astNodeSpec("VariableDeclarator", cursor, paramEnd)
+    parameter.name = tokenValue(tokenArenaGet(tokens, cursor))
+    parameter.typeName = astTokenText(tokens, colon + 1, paramEnd)
+    parameter.text = astTokenText(tokens, cursor, paramEnd)
+    program = astAdd(program, tokens, functionId, parameter)
+    let parameterId = program.lastNode
+    program = astAddIdentifier(program, tokens, parameterId, cursor)
+    program = astAddType(program, tokens, parameterId, colon + 1, paramEnd)
+    if comma < 0 {
+      break
+    }
+    cursor = comma + 1
+  }
+
+  if stringEquals(tokenValue(tokenArenaGet(tokens, close + 1)), ":") {
+    program = astAddType(program, tokens, functionId, close + 2, bodyOpen - 1)
+  }
+
+  let block = astNodeSpec("BlockStatement", bodyOpen, bodyClose)
+  program = astAdd(program, tokens, functionId, block)
+  let blockId = program.lastNode
+  program = astParseScope(program, tokens, bodyOpen + 1, bodyClose, blockId)
+  program.nextToken = bodyClose + 1
+  return program
+}
+
+function astParseVariable(program: AstProgram, tokens: TokenArena, index: i32, end: i32, parent: i32): AstProgram {
+  let statementEnd = astFindStatementEnd(tokens, index, end)
+  let declaration = astNodeSpec("VariableDeclaration", index, statementEnd)
+  if stringEquals(tokenValue(tokenArenaGet(tokens, index)), "const") {
+    declaration.flags = 1
+  }
+  declaration.text = astTokenText(tokens, index, statementEnd)
+  program = astAdd(program, tokens, parent, declaration)
+  let declarationId = program.lastNode
+  let equals = astFindTopLevel(tokens, index + 1, statementEnd, "=")
+  let colon = astFindTopLevel(tokens, index + 1, statementEnd, ":")
+  let declaratorEnd = statementEnd
+  let declarator = astNodeSpec("VariableDeclarator", index + 1, declaratorEnd)
+  declarator.name = tokenValue(tokenArenaGet(tokens, index + 1))
+  declarator.text = astTokenText(tokens, index + 1, declaratorEnd)
+  program = astAdd(program, tokens, declarationId, declarator)
+  let declaratorId = program.lastNode
+  program = astAddIdentifier(program, tokens, declaratorId, index + 1)
+
+  if colon >= 0 {
+    let typeEnd = statementEnd
+    if equals >= 0 {
+      typeEnd = equals - 1
+    }
+    program = astAddType(program, tokens, declaratorId, colon + 1, typeEnd)
+  }
+
+  if equals >= 0 {
+    program = astParseExpression(program, tokens, equals + 1, statementEnd, declaratorId)
+  }
+
+  program.nextToken = statementEnd + 1
+  return program
+}
+
+function astParseIf(program: AstProgram, tokens: TokenArena, index: i32, end: i32, parent: i32): AstProgram {
+  let open = findNext(tokens, index, "{")
+  let close = findBlockEnd(tokens, open)
+  let spec = astNodeSpec("IfStatement", index, close)
+  program = astAdd(program, tokens, parent, spec)
+  let ifId = program.lastNode
+  program = astParseExpression(program, tokens, index + 1, open - 1, ifId)
+  let block = astNodeSpec("BlockStatement", open, close)
+  program = astAdd(program, tokens, ifId, block)
+  let blockId = program.lastNode
+  program = astParseScope(program, tokens, open + 1, close, blockId)
+  let next = astSkipTerminators(tokens, close + 1, end)
+
+  if stringEquals(tokenValue(tokenArenaGet(tokens, next)), "else") {
+    if stringEquals(tokenValue(tokenArenaGet(tokens, next + 1)), "if") {
+      program = astParseIf(program, tokens, next + 1, end, ifId)
+      close = program.nextToken - 1
+    } else {
+      let elseOpen = findNext(tokens, next, "{")
+      let elseClose = findBlockEnd(tokens, elseOpen)
+      let alternate = astNodeSpec("BlockStatement", elseOpen, elseClose)
+      program = astAdd(program, tokens, ifId, alternate)
+      let alternateId = program.lastNode
+      program = astParseScope(program, tokens, elseOpen + 1, elseClose, alternateId)
+      close = elseClose
+    }
+  }
+
+  program.nextToken = close + 1
+  return program
+}
+
+function astParseWhile(program: AstProgram, tokens: TokenArena, index: i32, end: i32, parent: i32): AstProgram {
+  let open = findNext(tokens, index, "{")
+  let close = findBlockEnd(tokens, open)
+  let conditionEnd = open - 1
+  if stringEquals(tokenValue(tokenArenaGet(tokens, conditionEnd)), "do") {
+    conditionEnd = conditionEnd - 1
+  }
+  let spec = astNodeSpec("WhileStatement", index, close)
+  program = astAdd(program, tokens, parent, spec)
+  let whileId = program.lastNode
+  program = astParseExpression(program, tokens, index + 1, conditionEnd, whileId)
+  let block = astNodeSpec("BlockStatement", open, close)
+  program = astAdd(program, tokens, whileId, block)
+  let blockId = program.lastNode
+  program = astParseScope(program, tokens, open + 1, close, blockId)
+  program.nextToken = close + 1
+  return program
+}
+
+function astParseReturn(program: AstProgram, tokens: TokenArena, index: i32, end: i32, parent: i32): AstProgram {
+  let statementEnd = astFindStatementEnd(tokens, index, end)
+  let spec = astNodeSpec("ReturnStatement", index, statementEnd)
+  program = astAdd(program, tokens, parent, spec)
+  let returnId = program.lastNode
+  program = astParseExpression(program, tokens, index + 1, statementEnd, returnId)
+  program.nextToken = statementEnd + 1
+  return program
+}
+
+function astParseExpressionStatement(program: AstProgram, tokens: TokenArena, index: i32, end: i32, parent: i32): AstProgram {
+  let statementEnd = astFindStatementEnd(tokens, index, end)
+  let spec = astNodeSpec("ExpressionStatement", index, statementEnd)
+  program = astAdd(program, tokens, parent, spec)
+  let statementId = program.lastNode
+  program = astParseExpression(program, tokens, index, statementEnd, statementId)
+  program.nextToken = statementEnd + 1
+  return program
+}
+
+function astParseScope(program: AstProgram, tokens: TokenArena, start: i32, end: i32, parent: i32): AstProgram {
+  let index = start
+
+  while index < end do {
+    index = astSkipTerminators(tokens, index, end)
+    if index >= end {
+      break
+    }
+    let current = tokenValue(tokenArenaGet(tokens, index))
+
+    if stringEquals(current, "import") {
+      program = astParseImport(program, tokens, index, end, parent)
+    } else if stringEquals(current, "struct") {
+      program = astParseStruct(program, tokens, index, end, parent)
+    } else if stringEquals(current, "function") || stringEquals(current, "async") {
+      program = astParseFunction(program, tokens, index, end, parent)
+    } else if stringEquals(current, "let") || stringEquals(current, "const") {
+      program = astParseVariable(program, tokens, index, end, parent)
+    } else if stringEquals(current, "if") {
+      program = astParseIf(program, tokens, index, end, parent)
+    } else if stringEquals(current, "while") {
+      program = astParseWhile(program, tokens, index, end, parent)
+    } else if stringEquals(current, "return") {
+      program = astParseReturn(program, tokens, index, end, parent)
+    } else if stringEquals(current, "break") {
+      let spec = astNodeSpec("BreakStatement", index, index)
+      program = astAdd(program, tokens, parent, spec)
+      program.nextToken = index + 1
+    } else if stringEquals(current, "continue") {
+      let spec = astNodeSpec("ContinueStatement", index, index)
+      program = astAdd(program, tokens, parent, spec)
+      program.nextToken = index + 1
+    } else {
+      program = astParseExpressionStatement(program, tokens, index, end, parent)
+    }
+
+    if program.nextToken <= index {
+      index = index + 1
+    } else {
+      index = program.nextToken
+    }
+  }
+
+  program.nextToken = end
+  return program
+}
+
+function parseAst(tokens: TokenArena): AstProgram {
+  let program = astProgram(tokens)
+  return astParseScope(program, tokens, 0, tokens.count, program.root)
+}
+
 function parseProgram(tokens: TokenArena): string {
-  let ast = parseAst(tokens)
   let program = map("kind", "program", "mainReturnKind", "number", "mainReturnValue", "0", "printCount", "0", "statementCount", "0", "functionCount", "0", "syntaxCount", "0")
   let variables = map("unused", "unused")
   let index: i32 = 0

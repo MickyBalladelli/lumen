@@ -44,7 +44,19 @@ function main(): i32 {
     tokenStart: 4,
     tokenEnd: 9,
     typeId: 3,
-    text: payload
+    text: payload,
+    name: "call",
+    value: payload,
+    operator: "",
+    typeName: "i32",
+    file: key,
+    offset: 4,
+    line: 2,
+    column: 3,
+    endOffset: 12,
+    endLine: 2,
+    endColumn: 11,
+    flags: 0
   })
   let node = astArenaGet(nodes, 0)
   assert(stringEquals(node.text, payload), "AST text must be lossless")

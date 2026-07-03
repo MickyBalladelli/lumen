@@ -1,169 +1,234 @@
+import { AstArena, CompilerAstNode, CompilerToken, TokenArena, astArena, astArenaGet, astArenaPush, astArenaSet, tokenArenaGet } from "./containers.lm"
+
+struct AstNodeSpec {
+  kind: string
+  name: string
+  value: string
+  operator: string
+  typeName: string
+  text: string
+  flags: i32
+  tokenStart: i32
+  tokenEnd: i32
+}
+
 struct AstProgram {
   kind: string
-  syntaxCount: i32
-  functionCount: i32
-  statementCount: i32
-  importCount: i32
-  externCount: i32
-  structCount: i32
-  enumCount: i32
-  asyncFunctionCount: i32
-  ifCount: i32
-  forCount: i32
-  forRangeCount: i32
-  forOfCount: i32
-  whileCount: i32
-  doUntilCount: i32
-  switchCount: i32
-  deferCount: i32
-  breakCount: i32
-  continueCount: i32
-  tryCatchCount: i32
-  throwCount: i32
-  matchCount: i32
-  mainReturnKind: string
-  mainReturnValue: string
+  nodes: AstArena
+  childStorage: string
+  childCount: i32
+  root: i32
+  lastNode: i32
+  nextToken: i32
 }
 
-function astProgram(): AstProgram {
+function astNodeSpec(kind: string, tokenStart: i32, tokenEnd: i32): AstNodeSpec {
+  return AstNodeSpec {
+    kind: kind,
+    name: "",
+    value: "",
+    operator: "",
+    typeName: "",
+    text: "",
+    flags: 0,
+    tokenStart: tokenStart,
+    tokenEnd: tokenEnd
+  }
+}
+
+function astLexemeEndLine(lexeme: string, startLine: i32): i32 {
+  let rangeLine = startLine
+  let index: i32 = 0
+  let length = stringLen(lexeme)
+
+  while index < length do {
+    let ch = lexeme[index..index + 1]
+    if stringEquals(ch, "
+") {
+      rangeLine = rangeLine + 1
+    }
+    index = index + 1
+  }
+
+  return rangeLine
+}
+
+function astTokenEndLine(token: CompilerToken): i32 {
+  return astLexemeEndLine(token.lexeme, token.line)
+}
+
+function astLexemeEndColumn(lexeme: string, startColumn: i32): i32 {
+  let rangeColumn = startColumn
+  let index: i32 = 0
+  let length = stringLen(lexeme)
+
+  while index < length do {
+    let ch = lexeme[index..index + 1]
+    if stringEquals(ch, "
+") {
+      rangeColumn = 1
+    } else {
+      rangeColumn = rangeColumn + 1
+    }
+    index = index + 1
+  }
+
+  return rangeColumn
+}
+
+function astTokenEndColumn(token: CompilerToken): i32 {
+  return astLexemeEndColumn(token.lexeme, token.column)
+}
+
+function astBuildNode(tokens: TokenArena, parent: i32, spec: AstNodeSpec): CompilerAstNode {
+  let start = tokenArenaGet(tokens, spec.tokenStart)
+  let finish = tokenArenaGet(tokens, spec.tokenEnd)
+
+  return CompilerAstNode {
+    kind: spec.kind,
+    parent: parent,
+    firstChild: -1,
+    childCount: 0,
+    tokenStart: spec.tokenStart,
+    tokenEnd: spec.tokenEnd,
+    typeId: -1,
+    text: spec.text,
+    name: spec.name,
+    value: spec.value,
+    operator: spec.operator,
+    typeName: spec.typeName,
+    file: start.file,
+    offset: start.offset,
+    line: start.line,
+    column: start.column,
+    endOffset: finish.offset + stringLen(finish.lexeme),
+    endLine: astTokenEndLine(finish),
+    endColumn: astTokenEndColumn(finish),
+    flags: spec.flags
+  }
+}
+
+function astAdd(program: AstProgram, tokens: TokenArena, parent: i32, spec: AstNodeSpec): AstProgram {
+  let nodeId = program.nodes.count
+  let node = astBuildNode(tokens, parent, spec)
+  program.nodes = astArenaPush(program.nodes, node)
+
+  if parent >= 0 {
+    let parentNode = astArenaGet(program.nodes, parent)
+    let edge = arenaAppend(program.childStorage)
+    arenaSetI32(program.childStorage, edge, 0, nodeId)
+    arenaSetI32(program.childStorage, edge, 1, -1)
+    if parentNode.firstChild < 0 {
+      parentNode.firstChild = edge
+    } else {
+      let cursor = parentNode.firstChild
+      let next = arenaGetI32(program.childStorage, cursor, 1)
+      while next >= 0 do {
+        cursor = next
+        next = arenaGetI32(program.childStorage, cursor, 1)
+      }
+      arenaSetI32(program.childStorage, cursor, 1, edge)
+    }
+    parentNode.childCount = parentNode.childCount + 1
+    program.nodes = astArenaSet(program.nodes, parent, parentNode)
+    program.childCount = program.childCount + 1
+  }
+
+  program.lastNode = nodeId
+  return program
+}
+
+function astProgram(tokens: TokenArena): AstProgram {
   let program = AstProgram {
     kind: "Program",
-    syntaxCount: 0,
-    functionCount: 0,
-    statementCount: 0,
-    importCount: 0,
-    externCount: 0,
-    structCount: 0,
-    enumCount: 0,
-    asyncFunctionCount: 0,
-    ifCount: 0,
-    forCount: 0,
-    forRangeCount: 0,
-    forOfCount: 0,
-    whileCount: 0,
-    doUntilCount: 0,
-    switchCount: 0,
-    deferCount: 0,
-    breakCount: 0,
-    continueCount: 0,
-    tryCatchCount: 0,
-    throwCount: 0,
-    matchCount: 0,
-    mainReturnKind: "number",
-    mainReturnValue: "0"
+    nodes: astArena(),
+    childStorage: arenaNew(),
+    childCount: 0,
+    root: 0,
+    lastNode: -1,
+    nextToken: 0
   }
-
+  let lastToken = tokens.count - 1
+  let root = astNodeSpec("Program", 0, lastToken)
+  program = astAdd(program, tokens, -1, root)
+  program.root = program.lastNode
   return program
 }
 
-function astRecordSyntax(program: AstProgram, kind: string): AstProgram {
-  program.syntaxCount = program.syntaxCount + 1
-
-  if stringEquals(kind, "import") {
-    program.importCount = program.importCount + 1
-    return program
-  }
-
-  if stringEquals(kind, "extern") {
-    program.externCount = program.externCount + 1
-    return program
-  }
-
-  if stringEquals(kind, "struct") {
-    program.structCount = program.structCount + 1
-    return program
-  }
-
-  if stringEquals(kind, "enum") {
-    program.enumCount = program.enumCount + 1
-    return program
-  }
-
-  if stringEquals(kind, "asyncFunction") {
-    program.asyncFunctionCount = program.asyncFunctionCount + 1
-    return program
-  }
-
-  if stringEquals(kind, "if") {
-    program.ifCount = program.ifCount + 1
-    return program
-  }
-
-  if stringEquals(kind, "for") {
-    program.forCount = program.forCount + 1
-    return program
-  }
-
-  if stringEquals(kind, "forRange") {
-    program.forRangeCount = program.forRangeCount + 1
-    return program
-  }
-
-  if stringEquals(kind, "forOf") {
-    program.forOfCount = program.forOfCount + 1
-    return program
-  }
-
-  if stringEquals(kind, "while") {
-    program.whileCount = program.whileCount + 1
-    return program
-  }
-
-  if stringEquals(kind, "doUntil") {
-    program.doUntilCount = program.doUntilCount + 1
-    return program
-  }
-
-  if stringEquals(kind, "switch") {
-    program.switchCount = program.switchCount + 1
-    return program
-  }
-
-  if stringEquals(kind, "defer") {
-    program.deferCount = program.deferCount + 1
-    return program
-  }
-
-  if stringEquals(kind, "break") {
-    program.breakCount = program.breakCount + 1
-    return program
-  }
-
-  if stringEquals(kind, "continue") {
-    program.continueCount = program.continueCount + 1
-    return program
-  }
-
-  if stringEquals(kind, "tryCatch") {
-    program.tryCatchCount = program.tryCatchCount + 1
-    return program
-  }
-
-  if stringEquals(kind, "throw") {
-    program.throwCount = program.throwCount + 1
-    return program
-  }
-
-  if stringEquals(kind, "match") {
-    program.matchCount = program.matchCount + 1
-    return program
-  }
-
-  return program
+function astNodeAt(program: AstProgram, nodeId: i32): CompilerAstNode {
+  return astArenaGet(program.nodes, nodeId)
 }
 
-function astRecordFunction(program: AstProgram): AstProgram {
-  program.functionCount = program.functionCount + 1
-  return program
+function astChildAt(program: AstProgram, parent: i32, childIndex: i32): i32 {
+  let node = astArenaGet(program.nodes, parent)
+  let edge = node.firstChild
+  let index: i32 = 0
+
+  while edge >= 0 do {
+    if index == childIndex {
+      return arenaGetI32(program.childStorage, edge, 0)
+    }
+    edge = arenaGetI32(program.childStorage, edge, 1)
+    index = index + 1
+  }
+
+  return -1
 }
 
-function astRecordStatement(program: AstProgram): AstProgram {
-  program.statementCount = program.statementCount + 1
-  return program
+function astCountKind(program: AstProgram, kind: string): i32 {
+  let count: i32 = 0
+  let index: i32 = 0
+
+  while index < program.nodes.count do {
+    let node = astArenaGet(program.nodes, index)
+    if stringEquals(node.kind, kind) {
+      count = count + 1
+    }
+    index = index + 1
+  }
+
+  return count
 }
 
-function astRecordReturn(program: AstProgram, kind: string, value: string): AstProgram {
-  program.mainReturnKind = kind
-  program.mainReturnValue = value
-  return astRecordStatement(program)
+function astFindKind(program: AstProgram, kind: string, start: i32): i32 {
+  let index = start
+  while index < program.nodes.count do {
+    let node = astArenaGet(program.nodes, index)
+    if stringEquals(node.kind, kind) {
+      return index
+    }
+    index = index + 1
+  }
+
+  return -1
+}
+
+function astNodeDepth(program: AstProgram, nodeId: i32): i32 {
+  let depth: i32 = 0
+  let current = nodeId
+
+  while current >= 0 do {
+    let node = astArenaGet(program.nodes, current)
+    current = node.parent
+    if current >= 0 {
+      depth = depth + 1
+    }
+  }
+
+  return depth
+}
+
+function astMaxDepth(program: AstProgram): i32 {
+  let maximum: i32 = 0
+  let index: i32 = 0
+
+  while index < program.nodes.count do {
+    let depth = astNodeDepth(program, index)
+    if depth > maximum {
+      maximum = depth
+    }
+    index = index + 1
+  }
+
+  return maximum
 }

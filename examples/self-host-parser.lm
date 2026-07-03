@@ -4,6 +4,7 @@ import { analyzeSemantics } from "../compiler/semantics.lm"
 import { checkTypes } from "../compiler/typechecker.lm"
 import { buildIr, irToProgram } from "../compiler/ir.lm"
 import { emitIr } from "../compiler/emitter.lm"
+import { astCountKind, astMaxDepth } from "../compiler/ast.lm"
 
 function main(): i32 {
   let tokens = tokenize("function main(): i32 { let value = 7 println(value) return value }")
@@ -30,24 +31,42 @@ function main(): i32 {
   println(ir.statement0ExpressionKind)
   println(mapGet(program, "irKind"))
 
-  let syntaxSource = 'import { println } from "system" struct Point { x: i32 y: i32 } enum Status { Ok Missing } extern function native(value: i32): i32 async function load(): i32 { return 1 } function main(): i32 { defer cleanup() let status: Status = Missing let label = match status { Ok => "ok" _ => "unknown" } for item in 0..2 { continue } for (let value of values) { break } switch status { case Missing { println(label) } default { println("x") } } do { status = Ok } until status == Ok try { throw "boom" } catch error { println(error) } return 0 }'
+  let syntaxSource = 'import { println } from "system"
+struct Point {
+  x: i32
+}
+function helper(value: i32): i32 {
+  return value + 1
+}
+function main(): i32 {
+  let value: i32 = 0
+  while value < 3 do {
+    if value == 2 {
+      break
+    }
+    value = helper(value)
+    continue
+  }
+  println(value)
+  return value
+}'
   let syntaxTokens = tokenize(syntaxSource)
   let syntaxAst = parseAst(syntaxTokens)
   let syntaxSemantics = analyzeSemantics(syntaxAst, syntaxTokens)
   let syntaxTypes = checkTypes(syntaxAst, syntaxTokens)
 
-  println(syntaxAst.importCount)
-  println(syntaxAst.structCount)
-  println(syntaxAst.enumCount)
-  println(syntaxAst.externCount)
-  println(syntaxAst.asyncFunctionCount)
-  println(syntaxAst.deferCount)
-  println(syntaxAst.matchCount)
-  println(syntaxAst.forRangeCount)
-  println(syntaxAst.forOfCount)
-  println(syntaxAst.switchCount)
-  println(syntaxAst.doUntilCount)
-  println(syntaxAst.tryCatchCount)
+  println(astCountKind(syntaxAst, "Program"))
+  println(astCountKind(syntaxAst, "ImportDeclaration"))
+  println(astCountKind(syntaxAst, "StructDeclaration"))
+  println(astCountKind(syntaxAst, "StructField"))
+  println(astCountKind(syntaxAst, "FunctionDeclaration"))
+  println(astCountKind(syntaxAst, "VariableDeclaration"))
+  println(astCountKind(syntaxAst, "WhileStatement"))
+  println(astCountKind(syntaxAst, "IfStatement"))
+  println(astCountKind(syntaxAst, "AssignmentExpression"))
+  println(astCountKind(syntaxAst, "CallExpression"))
+  println(astCountKind(syntaxAst, "ReturnStatement"))
+  println(astMaxDepth(syntaxAst))
   println(syntaxSemantics.ok)
   println(syntaxSemantics.symbolCount)
   println(syntaxTypes.ok)

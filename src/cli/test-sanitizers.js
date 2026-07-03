@@ -29,6 +29,12 @@ const cases = [
     stdout: 'bootstrap tokenizer\n'
   },
   {
+    name: 'bootstrap AST',
+    source: 'tests/runtime/bootstrap-ast.lm',
+    code: 0,
+    stdout: 'bootstrap AST\n'
+  },
+  {
     name: 'array bounds',
     source: 'tests/runtime/array-out-of-bounds.lm',
     code: 1,

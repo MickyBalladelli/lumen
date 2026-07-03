@@ -48,7 +48,7 @@ copy embedded stage-1 LLVM instead of compiling the Lumen source.
   operators, punctuation, and newline termination rules as the primary grammar.
   Report malformed input without reading past the source.
 
-- [ ] Replace `AstProgram` counters with a complete typed AST.
+- [x] Replace `AstProgram` counters with a complete typed AST.
   Represent every declaration, statement, type annotation, and expression used
   by the compiler source. Preserve arbitrary nesting and source ranges.
 
