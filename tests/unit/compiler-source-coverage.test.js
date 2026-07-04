@@ -11,7 +11,7 @@ test('compiler source coverage inventories the complete self-host closure', asyn
   const report = analyzeCompilerSourceCoverage(compilation)
 
   assert.equal(report.entry, 'compiler/main.lm')
-  assert.equal(report.inventory.modules.length, 10)
+  assert.equal(report.inventory.modules.length, 11)
   assert.ok(report.inventory.syntaxNodes.includes('ImportDeclaration'))
   assert.ok(report.inventory.syntaxNodes.includes('WhileStatement'))
   assert.ok(report.inventory.typeNames.includes('Result<string>'))

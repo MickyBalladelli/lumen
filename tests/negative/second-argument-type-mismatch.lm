@@ -1,0 +1,8 @@
+function combine(label: string, value: i32): string {
+  return label
+}
+
+function main(): i32 {
+  combine("ready", "wrong")
+  return 0
+}

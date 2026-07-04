@@ -1,0 +1,10 @@
+struct Pair {
+  left: i32
+}
+
+function main(): i32 {
+  let pair = Pair {
+    left: "bad"
+  }
+  return pair.left
+}

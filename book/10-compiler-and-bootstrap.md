@@ -242,7 +242,8 @@ growing subset of the language. The exact tested subset lives in the
 | `compiler/ast.lm` | | Growable typed node and child arenas with parent links and complete source ranges |
 | `compiler/parser.lm` | | Builds one recursively nested typed AST for the compiler closure; later compatibility lowering derives emitter facts from that AST |
 | `compiler/semantics.lm` | | `SemanticResult` — checks `main`, duplicate symbols, `while 1`, `break`/`continue` validity |
-| `compiler/typechecker.lm` | | `TypeResult` — checks annotated variable initializers and first-argument function calls including `none()` and `ok(...)` shapes |
+| `compiler/typechecker.lm` | | `TypeResult` — checks primitive, struct, array, nullable, Result, access, operator, assignment, call, and return types |
+| `compiler/types.lm` | | Shared bootstrap type relations for arrays, nullable values, Results, tasks, numeric widening, assignment, and comparison |
 | `compiler/ir.lm` | | `IrModule` — lowers AST/statement bridge into module facts, instruction counts, return values, print counts, call/binary/loop flags |
 | `compiler/emitter.lm` | | LLVM emission with `emitIr(...)` entry point. Internals still delegate through the legacy statement bridge |
 | `compiler/modules.lm` | | Typed module graph with AST import discovery, canonical local and Photon resolution, export checks, cycle detection, and load-once caching |
@@ -479,8 +480,8 @@ and UBSan (UndefinedBehaviorSanitizer) to verify memory safety.
   compatibility bridge internally
 - **Parser coverage** — not all JS compiler features are covered by the
   self-host parser
-- **Type checking** — only simple annotated initializers and first-argument
-  calls are checked
+- **Type checking** — the compiler-source type model is covered; some broader
+  JS compiler features still depend on the typed ABI registry
 - **Semantic checks** — only basic checks exist; many JS compiler diagnostic
   cases are not covered
 - **Module loading** — only local and bare-package `main.lm` loading are

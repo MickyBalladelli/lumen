@@ -36,9 +36,9 @@ Finished" section so the project's progress is visible.
   duplicate top-level symbols, unsupported bootstrap `while 1`, and
   `break`/`continue` outside valid control-flow regions.
 
-- **Self-host type checker** — `TypeResult` with checks for simple annotated
-  variable initializers plus first-argument function calls, including `none()`
-  and `ok(...)` helper shapes.
+- **Self-host type checker** — `TypeResult` covers primitives, structs, arrays,
+  nullable values, Results, calls and all arguments, access expressions,
+  operators, assignments, and return values.
 
 - **Bootstrap IR summary** — typed `IrModule` structures hold module facts,
   instruction counts, return values, print counts, and call/binary/loop flags.
@@ -145,8 +145,7 @@ generated into [the support matrix](support-matrix.md).
   emit directly from IR
 - Grow the parser to cover all JS compiler features
 - Strengthen semantic checks to match JS compiler diagnostic coverage
-- Strengthen type checks beyond simple annotated initializers and
-  first-argument calls
+- Connect bootstrap builtin and extern checks to the shared typed ABI registry
 - Replace the linked token projection with module-aware semantic and IR passes
 
 ## P1 — Runtime And Portability

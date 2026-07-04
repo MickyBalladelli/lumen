@@ -73,7 +73,7 @@ copy embedded stage-1 LLVM instead of compiling the Lumen source.
   imports by identity. Handle shadowing and duplicate declarations without
   name-based emitter guesses.
 
-- [ ] Port the complete type model needed by the compiler source.
+- [x] Port the complete type model needed by the compiler source.
   Check primitives, structs, arrays, nullable values, Results, calls, field and
   index access, slices, assignment, unary and binary operators, and return
   values. Validate every argument, not only the first one.

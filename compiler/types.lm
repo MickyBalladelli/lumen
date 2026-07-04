@@ -1,0 +1,155 @@
+function typeHasSuffix(value: string, suffix: string): bool {
+  let valueLength = stringLen(value)
+  let suffixLength = stringLen(suffix)
+  if suffixLength > valueLength {
+    return false
+  }
+  return stringEquals(
+    value[valueLength - suffixLength..valueLength],
+    suffix
+  )
+}
+
+function typeIsArray(typeName: string): bool {
+  return typeHasSuffix(typeName, "[]")
+}
+
+function typeArrayElement(typeName: string): string {
+  if !typeIsArray(typeName) {
+    return "unknown"
+  }
+  return typeName[0..stringLen(typeName) - 2]
+}
+
+function typeIsNullable(typeName: string): bool {
+  return typeHasSuffix(typeName, "?")
+}
+
+function typeNonNullable(typeName: string): string {
+  if !typeIsNullable(typeName) {
+    return typeName
+  }
+  return typeName[0..stringLen(typeName) - 1]
+}
+
+function typeIsResult(typeName: string): bool {
+  let length = stringLen(typeName)
+  if length < 9 {
+    return false
+  }
+  return stringEquals(typeName[0..7], "Result<") &&
+    stringEquals(typeName[length - 1..length], ">")
+}
+
+function typeResultValue(typeName: string): string {
+  if !typeIsResult(typeName) {
+    return "unknown"
+  }
+  return typeName[7..stringLen(typeName) - 1]
+}
+
+function typeIsTask(typeName: string): bool {
+  let length = stringLen(typeName)
+  if length < 7 {
+    return false
+  }
+  return stringEquals(typeName[0..5], "Task<") &&
+    stringEquals(typeName[length - 1..length], ">")
+}
+
+function typeTaskValue(typeName: string): string {
+  if !typeIsTask(typeName) {
+    return "unknown"
+  }
+  return typeName[5..stringLen(typeName) - 1]
+}
+
+function typeIsNumeric(typeName: string): bool {
+  return stringEquals(typeName, "i32") ||
+    stringEquals(typeName, "i64") ||
+    stringEquals(typeName, "f32")
+}
+
+function typeWidest(left: string, right: string): string {
+  if stringEquals(left, "f32") || stringEquals(right, "f32") {
+    return "f32"
+  }
+  if stringEquals(left, "i64") || stringEquals(right, "i64") {
+    return "i64"
+  }
+  return "i32"
+}
+
+function typeCanAssign(actual: string, expected: string): bool {
+  if stringEquals(actual, expected) {
+    return true
+  }
+
+  if stringEquals(actual, "unknown") || stringEquals(expected, "unknown") {
+    return true
+  }
+
+  if stringEquals(actual, "none") {
+    return typeIsNullable(expected)
+  }
+
+  if typeIsNullable(actual) || typeIsNullable(expected) {
+    if !typeIsNullable(expected) {
+      return false
+    }
+    if typeIsNullable(actual) {
+      return typeCanAssign(typeNonNullable(actual), typeNonNullable(expected))
+    }
+    return typeCanAssign(actual, typeNonNullable(expected))
+  }
+
+  if typeIsArray(actual) || typeIsArray(expected) {
+    if !typeIsArray(actual) || !typeIsArray(expected) {
+      return false
+    }
+    let actualElement = typeArrayElement(actual)
+    let expectedElement = typeArrayElement(expected)
+    if stringEquals(actualElement, "unknown") {
+      return true
+    }
+    return stringEquals(actualElement, expectedElement)
+  }
+
+  if typeIsResult(actual) || typeIsResult(expected) {
+    if !typeIsResult(actual) || !typeIsResult(expected) {
+      return false
+    }
+    let actualValue = typeResultValue(actual)
+    let expectedValue = typeResultValue(expected)
+    if stringEquals(actualValue, "unknown") ||
+      stringEquals(expectedValue, "unknown") {
+      return true
+    }
+    return typeCanAssign(actualValue, expectedValue)
+  }
+
+  if typeIsTask(actual) || typeIsTask(expected) {
+    if !typeIsTask(actual) || !typeIsTask(expected) {
+      return false
+    }
+    return typeCanAssign(typeTaskValue(actual), typeTaskValue(expected))
+  }
+
+  if stringEquals(actual, "i32") {
+    return stringEquals(expected, "i64") || stringEquals(expected, "f32")
+  }
+
+  if stringEquals(actual, "string") && stringEquals(expected, "json") {
+    return true
+  }
+
+  if stringEquals(actual, "string") && stringEquals(expected, "error") {
+    return true
+  }
+
+  return false
+}
+
+function typeCanCompare(left: string, right: string): bool {
+  return typeCanAssign(left, right) || typeCanAssign(right, left)
+}
