@@ -16,6 +16,7 @@ struct CompilerAstNode {
   tokenStart: i32
   tokenEnd: i32
   typeId: i32
+  symbolId: i32
   text: string
   name: string
   value: string
@@ -170,6 +171,7 @@ function astArenaPush(arena: AstArena, node: CompilerAstNode): AstArena {
   arenaSetI32(arena.storage, index, 4, node.tokenStart)
   arenaSetI32(arena.storage, index, 5, node.tokenEnd)
   arenaSetI32(arena.storage, index, 6, node.typeId)
+  arenaSetI32(arena.storage, index, 20, node.symbolId)
   arenaSetString(arena.storage, index, 7, node.text)
   arenaSetString(arena.storage, index, 8, node.name)
   arenaSetString(arena.storage, index, 9, node.value)
@@ -195,6 +197,7 @@ function astArenaSet(arena: AstArena, index: i32, node: CompilerAstNode): AstAre
   arenaSetI32(arena.storage, index, 4, node.tokenStart)
   arenaSetI32(arena.storage, index, 5, node.tokenEnd)
   arenaSetI32(arena.storage, index, 6, node.typeId)
+  arenaSetI32(arena.storage, index, 20, node.symbolId)
   arenaSetString(arena.storage, index, 7, node.text)
   arenaSetString(arena.storage, index, 8, node.name)
   arenaSetString(arena.storage, index, 9, node.value)
@@ -220,6 +223,7 @@ function astArenaGet(arena: AstArena, index: i32): CompilerAstNode {
     tokenStart: arenaGetI32(arena.storage, index, 4),
     tokenEnd: arenaGetI32(arena.storage, index, 5),
     typeId: arenaGetI32(arena.storage, index, 6),
+    symbolId: arenaGetI32(arena.storage, index, 20),
     text: arenaGetString(arena.storage, index, 7),
     name: arenaGetString(arena.storage, index, 8),
     value: arenaGetString(arena.storage, index, 9),

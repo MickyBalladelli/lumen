@@ -10,7 +10,16 @@ export class IRModule {
 }
 
 export class IRFunction {
-  constructor(name, params, returnType, blocks = [], entry = 'entry', location = null, isAsync = false) {
+  constructor(
+    name,
+    params,
+    returnType,
+    blocks = [],
+    entry = 'entry',
+    location = null,
+    isAsync = false,
+    symbolId = null
+  ) {
     this.kind = 'IRFunction'
     this.name = name
     this.params = params
@@ -19,6 +28,7 @@ export class IRFunction {
     this.entry = entry
     this.location = location
     this.isAsync = isAsync
+    this.symbolId = symbolId
   }
 }
 

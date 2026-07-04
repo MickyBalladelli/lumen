@@ -1,10 +1,23 @@
-import { AstProgram } from "./ast.lm"
-import { CompilerToken, TokenArena, tokenArenaGet } from "./containers.lm"
+import { AstProgram, astChildAt, astNodeAt } from "./ast.lm"
+import { CompilerSymbol, CompilerToken, SymbolArena, TokenArena, astArenaSet, symbolArena, symbolArenaGet, symbolArenaPush, tokenArenaGet } from "./containers.lm"
 
 struct SemanticResult {
   ok: bool
   message: string
   symbolCount: i32
+  tokenIndex: i32
+  symbols: SymbolArena
+}
+
+struct SemanticResolver {
+  ast: AstProgram
+  symbols: SymbolArena
+  scopeStorage: string
+  bindings: string
+  fields: string
+  rootScope: i32
+  ok: bool
+  message: string
   tokenIndex: i32
 }
 
@@ -13,7 +26,8 @@ function semanticOk(symbolCount: i32): SemanticResult {
     ok: true,
     message: "",
     symbolCount: symbolCount,
-    tokenIndex: 0
+    tokenIndex: 0,
+    symbols: symbolArena()
   }
 
   return result
@@ -24,10 +38,520 @@ function semanticError(message: string, symbolCount: i32, tokenIndex: i32): Sema
     ok: false,
     message: message,
     symbolCount: symbolCount,
-    tokenIndex: tokenIndex
+    tokenIndex: tokenIndex,
+    symbols: symbolArena()
   }
 
   return result
+}
+
+function semanticResolver(ast: AstProgram): SemanticResolver {
+  let scopes = arenaNew()
+  let root = arenaAppend(scopes)
+  arenaSetI32(scopes, root, 0, -1)
+  return SemanticResolver {
+    ast: ast,
+    symbols: symbolArena(),
+    scopeStorage: scopes,
+    bindings: map("unused", "unused"),
+    fields: map("unused", "unused"),
+    rootScope: root,
+    ok: true,
+    message: "",
+    tokenIndex: 0
+  }
+}
+
+function semanticScopeKey(scopeId: i32, name: string): string {
+  return intToString(scopeId) + ":" + name
+}
+
+function semanticFieldKey(ownerId: i32, name: string): string {
+  return intToString(ownerId) + ":" + name
+}
+
+function semanticAddScope(resolver: SemanticResolver, parent: i32): SemanticResolver {
+  let scopeId = arenaAppend(resolver.scopeStorage)
+  arenaSetI32(resolver.scopeStorage, scopeId, 0, parent)
+  return resolver
+}
+
+function semanticLastScope(resolver: SemanticResolver): i32 {
+  return arenaLen(resolver.scopeStorage) - 1
+}
+
+function semanticSetNodeSymbol(resolver: SemanticResolver, nodeId: i32, symbolId: i32): SemanticResolver {
+  let node = astNodeAt(resolver.ast, nodeId)
+  node.symbolId = symbolId
+  resolver.ast.nodes = astArenaSet(resolver.ast.nodes, nodeId, node)
+  return resolver
+}
+
+function semanticFailResolver(
+  resolver: SemanticResolver,
+  message: string,
+  tokenIndex: i32
+): SemanticResolver {
+  if resolver.ok {
+    resolver.ok = false
+    resolver.message = message
+    resolver.tokenIndex = tokenIndex
+  }
+  return resolver
+}
+
+function semanticDuplicateName(kind: string, name: string): string {
+  if stringEquals(kind, "param") {
+    return "compile error: duplicate parameter " + name
+  }
+  if stringEquals(kind, "field") {
+    return "compile error: duplicate field " + name
+  }
+  return "compile error: duplicate declaration " + name
+}
+
+function semanticBind(
+  resolver: SemanticResolver,
+  scopeId: i32,
+  name: string,
+  kind: string,
+  declarationId: i32
+): SemanticResolver {
+  let key = semanticScopeKey(scopeId, name)
+  if mapHas(resolver.bindings, key) {
+    let node = astNodeAt(resolver.ast, declarationId)
+    return semanticFailResolver(
+      resolver,
+      semanticDuplicateName(kind, name),
+      node.tokenStart
+    )
+  }
+
+  let symbolId = resolver.symbols.count
+  resolver.symbols = symbolArenaPush(resolver.symbols, CompilerSymbol {
+    kind: kind,
+    name: name,
+    typeId: -1,
+    scopeId: scopeId,
+    declarationId: declarationId
+  })
+  resolver.bindings = mapSet(resolver.bindings, key, intToString(symbolId))
+  return semanticSetNodeSymbol(resolver, declarationId, symbolId)
+}
+
+function semanticResolveName(resolver: SemanticResolver, scopeId: i32, name: string): i32 {
+  let scope = scopeId
+  while scope >= 0 do {
+    let key = semanticScopeKey(scope, name)
+    if mapHas(resolver.bindings, key) {
+      return stringToInt(mapGet(resolver.bindings, key))
+    }
+    scope = arenaGetI32(resolver.scopeStorage, scope, 0)
+  }
+  return -1
+}
+
+function semanticDeclarationIdentifier(
+  resolver: SemanticResolver,
+  declarationId: i32,
+  symbolId: i32
+): SemanticResolver {
+  let declaration = astNodeAt(resolver.ast, declarationId)
+  let index: i32 = 0
+  while index < declaration.childCount do {
+    let childId = astChildAt(resolver.ast, declarationId, index)
+    let child = astNodeAt(resolver.ast, childId)
+    if stringEquals(child.kind, "Identifier") {
+      if stringEquals(child.name, declaration.name) {
+        return semanticSetNodeSymbol(resolver, childId, symbolId)
+      }
+    }
+    index = index + 1
+  }
+  return resolver
+}
+
+function semanticBindDeclaration(
+  resolver: SemanticResolver,
+  scopeId: i32,
+  nodeId: i32,
+  kind: string
+): SemanticResolver {
+  let node = astNodeAt(resolver.ast, nodeId)
+  resolver = semanticBind(resolver, scopeId, node.name, kind, nodeId)
+  if !resolver.ok {
+    return resolver
+  }
+  let symbolId = semanticResolveName(resolver, scopeId, node.name)
+  return semanticDeclarationIdentifier(resolver, nodeId, symbolId)
+}
+
+function semanticBindImports(
+  resolver: SemanticResolver,
+  nodeId: i32,
+  scopeId: i32
+): SemanticResolver {
+  let node = astNodeAt(resolver.ast, nodeId)
+  let index: i32 = 0
+  while index < node.childCount do {
+    let childId = astChildAt(resolver.ast, nodeId, index)
+    let child = astNodeAt(resolver.ast, childId)
+    if stringEquals(child.kind, "Identifier") {
+      resolver = semanticBind(resolver, scopeId, child.name, "import", childId)
+      if !resolver.ok {
+        return resolver
+      }
+    }
+    index = index + 1
+  }
+  return resolver
+}
+
+function semanticBindStructFields(
+  resolver: SemanticResolver,
+  nodeId: i32
+): SemanticResolver {
+  let owner = astNodeAt(resolver.ast, nodeId)
+  let ownerId = owner.symbolId
+  resolver = semanticAddScope(resolver, -1)
+  let fieldScope = semanticLastScope(resolver)
+  let index: i32 = 0
+
+  while index < owner.childCount do {
+    let fieldId = astChildAt(resolver.ast, nodeId, index)
+    let field = astNodeAt(resolver.ast, fieldId)
+    if stringEquals(field.kind, "StructField") {
+      resolver = semanticBindDeclaration(resolver, fieldScope, fieldId, "field")
+      if !resolver.ok {
+        return resolver
+      }
+      let symbolId = semanticResolveName(resolver, fieldScope, field.name)
+      resolver.fields = mapSet(
+        resolver.fields,
+        semanticFieldKey(ownerId, field.name),
+        intToString(symbolId)
+      )
+    }
+    index = index + 1
+  }
+  return resolver
+}
+
+function semanticPredeclare(resolver: SemanticResolver): SemanticResolver {
+  let root = astNodeAt(resolver.ast, resolver.ast.root)
+  let index: i32 = 0
+
+  while index < root.childCount do {
+    let nodeId = astChildAt(resolver.ast, resolver.ast.root, index)
+    let node = astNodeAt(resolver.ast, nodeId)
+    if stringEquals(node.kind, "FunctionDeclaration") {
+      resolver = semanticBindDeclaration(resolver, resolver.rootScope, nodeId, "function")
+    } else if stringEquals(node.kind, "StructDeclaration") {
+      resolver = semanticBindDeclaration(resolver, resolver.rootScope, nodeId, "struct")
+    } else if stringEquals(node.kind, "ImportDeclaration") {
+      resolver = semanticBindImports(resolver, nodeId, resolver.rootScope)
+    }
+    if !resolver.ok {
+      return resolver
+    }
+    index = index + 1
+  }
+
+  index = 0
+  while index < root.childCount do {
+    let nodeId = astChildAt(resolver.ast, resolver.ast.root, index)
+    let node = astNodeAt(resolver.ast, nodeId)
+    if stringEquals(node.kind, "StructDeclaration") {
+      resolver = semanticBindStructFields(resolver, nodeId)
+      if !resolver.ok {
+        return resolver
+      }
+    }
+    index = index + 1
+  }
+  return resolver
+}
+
+function semanticResolveTypeNode(
+  resolver: SemanticResolver,
+  nodeId: i32
+): SemanticResolver {
+  let node = astNodeAt(resolver.ast, nodeId)
+  let index: i32 = 0
+  while index < resolver.symbols.count do {
+    let symbol = symbolArenaGet(resolver.symbols, index)
+    if stringEquals(symbol.kind, "struct") {
+      if stringEquals(node.typeName, symbol.name) || includes(node.typeName, symbol.name) {
+        return semanticSetNodeSymbol(resolver, nodeId, index)
+      }
+    }
+    index = index + 1
+  }
+  return resolver
+}
+
+function semanticFindStructName(resolver: SemanticResolver, nodeId: i32): string {
+  let node = astNodeAt(resolver.ast, nodeId)
+  if stringEquals(node.kind, "StructExpression") {
+    return node.name
+  }
+  if !stringEquals(node.typeName, "") {
+    return node.typeName
+  }
+  let index: i32 = 0
+  while index < node.childCount do {
+    let childId = astChildAt(resolver.ast, nodeId, index)
+    let found = semanticFindStructName(resolver, childId)
+    if !stringEquals(found, "") {
+      return found
+    }
+    index = index + 1
+  }
+  return ""
+}
+
+function semanticObjectStructName(resolver: SemanticResolver, objectId: i32): string {
+  let object = astNodeAt(resolver.ast, objectId)
+  if object.symbolId >= 0 {
+    let symbol = symbolArenaGet(resolver.symbols, object.symbolId)
+    return semanticFindStructName(resolver, symbol.declarationId)
+  }
+  return semanticFindStructName(resolver, objectId)
+}
+
+function semanticResolveField(
+  resolver: SemanticResolver,
+  ownerName: string,
+  fieldName: string,
+  nodeId: i32
+): SemanticResolver {
+  let ownerId = semanticResolveName(resolver, resolver.rootScope, ownerName)
+  if ownerId < 0 {
+    return resolver
+  }
+  let key = semanticFieldKey(ownerId, fieldName)
+  if mapHas(resolver.fields, key) {
+    return semanticSetNodeSymbol(
+      resolver,
+      nodeId,
+      stringToInt(mapGet(resolver.fields, key))
+    )
+  }
+  return resolver
+}
+
+function semanticResolveNode(
+  resolver: SemanticResolver,
+  nodeId: i32,
+  scopeId: i32
+): SemanticResolver {
+  if !resolver.ok {
+    return resolver
+  }
+  let node = astNodeAt(resolver.ast, nodeId)
+
+  if stringEquals(node.kind, "ImportDeclaration") {
+    return resolver
+  }
+  if stringEquals(node.kind, "TypeAnnotation") {
+    return semanticResolveTypeNode(resolver, nodeId)
+  }
+  if stringEquals(node.kind, "StructDeclaration") {
+    let fieldIndex: i32 = 0
+    while fieldIndex < node.childCount do {
+      let fieldId = astChildAt(resolver.ast, nodeId, fieldIndex)
+      let field = astNodeAt(resolver.ast, fieldId)
+      if stringEquals(field.kind, "StructField") {
+        let childIndex: i32 = 0
+        while childIndex < field.childCount do {
+          let childId = astChildAt(resolver.ast, fieldId, childIndex)
+          resolver = semanticResolveNode(resolver, childId, scopeId)
+          childIndex = childIndex + 1
+        }
+      }
+      fieldIndex = fieldIndex + 1
+    }
+    return resolver
+  }
+  if stringEquals(node.kind, "FunctionDeclaration") {
+    resolver = semanticAddScope(resolver, scopeId)
+    let functionScope = semanticLastScope(resolver)
+    let index: i32 = 0
+    while index < node.childCount do {
+      let childId = astChildAt(resolver.ast, nodeId, index)
+      let child = astNodeAt(resolver.ast, childId)
+      if stringEquals(child.kind, "VariableDeclarator") {
+        resolver = semanticBindDeclaration(resolver, functionScope, childId, "param")
+        let paramChild: i32 = 0
+        while paramChild < child.childCount do {
+          let paramNodeId = astChildAt(resolver.ast, childId, paramChild)
+          let paramNode = astNodeAt(resolver.ast, paramNodeId)
+          if stringEquals(paramNode.kind, "TypeAnnotation") {
+            resolver = semanticResolveNode(resolver, paramNodeId, functionScope)
+          }
+          paramChild = paramChild + 1
+        }
+      } else if stringEquals(child.kind, "BlockStatement") ||
+        stringEquals(child.kind, "TypeAnnotation") {
+        resolver = semanticResolveNode(resolver, childId, functionScope)
+      }
+      if !resolver.ok {
+        return resolver
+      }
+      index = index + 1
+    }
+    return resolver
+  }
+  if stringEquals(node.kind, "BlockStatement") {
+    resolver = semanticAddScope(resolver, scopeId)
+    let blockScope = semanticLastScope(resolver)
+    let index: i32 = 0
+    while index < node.childCount do {
+      resolver = semanticResolveNode(
+        resolver,
+        astChildAt(resolver.ast, nodeId, index),
+        blockScope
+      )
+      if !resolver.ok {
+        return resolver
+      }
+      index = index + 1
+    }
+    return resolver
+  }
+  if stringEquals(node.kind, "VariableDeclaration") {
+    let index: i32 = 0
+    while index < node.childCount do {
+      let declarationId = astChildAt(resolver.ast, nodeId, index)
+      let declaration = astNodeAt(resolver.ast, declarationId)
+      let childIndex: i32 = 0
+      while childIndex < declaration.childCount do {
+        let childId = astChildAt(resolver.ast, declarationId, childIndex)
+        let child = astNodeAt(resolver.ast, childId)
+        if !stringEquals(child.kind, "Identifier") {
+          resolver = semanticResolveNode(resolver, childId, scopeId)
+        }
+        childIndex = childIndex + 1
+      }
+      resolver = semanticBindDeclaration(resolver, scopeId, declarationId, "local")
+      if !resolver.ok {
+        return resolver
+      }
+      index = index + 1
+    }
+    return resolver
+  }
+  if stringEquals(node.kind, "IdentifierExpression") {
+    let symbolId = semanticResolveName(resolver, scopeId, node.name)
+    if symbolId >= 0 {
+      return semanticSetNodeSymbol(resolver, nodeId, symbolId)
+    }
+    return resolver
+  }
+  if stringEquals(node.kind, "StructExpression") {
+    let ownerId = semanticResolveName(resolver, resolver.rootScope, node.name)
+    if ownerId >= 0 {
+      resolver = semanticSetNodeSymbol(resolver, nodeId, ownerId)
+    }
+    let index: i32 = 0
+    while index < node.childCount do {
+      let propertyId = astChildAt(resolver.ast, nodeId, index)
+      let property = astNodeAt(resolver.ast, propertyId)
+      resolver = semanticResolveField(resolver, node.name, property.name, propertyId)
+      let childIndex: i32 = 0
+      while childIndex < property.childCount do {
+        resolver = semanticResolveNode(
+          resolver,
+          astChildAt(resolver.ast, propertyId, childIndex),
+          scopeId
+        )
+        childIndex = childIndex + 1
+      }
+      index = index + 1
+    }
+    return resolver
+  }
+  if stringEquals(node.kind, "MemberExpression") {
+    if node.childCount > 0 {
+      let objectId = astChildAt(resolver.ast, nodeId, 0)
+      resolver = semanticResolveNode(resolver, objectId, scopeId)
+      if node.childCount > 1 {
+        let propertyId = astChildAt(resolver.ast, nodeId, 1)
+        let property = astNodeAt(resolver.ast, propertyId)
+        let ownerName = semanticObjectStructName(resolver, objectId)
+        resolver = semanticResolveField(resolver, ownerName, property.name, propertyId)
+        let resolvedProperty = astNodeAt(resolver.ast, propertyId)
+        if resolvedProperty.symbolId >= 0 {
+          resolver = semanticSetNodeSymbol(resolver, nodeId, resolvedProperty.symbolId)
+        }
+      }
+    }
+    return resolver
+  }
+  if stringEquals(node.kind, "CallExpression") {
+    let index: i32 = 0
+    while index < node.childCount do {
+      let childId = astChildAt(resolver.ast, nodeId, index)
+      resolver = semanticResolveNode(resolver, childId, scopeId)
+      index = index + 1
+    }
+    if node.childCount > 0 {
+      let calleeId = astChildAt(resolver.ast, nodeId, 0)
+      let callee = astNodeAt(resolver.ast, calleeId)
+      if callee.symbolId < 0 {
+        let existing = semanticResolveName(resolver, resolver.rootScope, callee.name)
+        if existing < 0 {
+          resolver = semanticBind(
+            resolver,
+            resolver.rootScope,
+            callee.name,
+            "builtin",
+            calleeId
+          )
+          existing = semanticResolveName(resolver, resolver.rootScope, callee.name)
+        }
+        resolver = semanticSetNodeSymbol(resolver, calleeId, existing)
+      }
+      let resolvedCallee = astNodeAt(resolver.ast, calleeId)
+      resolver = semanticSetNodeSymbol(resolver, nodeId, resolvedCallee.symbolId)
+    }
+    return resolver
+  }
+
+  let index: i32 = 0
+  while index < node.childCount do {
+    resolver = semanticResolveNode(
+      resolver,
+      astChildAt(resolver.ast, nodeId, index),
+      scopeId
+    )
+    if !resolver.ok {
+      return resolver
+    }
+    index = index + 1
+  }
+  return resolver
+}
+
+function semanticResolveProgram(ast: AstProgram): SemanticResolver {
+  let resolver = semanticPredeclare(semanticResolver(ast))
+  if !resolver.ok {
+    return resolver
+  }
+  let root = astNodeAt(resolver.ast, resolver.ast.root)
+  let index: i32 = 0
+  while index < root.childCount do {
+    resolver = semanticResolveNode(
+      resolver,
+      astChildAt(resolver.ast, resolver.ast.root, index),
+      resolver.rootScope
+    )
+    if !resolver.ok {
+      return resolver
+    }
+    index = index + 1
+  }
+  return resolver
 }
 
 function semanticTokenValue(token: CompilerToken): string {
@@ -244,12 +768,21 @@ function semanticCheckDuplicateParameters(tokens: TokenArena, functionIndex: i32
 }
 
 function analyzeSemantics(ast: AstProgram): SemanticResult {
+  let resolution = semanticResolveProgram(ast)
+  if !resolution.ok {
+    let failed = semanticError(
+      resolution.message,
+      resolution.symbols.count,
+      resolution.tokenIndex
+    )
+    failed.symbols = resolution.symbols
+    return failed
+  }
   let tokens = ast.tokens
-  let symbols = map("unused", "unused")
   let scopes = ""
   let count = tokens.count
   let index: i32 = 0
-  let symbolCount: i32 = 0
+  let symbolCount = resolution.symbols.count
   let scopeDepth: i32 = 0
   let loopDepth: i32 = 0
   let switchDepth: i32 = 0
@@ -320,20 +853,6 @@ function analyzeSemantics(ast: AstProgram): SemanticResult {
         hasMain = true
       }
 
-      if includes(mapGet(symbols, name), "declared") {
-        let duplicateImportSafe = 1
-      } else {
-        symbols = mapSet(symbols, name, "declared")
-        symbolCount = symbolCount + 1
-      }
-
-      let params = semanticCheckDuplicateParameters(tokens, index, symbolCount)
-      if params.ok {
-        let okParams = 1
-      } else {
-        return params
-      }
-
       if stringEquals(current, "async") {
         index = index + 1
       }
@@ -343,7 +862,9 @@ function analyzeSemantics(ast: AstProgram): SemanticResult {
       if stringEquals(current, "while") {
       let condition = semanticTokenValue(tokenArenaGet(tokens, index + 1))
       if stringEquals(condition, "1") {
-        return semanticError("compile error: unsupported while", symbolCount, index)
+        let failed = semanticError("compile error: unsupported while", symbolCount, index)
+        failed.symbols = resolution.symbols
+        return failed
       }
       }
     }
@@ -355,7 +876,9 @@ function analyzeSemantics(ast: AstProgram): SemanticResult {
       } else if switchDepth > 0 {
         let okSwitchBreak = 1
       } else {
-        return semanticError("compile error: break outside loop", symbolCount, index)
+        let failed = semanticError("compile error: break outside loop", symbolCount, index)
+        failed.symbols = resolution.symbols
+        return failed
       }
     }
     }
@@ -369,7 +892,9 @@ function analyzeSemantics(ast: AstProgram): SemanticResult {
       } else if semanticHasPriorLoop(tokens, index) {
         let okPriorLoopContinue = 1
       } else {
-        return semanticError("compile error: continue outside loop", symbolCount, index)
+        let failed = semanticError("compile error: continue outside loop", symbolCount, index)
+        failed.symbols = resolution.symbols
+        return failed
       }
     }
     }
@@ -378,8 +903,12 @@ function analyzeSemantics(ast: AstProgram): SemanticResult {
   }
 
   if hasMain {
-    return semanticOk(symbolCount)
+    let result = semanticOk(symbolCount)
+    result.symbols = resolution.symbols
+    return result
   }
 
-  return semanticError("compile error: missing function main", symbolCount, 0)
+  let failed = semanticError("compile error: missing function main", symbolCount, 0)
+  failed.symbols = resolution.symbols
+  return failed
 }

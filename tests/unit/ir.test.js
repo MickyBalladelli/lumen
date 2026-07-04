@@ -106,6 +106,22 @@ test('filter predicate is typed in its local scope', () => {
   assert.equal(predicate.body.left.type, 'i32')
 })
 
+test('backend keeps shadowed bindings distinct after lexical scope exits', () => {
+  const { llvm } = new Compiler().compileSource([
+    'function main(): i32 {',
+    '  let value: i32 = 1',
+    '  {',
+    '    let value: i32 = 2',
+    '    defer println(value)',
+    '  }',
+    '  return value',
+    '}'
+  ].join('\n'))
+
+  assert.match(llvm, /load i32, ptr %value\.addr\.1/)
+  assert.match(llvm, /load i32, ptr %value\.addr\.0[\s\S]*ret i32/)
+})
+
 test('IR validator rejects invalid operations and return types', () => {
   const invalidOperation = new IRModule([
     new IRFunction('main', [], 'i32', [

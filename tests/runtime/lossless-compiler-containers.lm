@@ -44,6 +44,7 @@ function main(): i32 {
     tokenStart: 4,
     tokenEnd: 9,
     typeId: 3,
+    symbolId: 4,
     text: payload,
     name: "call",
     value: payload,
@@ -60,6 +61,7 @@ function main(): i32 {
   })
   let node = astArenaGet(nodes, 0)
   assert(stringEquals(node.text, payload), "AST text must be lossless")
+  assert(node.symbolId == 4, "AST symbol identity must survive")
 
   let types: TypeArena = typeArena()
   types = typeArenaPush(types, CompilerType {

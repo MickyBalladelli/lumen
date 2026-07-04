@@ -8,12 +8,15 @@ class AggregateLowering {
       throw new Diagnostic(`Unknown struct "${node.type}"`, node.location, 'backend')
     }
 
-    const values = new Map(node.fields.map(field => [field.key, field.value]))
+    const values = new Map(node.fields.map(field => [
+      field.symbolId ?? field.key,
+      field.value
+    ]))
     let aggregate = 'undef'
 
     for (let index = 0; index < struct.fields.length; index += 1) {
       const field = struct.fields[index]
-      const valueNode = values.get(field.name)
+      const valueNode = values.get(field.symbol?.id ?? field.name)
       const value = valueNode?.op === 'struct'
         ? this.emitStructValueNode(valueNode)
         : this.emitExpression(valueNode)
@@ -30,7 +33,7 @@ class AggregateLowering {
 
   emitMemberNode(node) {
     if (node.computed && node.object.op === 'reference') {
-      const base = this.resolve(node.object.name)
+      const base = this.resolve(node.object)
       if (base.type === LumenTypes.String) {
         this.usesBounds = true
         const source = this.nextTemp()
@@ -60,7 +63,7 @@ class AggregateLowering {
 
   emitLValueNode(node) {
     if (node.op === 'reference') {
-      const symbol = this.resolve(node.name)
+      const symbol = this.resolve(node)
       return {
         pointer: symbol.pointer,
         type: symbol.type,
@@ -91,7 +94,9 @@ class AggregateLowering {
       }
     }
 
-    const field = this.typeSystem.getField(object.type, node.field)
+    const field = node.fieldSymbolId
+      ? this.typeSystem.getFieldById(object.type, node.fieldSymbolId)
+      : this.typeSystem.getField(object.type, node.field)
     const struct = this.typeSystem.getStruct(object.type)
     if (!field || !struct) {
       throw new Diagnostic(`Unknown field "${node.field}"`, node.location, 'backend')
@@ -186,11 +191,14 @@ class AggregateLowering {
 
   emitStructInitializerNode(pointer, type, node) {
     const struct = this.typeSystem.getStruct(type)
-    const values = new Map(node.fields.map(field => [field.key, field.value]))
+    const values = new Map(node.fields.map(field => [
+      field.symbolId ?? field.key,
+      field.value
+    ]))
 
     for (let index = 0; index < struct.fields.length; index += 1) {
       const field = struct.fields[index]
-      const valueNode = values.get(field.name)
+      const valueNode = values.get(field.symbol?.id ?? field.name)
       const fieldPointer = this.nextTemp()
       this.lines.push(`  ${fieldPointer} = getelementptr inbounds ${this.llvmType(type)}, ptr ${pointer}, i32 0, i32 ${index}`)
 

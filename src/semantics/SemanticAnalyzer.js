@@ -1,6 +1,9 @@
 import { Diagnostic } from '../diagnostics/Diagnostic.js'
 import { Scope } from './Scope.js'
 import { ModuleRegistry } from './ModuleRegistry.js'
+import { SemanticSymbol } from './SemanticSymbol.js'
+import { setCompilerMetadata } from './CompilerMetadata.js'
+import { builtinSignature } from '../runtime/BuiltinRegistry.js'
 
 export class SemanticAnalyzer {
   constructor({ moduleRegistry = new ModuleRegistry() } = {}) {
@@ -9,6 +12,7 @@ export class SemanticAnalyzer {
 
   analyze(program, { diagnostics = null } = {}) {
     this.diagnostics = diagnostics
+    this.nextSymbolId = 1
     const scope = new Scope()
 
     for (const node of program.body) {
@@ -23,6 +27,9 @@ export class SemanticAnalyzer {
       }
       if (node.kind === 'ExternFunctionDeclaration') {
         this.attempt(() => this.defineFunction(scope, node))
+      }
+      if (node.kind === 'ImportDeclaration') {
+        this.attempt(() => this.defineImport(scope, node))
       }
     }
 
@@ -45,55 +52,101 @@ export class SemanticAnalyzer {
   }
 
   defineStruct(scope, node) {
-    const previous = scope.resolve(node.name.name)
-    if (!scope.define(node.name.name, {
-      kind: 'struct',
-      node
-    })) {
+    const symbol = this.createSymbol(node.name.name, 'struct', node)
+    const previous = scope.resolveOwn(node.name.name)
+    if (!scope.define(node.name.name, symbol)) {
       throw duplicateDiagnostic(`Duplicate type "${node.name.name}"`, node.location, previous)
+    }
+    setCompilerMetadata(node, 'symbol', symbol)
+
+    const fields = new Scope()
+    for (const field of node.fields) {
+      const fieldSymbol = this.createSymbol(field.name, 'field', field, {
+        owner: symbol
+      })
+      const previousField = fields.resolveOwn(field.name)
+      if (!fields.define(field.name, fieldSymbol)) {
+        throw duplicateDiagnostic(`Duplicate field "${field.name}"`, field.location, previousField)
+      }
+      setCompilerMetadata(field, 'symbol', fieldSymbol)
     }
   }
 
   defineFunction(scope, node) {
-    const previous = scope.resolve(node.name.name)
-    if (!scope.define(node.name.name, {
-      kind: 'function',
-      node
-    })) {
+    const symbol = this.createSymbol(node.name.name, 'function', node)
+    const previous = scope.resolveOwn(node.name.name)
+    if (!scope.define(node.name.name, symbol)) {
       throw duplicateDiagnostic(`Duplicate function "${node.name.name}"`, node.location, previous)
     }
+    setCompilerMetadata(node, 'symbol', symbol)
   }
 
   defineEnum(scope, node) {
-    const previous = scope.resolve(node.name.name)
-    if (!scope.define(node.name.name, {
-      kind: 'enum',
-      node
-    })) {
+    const symbol = this.createSymbol(node.name.name, 'enum', node)
+    const previous = scope.resolveOwn(node.name.name)
+    if (!scope.define(node.name.name, symbol)) {
       throw duplicateDiagnostic(`Duplicate enum "${node.name.name}"`, node.location, previous)
     }
+    setCompilerMetadata(node, 'symbol', symbol)
 
     for (const variant of node.variants) {
-      const previousVariant = scope.resolve(variant.name)
-      if (!scope.define(variant.name, {
-        kind: 'enumVariant',
-        node: variant,
+      const variantSymbol = this.createSymbol(variant.name, 'enumVariant', variant, {
         enumName: node.name.name,
+        owner: symbol,
         mutable: false
-      })) {
+      })
+      const previousVariant = scope.resolveOwn(variant.name)
+      if (!scope.define(variant.name, variantSymbol)) {
         throw duplicateDiagnostic(
           `Duplicate enum variant "${variant.name}"`,
           variant.location,
           previousVariant
         )
       }
+      setCompilerMetadata(variant, 'symbol', variantSymbol)
     }
+  }
+
+  defineImport(scope, node) {
+    if (!this.moduleRegistry.hasModule(node.source)) {
+      throw new Diagnostic(`Unknown module "${node.source}"`, node.location, 'semantic')
+    }
+
+    for (const name of node.names) {
+      if (!this.moduleRegistry.has(node.source, name.name)) {
+        throw new Diagnostic(`Module "${node.source}" has no export "${name.name}"`, name.location, 'semantic')
+      }
+
+      const signature = builtinSignature(name.name)
+      const symbol = this.createSymbol(name.name, 'import', name, {
+        builtin: signature?.module === node.source ? signature : null,
+        module: node.source,
+        mutable: false
+      })
+      const previous = scope.resolveOwn(name.name)
+      if (!scope.define(name.name, symbol)) {
+        throw duplicateDiagnostic(`Duplicate import "${name.name}"`, name.location, previous)
+      }
+      setCompilerMetadata(name, 'symbol', symbol)
+    }
+  }
+
+  createSymbol(name, kind, node, fields = {}) {
+    const symbol = new SemanticSymbol(
+      `symbol.${this.nextSymbolId}`,
+      name,
+      kind,
+      node,
+      fields
+    )
+    this.nextSymbolId += 1
+    return symbol
   }
 
   visit(node, scope) {
     if (!node) return
 
-    if (node.kind === 'ImportDeclaration') return this.visitImport(node, scope)
+    if (node.kind === 'ImportDeclaration') return
     if (node.kind === 'StructDeclaration') return
     if (node.kind === 'EnumDeclaration') return
     if (node.kind === 'ExternFunctionDeclaration') return
@@ -120,36 +173,17 @@ export class SemanticAnalyzer {
     const functionScope = new Scope(scope)
 
     for (const param of node.params) {
-      const previous = functionScope.symbols.get(param.name)
-      if (!functionScope.define(param.name, {
-        kind: 'param',
-        node: param,
+      const symbol = this.createSymbol(param.name, 'param', param, {
         mutable: false
-      })) {
+      })
+      const previous = functionScope.resolveOwn(param.name)
+      if (!functionScope.define(param.name, symbol)) {
         throw duplicateDiagnostic(`Duplicate parameter "${param.name}"`, param.location, previous)
       }
+      setCompilerMetadata(param, 'symbol', symbol)
     }
 
     this.visit(node.body, functionScope)
-  }
-
-  visitImport(node, scope) {
-    if (!this.moduleRegistry.hasModule(node.source)) {
-      throw new Diagnostic(`Unknown module "${node.source}"`, node.location, 'semantic')
-    }
-
-    for (const name of node.names) {
-      if (!this.moduleRegistry.has(node.source, name.name)) {
-        throw new Diagnostic(`Module "${node.source}" has no export "${name.name}"`, name.location, 'semantic')
-      }
-
-      scope.define(name.name, {
-        kind: 'import',
-        node: name,
-        module: node.source,
-        mutable: false
-      })
-    }
   }
 
   visitBlock(node, scope) {
@@ -160,18 +194,18 @@ export class SemanticAnalyzer {
   visitVariableDeclaration(node, scope) {
     for (const declaration of node.declarations) {
       this.visitExpression(declaration.initializer, scope)
-      const previous = scope.symbols.get(declaration.id.name)
-      if (!scope.define(declaration.id.name, {
-        kind: 'variable',
-        node: declaration,
+      const symbol = this.createSymbol(declaration.id.name, 'variable', declaration, {
         mutable: node.declarationKind === 'let'
-      })) {
+      })
+      const previous = scope.resolveOwn(declaration.id.name)
+      if (!scope.define(declaration.id.name, symbol)) {
         throw duplicateDiagnostic(
           `Duplicate variable "${declaration.id.name}"`,
           declaration.location,
           previous
         )
       }
+      setCompilerMetadata(declaration, 'symbol', symbol)
     }
   }
 
@@ -193,11 +227,11 @@ export class SemanticAnalyzer {
     const loopScope = new Scope(scope)
     this.visitExpression(node.iterable, scope)
 
-    loopScope.define(node.item.name, {
-      kind: 'variable',
-      node: node.item,
+    const symbol = this.createSymbol(node.item.name, 'variable', node.item, {
       mutable: false
     })
+    loopScope.define(node.item.name, symbol)
+    setCompilerMetadata(node.item, 'symbol', symbol)
 
     this.visit(node.body, loopScope)
   }
@@ -207,11 +241,11 @@ export class SemanticAnalyzer {
     this.visitExpression(node.start, scope)
     this.visitExpression(node.end, scope)
 
-    loopScope.define(node.item.name, {
-      kind: 'variable',
-      node: node.item,
+    const symbol = this.createSymbol(node.item.name, 'variable', node.item, {
       mutable: false
     })
+    loopScope.define(node.item.name, symbol)
+    setCompilerMetadata(node.item, 'symbol', symbol)
 
     this.visit(node.body, loopScope)
   }
@@ -240,11 +274,11 @@ export class SemanticAnalyzer {
     this.visit(node.tryBlock, scope)
 
     const catchScope = new Scope(scope)
-    catchScope.define(node.catchParam.name, {
-      kind: 'variable',
-      node: node.catchParam,
+    const symbol = this.createSymbol(node.catchParam.name, 'variable', node.catchParam, {
       mutable: false
     })
+    catchScope.define(node.catchParam.name, symbol)
+    setCompilerMetadata(node.catchParam, 'symbol', symbol)
 
     this.visit(node.catchBlock, catchScope)
   }
@@ -253,14 +287,31 @@ export class SemanticAnalyzer {
     const node = expression?.kind === 'RawExpression' ? expression.parsed : expression
     if (!node) return
 
+    if (node.kind === 'IdentifierExpression') {
+      const symbol = scope.resolve(node.name)
+      if (symbol) setCompilerMetadata(node, 'resolvedSymbol', symbol)
+      return
+    }
+
+    if (node.kind === 'StructExpression') {
+      const symbol = scope.resolve(node.name)
+      if (symbol?.kind === 'struct') {
+        setCompilerMetadata(node, 'resolvedSymbol', symbol)
+        setCompilerMetadata(node, 'resolvedDeclaration', symbol.node)
+      }
+    }
+
     if (node.kind === 'ArrowFunctionExpression') {
       const arrowScope = new Scope(scope)
       for (const param of node.params) {
-        arrowScope.define(param.name, {
-          kind: 'param',
-          node: param,
+        const symbol = this.createSymbol(param.name, 'param', param, {
           mutable: false
         })
+        const previous = arrowScope.resolveOwn(param.name)
+        if (!arrowScope.define(param.name, symbol)) {
+          throw duplicateDiagnostic(`Duplicate parameter "${param.name}"`, param.location, previous)
+        }
+        setCompilerMetadata(param, 'symbol', symbol)
       }
       this.visitExpression(node.body, arrowScope)
       return

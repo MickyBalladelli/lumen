@@ -50,13 +50,20 @@ export class LLVMEmitter {
       ...irModule.functions.map(func => [func.name, func]),
       ...(irModule.externs ?? []).map(func => [func.name, func])
     ])
+    this.functionSignaturesById = new Map([
+      ...irModule.functions,
+      ...(irModule.externs ?? [])
+    ].filter(func => func.symbolId).map(func => [func.symbolId, func]))
     this.enumConstants = new Map()
+    this.enumConstantsById = new Map()
     for (const enumType of irModule.enums ?? []) {
       for (const variant of enumType.variants) {
-        this.enumConstants.set(variant.name, {
+        const constant = {
           type: enumType.name,
           value: String(variant.value)
-        })
+        }
+        this.enumConstants.set(variant.name, constant)
+        if (variant.symbolId) this.enumConstantsById.set(variant.symbolId, constant)
       }
     }
     const typeDefinitions = irModule.structs.map(struct => this.emitStructType(struct))
@@ -101,6 +108,7 @@ export class LLVMEmitter {
     this.lines = this.createLineBuffer()
     this.entryAllocas = []
     this.scopes = [new Map()]
+    this.symbolsById = new Map()
     this.tryStack = []
     this.loopStack = []
     this.breakStack = []
@@ -122,7 +130,8 @@ export class LLVMEmitter {
       const pointer = this.alloca(param.name, param.type, {
         debugLocation: param.location,
         isParameter: true,
-        argumentIndex: func.params.indexOf(param) + 1
+        argumentIndex: func.params.indexOf(param) + 1,
+        symbolId: param.symbolId
       })
       this.lines.push(`  store ${this.llvmType(param.type)} %${param.name}, ptr ${pointer}`)
     }
@@ -240,7 +249,8 @@ export class LLVMEmitter {
     length = null,
     debugLocation = null,
     isParameter = false,
-    argumentIndex = null
+    argumentIndex = null,
+    symbolId = null
   } = {}) {
     const pointer = `%${name}.addr.${this.temp}`
     this.temp += 1
@@ -258,7 +268,7 @@ export class LLVMEmitter {
       pointer,
       type,
       length
-    })
+    }, symbolId)
     return pointer
   }
 
@@ -286,11 +296,20 @@ export class LLVMEmitter {
     this.scopes.pop()
   }
 
-  define(name, symbol) {
+  define(name, symbol, symbolId = null) {
     this.scopes.at(-1).set(name, symbol)
+    if (symbolId) this.symbolsById.set(symbolId, symbol)
   }
 
-  resolve(name) {
+  resolve(reference) {
+    const symbolId = typeof reference === 'object' ? reference?.symbolId : null
+    const name = typeof reference === 'object' ? reference?.name : reference
+    if (symbolId) {
+      const symbol = this.symbolsById.get(symbolId)
+      if (symbol) return symbol
+      throw new Diagnostic(`Unknown symbol identity "${symbolId}"`, reference?.location ?? null, 'backend')
+    }
+
     for (let index = this.scopes.length - 1; index >= 0; index -= 1) {
       const symbol = this.scopes[index].get(name)
       if (symbol) return symbol

@@ -27,7 +27,7 @@ class ControlFlowLowering {
       pointer: errorPointer,
       type: LumenTypes.String,
       length: null
-    })
+    }, node.catchParam.symbolId)
     this.emitStatement(node.catchBlock)
     this.popScope()
 
@@ -67,7 +67,8 @@ class ControlFlowLowering {
       const type = declaration.type ?? LumenTypes.I32
       const pointer = this.alloca(declaration.name, type, {
         length: declaration.arrayLength,
-        debugLocation: declaration.location ?? node.location
+        debugLocation: declaration.location ?? node.location,
+        symbolId: declaration.symbolId
       })
 
       if (declaration.initializer) {
@@ -272,7 +273,9 @@ class ControlFlowLowering {
 
   emitForRange(node) {
     this.pushScope()
-    const itemPointer = this.alloca(node.item.name, LumenTypes.I32)
+    const itemPointer = this.alloca(node.item.name, LumenTypes.I32, {
+      symbolId: node.item.symbolId
+    })
     const start = this.emitExpression(node.start)
     const end = this.emitExpression(node.end)
     const conditionLabel = this.nextLabel('range.cond')
@@ -410,15 +413,16 @@ class ControlFlowLowering {
     const iterableNode = node.iterable
     if (iterableNode?.op === 'call' &&
       iterableNode.callee.op === 'reference' &&
-      iterableNode.callee.name === SystemFunctions.Filter) {
+      (iterableNode.callee.symbolId
+        ? iterableNode.callee.builtinName
+        : iterableNode.callee.name) === SystemFunctions.Filter) {
       return this.emitFilteredForOf(node)
     }
 
     if (iterableNode?.op !== 'reference') {
       throw new Diagnostic('for-of iterable must be an array variable', node.iterable.location, 'backend')
     }
-    const iterableName = iterableNode.name
-    const iterable = this.resolve(iterableName)
+    const iterable = this.resolve(iterableNode)
 
     if (!this.typeSystem.isArray(iterable.type) || iterable.length === null) {
       throw new Diagnostic('for-of backend needs fixed array', node.location, 'backend')
@@ -426,7 +430,9 @@ class ControlFlowLowering {
 
     const elementType = this.typeSystem.elementType(iterable.type)
     const indexPointer = this.alloca(`.${node.item.name}.index`, LumenTypes.I32)
-    const itemPointer = this.alloca(node.item.name, elementType)
+    const itemPointer = this.alloca(node.item.name, elementType, {
+      symbolId: node.item.symbolId
+    })
     const conditionLabel = this.nextLabel('forof.cond')
     const bodyLabel = this.nextLabel('forof.body')
     const updateLabel = this.nextLabel('forof.update')
@@ -481,8 +487,7 @@ class ControlFlowLowering {
       throw new Diagnostic('filter expects array and predicate', node.iterable.location, 'backend')
     }
 
-    const iterableName = collection.name
-    const iterable = this.resolve(iterableName)
+    const iterable = this.resolve(collection)
 
     if (!this.typeSystem.isArray(iterable.type) || iterable.length === null) {
       throw new Diagnostic('filter needs fixed array', node.location, 'backend')
@@ -490,12 +495,14 @@ class ControlFlowLowering {
 
     const elementType = this.typeSystem.elementType(iterable.type)
     const indexPointer = this.alloca(`.${node.item.name}.index`, LumenTypes.I32)
-    const itemPointer = this.alloca(node.item.name, elementType)
+    const itemPointer = this.alloca(node.item.name, elementType, {
+      symbolId: node.item.symbolId
+    })
     this.define(predicate.params[0].name, {
       pointer: itemPointer,
       type: elementType,
       length: null
-    })
+    }, predicate.params[0].symbolId)
     const conditionLabel = this.nextLabel('filter.cond')
     const predicateLabel = this.nextLabel('filter.pred')
     const bodyLabel = this.nextLabel('filter.body')

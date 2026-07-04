@@ -68,7 +68,7 @@ copy embedded stage-1 LLVM instead of compiling the Lumen source.
   preserve export boundaries, detect cycles, and load each module once. Stop
   concatenating imported source text and scanning import lines as strings.
 
-- [ ] Implement lexical scopes and symbol resolution.
+- [x] Implement lexical scopes and symbol resolution.
   Resolve declarations, parameters, locals, functions, structs, fields, and
   imports by identity. Handle shadowing and duplicate declarations without
   name-based emitter guesses.

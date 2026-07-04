@@ -3,6 +3,8 @@ import { Scope } from './Scope.js'
 import { ExpressionInspector } from './ExpressionInspector.js'
 import { LumenTypes, TypeSystem } from './TypeSystem.js'
 import { setCompilerMetadata } from './CompilerMetadata.js'
+import { SemanticSymbol } from './SemanticSymbol.js'
+import { builtinSignature } from '../runtime/BuiltinRegistry.js'
 
 export class TypeChecker {
   constructor({ typeSystem = new TypeSystem() } = {}) {
@@ -13,33 +15,57 @@ export class TypeChecker {
 
   check(program, { diagnostics = null } = {}) {
     this.diagnostics = diagnostics
+    this.nextSyntheticSymbolId = 1
     const scope = new Scope()
 
     for (const node of program.body) {
       if (node.kind === 'StructDeclaration') {
+        const symbol = this.symbolFor(node, {
+          kind: 'struct'
+        })
         this.attempt(() => this.registerStruct(node))
+        scope.define(node.name.name, symbol)
       }
       if (node.kind === 'EnumDeclaration') {
+        const symbol = this.symbolFor(node, {
+          kind: 'enum'
+        })
         this.attempt(() => this.registerEnum(node))
+        scope.define(node.name.name, symbol)
+        for (const variant of node.variants) {
+          scope.define(variant.name, this.symbolFor(variant, {
+            enumName: node.name.name,
+            kind: 'enumVariant',
+            mutable: false,
+            owner: node.symbol
+          }))
+        }
       }
       if (node.kind === 'FunctionDeclaration') {
         const returnType = node.returnType?.name ?? LumenTypes.I32
-        const symbol = {
+        const symbol = this.symbolFor(node, {
           kind: 'function',
-          node,
           type: node.isAsync ? `Task<${returnType}>` : returnType
-        }
+        })
         scope.define(node.name.name, symbol)
-        setCompilerMetadata(node, 'symbol', symbol)
       }
       if (node.kind === 'ExternFunctionDeclaration') {
-        const symbol = {
+        const symbol = this.symbolFor(node, {
           kind: 'function',
-          node,
           type: node.returnType?.name ?? LumenTypes.I32
-        }
+        })
         scope.define(node.name.name, symbol)
-        setCompilerMetadata(node, 'symbol', symbol)
+      }
+      if (node.kind === 'ImportDeclaration') {
+        for (const imported of node.names) {
+          const signature = builtinSignature(imported.name)
+          scope.define(imported.name, this.symbolFor(imported, {
+            builtin: signature?.module === node.source ? signature : null,
+            kind: 'import',
+            module: node.source,
+            mutable: false
+          }))
+        }
       }
     }
 
@@ -61,31 +87,34 @@ export class TypeChecker {
   }
 
   registerStruct(node) {
-    const seen = new Map()
     const fields = node.fields.map(field => {
-      if (seen.has(field.name)) {
-        throw new Diagnostic(`Duplicate field "${field.name}"`, field.location, 'type')
-          .addNote('First field is here', seen.get(field.name))
-      }
-
-      seen.set(field.name, field.location)
       return {
         name: field.name,
         type: this.resolveType(field.typeAnnotation, null),
         location: field.location,
-        node: field
+        node: field,
+        symbol: this.symbolFor(field, {
+          kind: 'field',
+          owner: node.symbol
+        })
       }
     })
 
-    this.typeSystem.registerStruct(node.name.name, fields, node)
+    this.typeSystem.registerStruct(node.name.name, fields, node, node.symbol)
   }
 
   registerEnum(node) {
     this.typeSystem.registerEnum(node.name.name, node.variants.map(variant => ({
       name: variant.name,
       location: variant.location,
-      declaration: variant
-    })), node)
+      declaration: variant,
+      symbol: this.symbolFor(variant, {
+        enumName: node.name.name,
+        kind: 'enumVariant',
+        mutable: false,
+        owner: node.symbol
+      })
+    })), node, node.symbol)
   }
 
   checkNode(node, scope, currentFunction) {
@@ -129,15 +158,13 @@ export class TypeChecker {
     for (const param of node.params) {
       const paramType = this.resolveType(param.typeAnnotation, LumenTypes.I32)
       param.inferredType = paramType
-      const symbol = {
+      const symbol = this.symbolFor(param, {
         kind: 'param',
-        node: param,
         type: paramType,
         mutable: false,
         initialized: true
-      }
+      })
       scope.define(param.name, symbol)
-      setCompilerMetadata(param, 'symbol', symbol)
     }
 
     this.checkNode(node.body, scope, node)
@@ -193,15 +220,13 @@ export class TypeChecker {
       }
 
       declaration.inferredType = finalType
-      const symbol = {
+      const symbol = this.symbolFor(declaration, {
         kind: 'variable',
-        node: declaration,
         type: finalType,
         mutable: node.declarationKind === 'let',
         initialized: Boolean(declaration.initializer)
-      }
+      })
       scope.define(declaration.id.name, symbol)
-      setCompilerMetadata(declaration, 'symbol', symbol)
     }
 
     return LumenTypes.Void
@@ -237,15 +262,13 @@ export class TypeChecker {
     node.item.inferredType = itemType
     node.iterable.inferredType = iterableType
 
-    const symbol = {
+    const symbol = this.symbolFor(node.item, {
       kind: 'variable',
-      node: node.item,
       type: itemType,
       mutable: false,
       initialized: true
-    }
+    })
     scope.define(node.item.name, symbol)
-    setCompilerMetadata(node.item, 'symbol', symbol)
 
     const beforeLoop = this.captureInitialization(parentScope)
     this.withLoop(() => this.checkNode(node.body, scope, currentFunction))
@@ -261,15 +284,13 @@ export class TypeChecker {
     }
     const scope = new Scope(parentScope)
     node.item.inferredType = LumenTypes.I32
-    const symbol = {
+    const symbol = this.symbolFor(node.item, {
       kind: 'variable',
-      node: node.item,
       type: LumenTypes.I32,
       mutable: false,
       initialized: true
-    }
+    })
     scope.define(node.item.name, symbol)
-    setCompilerMetadata(node.item, 'symbol', symbol)
     const beforeLoop = this.captureInitialization(parentScope)
     this.withLoop(() => this.checkNode(node.body, scope, currentFunction))
     this.restoreInitialization(beforeLoop)
@@ -418,15 +439,13 @@ export class TypeChecker {
 
     const catchScope = new Scope(parentScope)
     node.catchParam.inferredType = LumenTypes.String
-    const symbol = {
+    const symbol = this.symbolFor(node.catchParam, {
       kind: 'variable',
-      node: node.catchParam,
       type: LumenTypes.String,
       mutable: false,
       initialized: true
-    }
+    })
     catchScope.define(node.catchParam.name, symbol)
-    setCompilerMetadata(node.catchParam, 'symbol', symbol)
 
     this.checkNode(node.catchBlock, catchScope, currentFunction)
     const catchState = this.captureInitialization(parentScope)
@@ -566,6 +585,7 @@ export class TypeChecker {
     if (struct.declaration) {
       setCompilerMetadata(node, 'resolvedDeclaration', struct.declaration)
     }
+    if (struct.symbol) setCompilerMetadata(node, 'resolvedSymbol', struct.symbol)
     const seen = new Set()
 
     for (const property of node.fields) {
@@ -577,6 +597,7 @@ export class TypeChecker {
       if (field.node) {
         setCompilerMetadata(property, 'resolvedDeclaration', field.node)
       }
+      if (field.symbol) setCompilerMetadata(property, 'resolvedSymbol', field.symbol)
       seen.add(property.key)
       const valueType = new ExpressionInspector(scope, this.typeSystem).infer(property.value)
 
@@ -633,10 +654,30 @@ export class TypeChecker {
     }
     const declaration = this.typeSystem.getStruct(declarationType)?.declaration ??
       this.typeSystem.getEnum(declarationType)?.declaration
+    const symbol = this.typeSystem.getStruct(declarationType)?.symbol ??
+      this.typeSystem.getEnum(declarationType)?.symbol
     if (declaration) {
       setCompilerMetadata(typeAnnotation, 'resolvedDeclaration', declaration)
     }
+    if (symbol) setCompilerMetadata(typeAnnotation, 'resolvedSymbol', symbol)
 
     return normalized
+  }
+
+  symbolFor(node, fields = {}) {
+    let symbol = node?.symbol
+    if (!symbol) {
+      const name = node?.name?.name ?? node?.name ?? node?.id?.name ?? ''
+      symbol = new SemanticSymbol(
+        `type-symbol.${this.nextSyntheticSymbolId}`,
+        name,
+        fields.kind ?? 'unknown',
+        node
+      )
+      this.nextSyntheticSymbolId += 1
+      setCompilerMetadata(node, 'symbol', symbol)
+    }
+    Object.assign(symbol, fields)
+    return symbol
   }
 }

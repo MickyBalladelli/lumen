@@ -10,8 +10,13 @@ export class Scope {
     return true
   }
 
+  resolveOwn(name) {
+    return this.symbols.get(name) ?? null
+  }
+
   resolve(name) {
-    if (this.symbols.has(name)) return this.symbols.get(name)
+    const symbol = this.resolveOwn(name)
+    if (symbol) return symbol
     return this.parent?.resolve(name) ?? null
   }
 }

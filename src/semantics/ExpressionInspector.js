@@ -9,6 +9,8 @@ import { ThreadLibrary } from '../thread/ThreadLibrary.js'
 import { builtinSignature } from '../runtime/BuiltinRegistry.js'
 import { setCompilerMetadata } from './CompilerMetadata.js'
 
+const builtinSymbols = new Map()
+
 export class ExpressionInspector {
   constructor(
     scope,
@@ -100,6 +102,7 @@ export class ExpressionInspector {
       if (variant?.declaration) {
         setCompilerMetadata(node, 'resolvedDeclaration', variant.declaration)
       }
+      if (variant?.symbol) setCompilerMetadata(node, 'resolvedSymbol', variant.symbol)
       if (locals.has(node.name) || symbol || variant) return
       throw new Diagnostic(`Unknown symbol "${node.name}"`, node.location, 'semantic')
     }
@@ -120,7 +123,11 @@ export class ExpressionInspector {
 
     if (node.kind === 'CallExpression') {
       const name = this.calleeName(node)
-      if (!name || !this.isKnownCall(name)) this.validateNode(node.callee, locals)
+      const symbol = name ? this.callSymbol(name) : null
+      if (symbol && node.callee.kind === 'IdentifierExpression') {
+        setCompilerMetadata(node.callee, 'resolvedSymbol', symbol)
+      }
+      if (!name || !symbol) this.validateNode(node.callee, locals)
       for (const argument of node.arguments) this.validateNode(argument, locals)
       return
     }
@@ -132,10 +139,18 @@ export class ExpressionInspector {
     }
 
     if (node.kind === 'StructExpression') {
-      if (!this.typeSystem.getStruct(node.name)) {
+      const struct = this.typeSystem.getStruct(node.name)
+      if (!struct) {
         throw new Diagnostic(`Unknown struct "${node.name}"`, node.location, 'semantic')
       }
-      for (const field of node.fields) this.validateNode(field.value, locals)
+      if (struct.declaration) setCompilerMetadata(node, 'resolvedDeclaration', struct.declaration)
+      if (struct.symbol) setCompilerMetadata(node, 'resolvedSymbol', struct.symbol)
+      for (const property of node.fields) {
+        const field = this.typeSystem.getField(node.name, property.key)
+        if (field?.node) setCompilerMetadata(property, 'resolvedDeclaration', field.node)
+        if (field?.symbol) setCompilerMetadata(property, 'resolvedSymbol', field.symbol)
+        this.validateNode(property.value, locals)
+      }
       return
     }
 
@@ -175,6 +190,7 @@ export class ExpressionInspector {
     if (variant?.declaration) {
       setCompilerMetadata(node, 'resolvedDeclaration', variant.declaration)
     }
+    if (variant?.symbol) setCompilerMetadata(node, 'resolvedSymbol', variant.symbol)
     return symbol?.type ??
       variant?.enumName ??
       LumenTypes.Unknown
@@ -217,6 +233,23 @@ export class ExpressionInspector {
   callType(node) {
     const name = this.calleeName(node)
     if (!name) return LumenTypes.Unknown
+    const lexicalSymbol = this.scope.resolve(name)
+    const registeredBuiltin = builtinSignature(name)
+    const isImportedBuiltin = lexicalSymbol?.kind === 'import' &&
+      lexicalSymbol.module === registeredBuiltin?.module
+
+    if (lexicalSymbol && node.callee.kind === 'IdentifierExpression') {
+      setCompilerMetadata(node.callee, 'resolvedSymbol', lexicalSymbol)
+    }
+    if (lexicalSymbol?.kind === 'function') {
+      return this.userCallType(node, lexicalSymbol)
+    }
+    if (lexicalSymbol && !isImportedBuiltin) {
+      throw new Diagnostic(`Call target "${name}" is not a function`, node.callee.location, 'semantic')
+    }
+    if (!lexicalSymbol && registeredBuiltin && node.callee.kind === 'IdentifierExpression') {
+      setCompilerMetadata(node.callee, 'resolvedSymbol', builtinSymbol(registeredBuiltin))
+    }
 
     if (name === SystemFunctions.Min || name === SystemFunctions.Max) {
       return this.numericPairType(node, name)
@@ -236,12 +269,16 @@ export class ExpressionInspector {
       const parameterType = this.typeSystem.elementType(collectionType) ?? LumenTypes.Unknown
       const predicateScope = new Scope(this.scope)
       predicate.params[0].inferredType = parameterType
-      const symbol = {
+      const symbol = predicate.params[0].symbol ?? {
+        id: `arrow:${predicate.params[0].location?.offset ?? predicate.params[0].name}`,
         kind: 'param',
-        node: predicate.params[0],
+        name: predicate.params[0].name,
+        node: predicate.params[0]
+      }
+      Object.assign(symbol, {
         type: parameterType,
         mutable: false
-      }
+      })
       predicateScope.define(predicate.params[0].name, symbol)
       setCompilerMetadata(predicate.params[0], 'symbol', symbol)
       const predicateInspector = new ExpressionInspector(
@@ -359,17 +396,16 @@ export class ExpressionInspector {
       throw new Diagnostic('startThread cannot take an async function', node.arguments[0].location, 'type')
     }
 
-    const builtin = builtinSignature(name)
-    if (builtin) {
-      this.validateBuiltinCall(node, builtin)
-      return builtin.returnType
+    if (registeredBuiltin) {
+      this.validateBuiltinCall(node, registeredBuiltin)
+      return registeredBuiltin.returnType
     }
 
-    const symbol = this.scope.resolve(name)
-    if (symbol && node.callee.kind === 'IdentifierExpression') {
-      setCompilerMetadata(node.callee, 'resolvedSymbol', symbol)
-    }
-    if (symbol?.kind !== 'function') return LumenTypes.Unknown
+    return LumenTypes.Unknown
+  }
+
+  userCallType(node, symbol) {
+    const name = node.callee.name
     const params = symbol.node?.params ?? []
     if (node.arguments.length !== params.length) {
       throw new Diagnostic(`Invalid call to ${name}`, node.location, 'semantic')
@@ -480,6 +516,7 @@ export class ExpressionInspector {
     if (field.node) {
       setCompilerMetadata(node.property, 'resolvedDeclaration', field.node)
     }
+    if (field.symbol) setCompilerMetadata(node.property, 'resolvedSymbol', field.symbol)
     return field.type
   }
 
@@ -607,11 +644,23 @@ export class ExpressionInspector {
   }
 
   isKnownCall(name) {
+    const symbol = this.scope.resolve(name)
+    if (symbol) {
+      return symbol.kind === 'function' ||
+        (symbol.kind === 'import' && symbol.module === builtinSignature(name)?.module)
+    }
     return this.systemLibrary.has(name) ||
       this.fsLibrary.has(name) ||
       this.httpLibrary.has(name) ||
       this.threadLibrary.has(name) ||
-      this.scope.resolve(name)?.kind === 'function'
+      Boolean(builtinSignature(name))
+  }
+
+  callSymbol(name) {
+    const symbol = this.scope.resolve(name)
+    if (symbol) return symbol
+    const builtin = builtinSignature(name)
+    return builtin ? builtinSymbol(builtin) : null
   }
 
   expressionNode(expression) {
@@ -631,4 +680,20 @@ export class ExpressionInspector {
     if (node.kind === 'SliceExpression') return [node.start, node.end]
     return []
   }
+}
+
+function builtinSymbol(signature) {
+  const id = `builtin:${signature.module}:${signature.name}`
+  if (!builtinSymbols.has(id)) {
+    builtinSymbols.set(id, {
+      id,
+      builtin: signature,
+      kind: 'builtin',
+      module: signature.module,
+      name: signature.name,
+      node: null,
+      type: signature.returnType
+    })
+  }
+  return builtinSymbols.get(id)
 }

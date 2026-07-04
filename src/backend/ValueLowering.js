@@ -75,8 +75,11 @@ class ValueLowering {
       }
     }
     if (node.op === 'reference') {
-      if (this.enumConstants.has(node.name)) return this.enumConstants.get(node.name)
-      const symbol = this.resolve(node.name)
+      if (node.symbolId && this.enumConstantsById.has(node.symbolId)) {
+        return this.enumConstantsById.get(node.symbolId)
+      }
+      if (!node.symbolId && this.enumConstants.has(node.name)) return this.enumConstants.get(node.name)
+      const symbol = this.resolve(node)
       const value = this.nextTemp()
       this.lines.push(`  ${value} = load ${this.llvmType(symbol.type)}, ptr ${symbol.pointer}`)
       return { type: symbol.type, value }
@@ -132,8 +135,13 @@ class ValueLowering {
       throw new Diagnostic('Call target must be a function name', node.location, 'backend')
     }
 
-    if (this.functionSignatures.has(node.callee.name)) {
+    if (node.callee.symbolId
+      ? this.functionSignaturesById.has(node.callee.symbolId)
+      : this.functionSignatures.has(node.callee.name)) {
       return this.emitUserCallNode(node)
+    }
+    if (node.callee.symbolId && !node.callee.builtinName) {
+      throw new Diagnostic('Call target has no callable symbol', node.callee.location, 'backend')
     }
 
     this.irCallArguments.push({
@@ -143,15 +151,15 @@ class ValueLowering {
         return tokens
       }),
       consumed: false,
-      name: node.callee.name,
+      name: node.callee.builtinName ?? node.callee.name,
       matched: false
     })
     try {
       const tokens = [
         {
           type: TokenType.Identifier,
-          lexeme: node.callee.name,
-          literal: node.callee.name,
+          lexeme: node.callee.builtinName ?? node.callee.name,
+          literal: node.callee.builtinName ?? node.callee.name,
           location: node.location
         },
         { lexeme: '(', location: node.location },
@@ -168,7 +176,9 @@ class ValueLowering {
 
   emitUserCallNode(node) {
     const name = node.callee.name
-    const signature = this.functionSignatures.get(name)
+    const signature = node.callee.symbolId
+      ? this.functionSignaturesById.get(node.callee.symbolId)
+      : this.functionSignatures.get(name)
     if (!signature || node.arguments.length !== signature.params.length) {
       throw new Diagnostic(`Invalid call to ${name}`, node.location, 'backend')
     }

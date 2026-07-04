@@ -135,7 +135,7 @@ class BuiltinLowering {
       throw new Diagnostic('len expects one argument', tokens[0].location, 'backend')
     }
 
-    const iterable = this.resolve(this.singleIdentifierName({
+    const iterable = this.resolve(this.singleIdentifierReference({
       tokens: args[0],
       location: tokens[0].location
     }))
@@ -746,7 +746,7 @@ class BuiltinLowering {
     const args = this.callArguments(tokens)
     if (args.length !== 1) throw new Diagnostic('arraySum expects one array', tokens[0].location, 'backend')
 
-    const name = this.singleIdentifierName({
+    const name = this.singleIdentifierReference({
       tokens: args[0],
       location: tokens[0].location
     })
@@ -783,7 +783,7 @@ class BuiltinLowering {
     const args = this.callArguments(tokens)
     if (args.length !== 1) throw new Diagnostic(`array${edge === 'first' ? 'First' : 'Last'} expects one array`, tokens[0].location, 'backend')
 
-    const name = this.singleIdentifierName({
+    const name = this.singleIdentifierReference({
       tokens: args[0],
       location: tokens[0].location
     })
@@ -812,7 +812,7 @@ class BuiltinLowering {
     const args = this.callArguments(tokens)
     if (args.length !== 2) throw new Diagnostic('arrayJoin expects array and separator', tokens[0].location, 'backend')
 
-    const name = this.singleIdentifierName({
+    const name = this.singleIdentifierReference({
       tokens: args[0],
       location: tokens[0].location
     })
@@ -929,7 +929,7 @@ class BuiltinLowering {
       return this.emitStringIncludes(haystack, args[1], tokens[0].location)
     }
 
-    const name = this.singleIdentifierName({
+    const name = this.singleIdentifierReference({
       tokens: args[0],
       location: tokens[0].location
     })
@@ -1319,10 +1319,16 @@ class BuiltinLowering {
       throw new Diagnostic('startThread expects function, path, message, semaphore', tokens[0].location, 'backend')
     }
 
-    const functionName = this.singleIdentifierName({
+    const functionReference = this.singleIdentifierReference({
       tokens: args[0],
       location: tokens[0].location
     })
+    const functionName = typeof functionReference === 'object' && functionReference.symbolId
+      ? this.functionSignaturesById.get(functionReference.symbolId)?.name
+      : typeof functionReference === 'object' ? functionReference.name : functionReference
+    if (!functionName) {
+      throw new Diagnostic('startThread expects a function', tokens[0].location, 'backend')
+    }
     const path = this.emitExpression({
       tokens: args[1],
       location: tokens[0].location
@@ -1392,7 +1398,7 @@ class BuiltinLowering {
   }
 
   arrayPointerArgument(tokens, location, { allowEmpty = false } = {}) {
-    const name = this.singleIdentifierName({
+    const name = this.singleIdentifierReference({
       tokens,
       location
     })
@@ -1511,8 +1517,13 @@ class BuiltinLowering {
   }
 
   singleIdentifierName(expression) {
+    const reference = this.singleIdentifierReference(expression)
+    return typeof reference === 'object' ? reference.name : reference
+  }
+
+  singleIdentifierReference(expression) {
     if (expression.tokens.irValue?.op === 'reference') {
-      return expression.tokens.irValue.name
+      return expression.tokens.irValue
     }
     if (expression.tokens.length === 1 && expression.tokens[0].type === TokenType.Identifier) {
       return expression.tokens[0].lexeme

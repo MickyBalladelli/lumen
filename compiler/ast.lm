@@ -95,6 +95,7 @@ function astBuildNode(tokens: TokenArena, parent: i32, spec: AstNodeSpec): Compi
     tokenStart: spec.tokenStart,
     tokenEnd: spec.tokenEnd,
     typeId: -1,
+    symbolId: -1,
     text: spec.text,
     name: spec.name,
     value: spec.value,

@@ -19,21 +19,23 @@ export class TypeSystem {
     this.enums = new Map()
   }
 
-  registerStruct(name, fields, declaration = null) {
+  registerStruct(name, fields, declaration = null, symbol = null) {
     this.known.add(name)
     this.structs.set(name, {
       name,
       fields,
-      declaration
+      declaration,
+      symbol
     })
   }
 
-  registerEnum(name, variants, declaration = null) {
+  registerEnum(name, variants, declaration = null, symbol = null) {
     this.known.add(name)
     this.enums.set(name, {
       name,
       variants,
-      declaration
+      declaration,
+      symbol
     })
   }
 
@@ -149,6 +151,10 @@ export class TypeSystem {
     return this.getStruct(structName)?.fields.find(field => field.name === fieldName) ?? null
   }
 
+  getFieldById(structName, symbolId) {
+    return this.getStruct(structName)?.fields.find(field => field.symbol?.id === symbolId) ?? null
+  }
+
   getEnum(name) {
     return this.enums.get(name) ?? null
   }
@@ -159,7 +165,8 @@ export class TypeSystem {
       if (index >= 0) return {
         enumName: enumType.name,
         index,
-        declaration: enumType.variants[index].declaration
+        declaration: enumType.variants[index].declaration,
+        symbol: enumType.variants[index].symbol
       }
     }
 

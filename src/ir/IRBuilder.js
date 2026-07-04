@@ -19,9 +19,11 @@ export class IRBuilder {
       .filter(node => node.kind === 'StructDeclaration')
       .map(node => ({
         name: node.name.name,
+        symbolId: node.symbol?.id ?? null,
         location: cloneLocation(node.location),
         fields: node.fields.map(field => ({
           name: field.name,
+          symbolId: field.symbol?.id ?? null,
           type: field.typeAnnotation.name,
           location: cloneLocation(field.location)
         }))
@@ -30,9 +32,11 @@ export class IRBuilder {
       .filter(node => node.kind === 'EnumDeclaration')
       .map(node => ({
         name: node.name.name,
+        symbolId: node.symbol?.id ?? null,
         location: cloneLocation(node.location),
         variants: node.variants.map((variant, index) => ({
           name: variant.name,
+          symbolId: variant.symbol?.id ?? null,
           value: index,
           location: cloneLocation(variant.location)
         }))
@@ -59,6 +63,7 @@ export class IRBuilder {
       node.name.name,
       node.params.map(param => ({
         name: param.name,
+        symbolId: param.symbol?.id ?? null,
         type: param.inferredType,
         location: cloneLocation(param.location)
       })),
@@ -66,7 +71,8 @@ export class IRBuilder {
       [entry],
       entry.name,
       cloneLocation(node.location),
-      node.isAsync
+      node.isAsync,
+      node.symbol?.id ?? null
     )
   }
 
@@ -75,13 +81,16 @@ export class IRBuilder {
       node.name.name,
       node.params.map(param => ({
         name: param.name,
+        symbolId: param.symbol?.id ?? null,
         type: param.inferredType,
         location: cloneLocation(param.location)
       })),
       node.inferredType,
       [],
       null,
-      cloneLocation(node.location)
+      cloneLocation(node.location),
+      false,
+      node.symbol?.id ?? null
     )
   }
 
@@ -130,6 +139,7 @@ export class IRBuilder {
         declarationKind: node.declarationKind,
         declarations: node.declarations.map(declaration => ({
           name: declaration.id.name,
+          symbolId: declaration.symbol?.id ?? null,
           type: declaration.inferredType,
           mutable: node.declarationKind === 'let',
           arrayLength: declaration.arrayLength ?? null,
@@ -191,6 +201,7 @@ export class IRBuilder {
       return new IRInstruction('forOf', {
         item: {
           name: node.item.name,
+          symbolId: node.item.symbol?.id ?? null,
           type: node.item.inferredType,
           location: cloneLocation(node.item.location)
         },
@@ -202,6 +213,7 @@ export class IRBuilder {
       return new IRInstruction('forRange', {
         item: {
           name: node.item.name,
+          symbolId: node.item.symbol?.id ?? null,
           type: node.item.inferredType,
           location: cloneLocation(node.item.location)
         },
@@ -227,6 +239,7 @@ export class IRBuilder {
         tryBlock: this.lowerBlock(node.tryBlock, 'try.body'),
         catchParam: {
           name: node.catchParam.name,
+          symbolId: node.catchParam.symbol?.id ?? null,
           type: node.catchParam.inferredType,
           location: cloneLocation(node.catchParam.location)
         },
@@ -258,7 +271,11 @@ export class IRBuilder {
     }
     if (node.kind === 'IdentifierExpression') {
       return new IRValue('reference', type, {
-        name: node.name
+        name: node.name,
+        symbolId: node.resolvedSymbol?.id ?? null,
+        symbolKind: node.resolvedSymbol?.kind ?? null,
+        builtinName: node.resolvedSymbol?.builtin?.name ?? null,
+        builtinModule: node.resolvedSymbol?.builtin?.module ?? null
       }, location)
     }
     if (node.kind === 'CallExpression') {
@@ -272,6 +289,7 @@ export class IRBuilder {
         object: this.lowerExpression(node.object),
         property: node.computed ? this.lowerExpression(node.property) : null,
         field: node.computed ? null : node.property.name,
+        fieldSymbolId: node.computed ? null : node.property.resolvedSymbol?.id ?? null,
         computed: node.computed
       }, location)
     }
@@ -310,8 +328,10 @@ export class IRBuilder {
     if (node.kind === 'StructExpression') {
       return new IRValue('struct', type, {
         name: node.name,
+        symbolId: node.resolvedSymbol?.id ?? null,
         fields: node.fields.map(field => ({
           key: field.key,
+          symbolId: field.resolvedSymbol?.id ?? null,
           value: this.lowerExpression(field.value),
           location: cloneLocation(field.location)
         }))
@@ -336,6 +356,7 @@ export class IRBuilder {
       return new IRValue('arrow', type, {
         params: node.params.map(param => ({
           name: param.name,
+          symbolId: param.symbol?.id ?? null,
           type: param.inferredType ?? LumenTypes.Unknown,
           location: cloneLocation(param.location)
         })),

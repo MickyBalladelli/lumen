@@ -48,3 +48,17 @@ test('bootstrap pipeline shares the linked module AST', async () => {
   assert.match(typechecker, /function checkTypes\(ast: AstProgram\)/)
   assert.match(ir, /function buildIr\(ast: AstProgram\)/)
 })
+
+test('bootstrap semantics stores lexical symbol identities on AST nodes', async () => {
+  const [containers, semantics] = await Promise.all([
+    readFile('compiler/containers.lm', 'utf8'),
+    readFile('compiler/semantics.lm', 'utf8')
+  ])
+
+  assert.match(containers, /symbolId: i32/)
+  assert.match(semantics, /symbols: SymbolArena/)
+  assert.match(semantics, /scopeStorage: string/)
+  assert.match(semantics, /declarationId: declarationId/)
+  assert.match(semantics, /semanticResolveName\(resolver, scopeId, node\.name\)/)
+  assert.match(semantics, /semanticFieldKey\(ownerId, fieldName\)/)
+})
