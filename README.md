@@ -39,8 +39,18 @@ Compile and run it:
 lumen run hello.lm
 ```
 
-The installation also provides `lmsh`, `photon`, `lumen-format`, and
-`lumen-lsp`.
+The installation also provides:
+
+- **`lmsh`** — Interpreter-like script runner. Executes Lumen files directly,
+  similar to `python` or `node`.
+- **`photon`** — Package manager. Installs external packages from local paths
+  or Git URLs into `.photon/packages/`. Commands include `init`, `add`,
+  `install`, `search`, and `list`.
+- **`lumen-format`** — Source code formatter for `.lm` files. Use `--check`
+  for CI validation (exits non-zero if any file would change).
+- **`lumen-lsp`** — Language server implementing the Language Server Protocol.
+  Provides diagnostics, formatting, go-to-definition, references, hover,
+  completion, rename, symbols, and semantic tokens for editor integration.
 
 ## Current Shape
 
