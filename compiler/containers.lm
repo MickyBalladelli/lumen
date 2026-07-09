@@ -64,6 +64,13 @@ struct CompilerIrBlock {
   target1: i32
 }
 
+struct CompilerIrFunction {
+  name: string
+  firstBlock: i32
+  blockCount: i32
+  returnTypeId: i32
+}
+
 struct CompilerDiagnostic {
   severity: string
   message: string
@@ -99,6 +106,11 @@ struct IrBlockArena {
   count: i32
 }
 
+struct IrFunctionArena {
+  storage: string
+  count: i32
+}
+
 struct DiagnosticArena {
   storage: string
   count: i32
@@ -118,6 +130,7 @@ struct CompilerContainers {
   symbols: SymbolArena
   values: IrValueArena
   blocks: IrBlockArena
+  functions: IrFunctionArena
   diagnostics: DiagnosticArena
 }
 
@@ -352,6 +365,32 @@ function irBlockArenaGet(arena: IrBlockArena, index: i32): CompilerIrBlock {
   }
 }
 
+function irFunctionArena(): IrFunctionArena {
+  return IrFunctionArena {
+    storage: arenaNew(),
+    count: 0
+  }
+}
+
+function irFunctionArenaPush(arena: IrFunctionArena, fn: CompilerIrFunction): IrFunctionArena {
+  let index = arenaAppend(arena.storage)
+  arenaSetString(arena.storage, index, 0, fn.name)
+  arenaSetI32(arena.storage, index, 1, fn.firstBlock)
+  arenaSetI32(arena.storage, index, 2, fn.blockCount)
+  arenaSetI32(arena.storage, index, 3, fn.returnTypeId)
+  arena.count = arenaLen(arena.storage)
+  return arena
+}
+
+function irFunctionArenaGet(arena: IrFunctionArena, index: i32): CompilerIrFunction {
+  return CompilerIrFunction {
+    name: arenaGetString(arena.storage, index, 0),
+    firstBlock: arenaGetI32(arena.storage, index, 1),
+    blockCount: arenaGetI32(arena.storage, index, 2),
+    returnTypeId: arenaGetI32(arena.storage, index, 3)
+  }
+}
+
 function diagnosticArena(): DiagnosticArena {
   return DiagnosticArena {
     storage: arenaNew(),
@@ -392,6 +431,7 @@ function compilerContainers(): CompilerContainers {
     symbols: symbolArena(),
     values: irValueArena(),
     blocks: irBlockArena(),
+    functions: irFunctionArena(),
     diagnostics: diagnosticArena()
   }
 }

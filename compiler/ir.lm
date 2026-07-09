@@ -1,4 +1,5 @@
-import { AstProgram } from "./ast.lm"
+import { AstProgram, astChildAt, astNodeAt } from "./ast.lm"
+import { CompilerIrBlock, CompilerIrFunction, CompilerIrValue, IrBlockArena, IrFunctionArena, IrValueArena, irBlockArena, irBlockArenaGet, irBlockArenaPush, irFunctionArena, irFunctionArenaGet, irFunctionArenaPush, irValueArena, irValueArenaPush } from "./containers.lm"
 import { astToProgram } from "./parser.lm"
 
 struct IrStatement {
@@ -45,10 +46,19 @@ struct IrFunction {
   returnRightValue: string
 }
 
+// This is the target IR shape for the self-host compiler. The old summary
+// remains only while the LLVM backend moves to typed IR.
+struct TypedIrModule {
+  values: IrValueArena
+  blocks: IrBlockArena
+  functions: IrFunctionArena
+}
+
 struct IrModule {
   kind: string
   mode: string
   program: string
+  typed: TypedIrModule
   functionCount: i32
   statementCount: i32
   instructionCount: i32
@@ -68,6 +78,111 @@ struct IrModule {
   statement3Kind: string
   statement3ExpressionKind: string
   statement3ExpressionValue: string
+}
+
+function typedIrModule(): TypedIrModule {
+  return TypedIrModule {
+    values: irValueArena(),
+    blocks: irBlockArena(),
+    functions: irFunctionArena()
+  }
+}
+
+function typedIrValue(nodeKind: string, typeId: i32, parent: i32, text: string): CompilerIrValue {
+  return CompilerIrValue {
+    kind: nodeKind,
+    typeId: typeId,
+    operand0: parent,
+    operand1: -1,
+    text: text
+  }
+}
+
+function typedIrAppendNode(module: TypedIrModule, ast: AstProgram, nodeId: i32): TypedIrModule {
+  let node = astNodeAt(ast, nodeId)
+  module.values = irValueArenaPush(
+    module.values,
+    typedIrValue(node.kind, node.typeId, node.parent, node.text)
+  )
+
+  let childIndex: i32 = 0
+  while childIndex < node.childCount do {
+    module = typedIrAppendNode(module, ast, astChildAt(ast, nodeId, childIndex))
+    childIndex = childIndex + 1
+  }
+  return module
+}
+
+// Function ownership is explicit. The LLVM emitter can lower one function
+// without recovering it from a delimiter-sensitive program string.
+function buildTypedIr(ast: AstProgram): TypedIrModule {
+  let module = typedIrModule()
+  let root = astNodeAt(ast, ast.root)
+  let childIndex: i32 = 0
+
+  while childIndex < root.childCount do {
+    let nodeId = astChildAt(ast, ast.root, childIndex)
+    let node = astNodeAt(ast, nodeId)
+    if stringEquals(node.kind, "FunctionDeclaration") {
+      let firstValue = module.values.count
+      module = typedIrAppendNode(module, ast, nodeId)
+      let blockId = module.blocks.count
+      module.blocks = irBlockArenaPush(module.blocks, CompilerIrBlock {
+        name: node.name + ".entry",
+        firstValue: firstValue,
+        valueCount: module.values.count - firstValue,
+        terminator: "fallthrough",
+        target0: -1,
+        target1: -1
+      })
+      module.functions = irFunctionArenaPush(module.functions, CompilerIrFunction {
+        name: node.name,
+        firstBlock: blockId,
+        blockCount: 1,
+        returnTypeId: node.typeId
+      })
+    }
+    childIndex = childIndex + 1
+  }
+  return module
+}
+
+function typedIrValid(module: TypedIrModule): bool {
+  let functionIndex: i32 = 0
+  let previousBlockEnd: i32 = 0
+
+  while functionIndex < module.functions.count do {
+    let fn = irFunctionArenaGet(module.functions, functionIndex)
+    if stringEquals(fn.name, "") || fn.blockCount < 1 {
+      return false
+    }
+    if fn.firstBlock != previousBlockEnd {
+      return false
+    }
+    if fn.firstBlock + fn.blockCount > module.blocks.count {
+      return false
+    }
+
+    let blockIndex = fn.firstBlock
+    while blockIndex < fn.firstBlock + fn.blockCount do {
+      let block = irBlockArenaGet(module.blocks, blockIndex)
+      if stringEquals(block.name, "") || stringEquals(block.terminator, "") {
+        return false
+      }
+      if block.firstValue < 0 || block.valueCount < 0 {
+        return false
+      }
+      if block.firstValue + block.valueCount > module.values.count {
+        return false
+      }
+      blockIndex = blockIndex + 1
+    }
+
+    previousBlockEnd = fn.firstBlock + fn.blockCount
+    functionIndex = functionIndex + 1
+  }
+
+  return previousBlockEnd == module.blocks.count
 }
 
 function irStatement(kind: string): IrStatement {
@@ -128,6 +243,7 @@ function irModule(): IrModule {
     kind: "IRModule",
     mode: "",
     program: "",
+    typed: typedIrModule(),
     functionCount: 0,
     statementCount: 0,
     instructionCount: 0,
@@ -273,6 +389,7 @@ function buildIr(ast: AstProgram): IrModule {
 
   module.mode = mapGet(program, "mode")
   module.program = program
+  module.typed = buildTypedIr(ast)
   module.functionCount = functionCount
   module.statementCount = statementCount
   module.returnKind = mapGet(program, "mainReturnKind")

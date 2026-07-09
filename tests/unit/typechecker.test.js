@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict'
+import { mkdtemp, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import test from 'node:test'
 import { Compiler } from '../../src/compiler/Compiler.js'
 import { LumenTypes, TypeSystem } from '../../src/semantics/TypeSystem.js'
@@ -83,6 +86,30 @@ test('failed compilation does not poison later compilations', () => {
     ].join('\n')),
     /Unknown type "FailedType"/
   )
+})
+
+test('type checker accepts linked imported struct types after module loading', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'lumen-imported-type-'))
+  const sharedPath = join(root, 'shared.lm')
+  const mainPath = join(root, 'main.lm')
+
+  await writeFile(sharedPath, [
+    'struct Shared {',
+    '  value: i32',
+    '}',
+    'function makeShared(): Shared {',
+    '  return Shared { value: 7 }',
+    '}'
+  ].join('\n'))
+  await writeFile(mainPath, [
+    'import { Shared, makeShared } from "./shared.lm"',
+    'function main(): i32 {',
+    '  let shared: Shared = makeShared()',
+    '  return 0',
+    '}'
+  ].join('\n'))
+
+  await assert.doesNotReject(() => new Compiler().compileFile(mainPath))
 })
 
 test('conditions must be boolean', () => {

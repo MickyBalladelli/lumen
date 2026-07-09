@@ -1,6 +1,9 @@
-import { IrModule, IrStatement, IrFunction, irStatementFromProgram, irFunctionFromProgram } from "./ir.lm"
+import { IrModule, IrStatement, IrFunction, irStatementFromProgram, irFunctionFromProgram, typedIrValid } from "./ir.lm"
 
 function emitIr(ir: IrModule): string {
+  if !typedIrValid(ir.typed) {
+    return "; invalid typed IR\n"
+  }
   if stringEquals(ir.mode, "compiler-main") {
     return emitCompilerMainIr(ir)
   }

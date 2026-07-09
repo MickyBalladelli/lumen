@@ -93,6 +93,27 @@ copy embedded stage-1 LLVM instead of compiling the Lumen source.
 
 ## P3 - Replace the compatibility IR and emitter
 
+### Next typed-IR slice
+
+- [ ] Lower each `TypedIrModule` function body into typed instructions and
+  terminators. The new function, block, and value arenas exist; do not add new
+  fields to `IrModule` or the program string map.
+
+- [ ] Make the LLVM emitter accept `TypedIrModule` for one function at a time,
+  starting with locals, calls, returns, and integer/string literals.
+
+- [ ] Add typed-IR verifier tests for block ownership, value ranges, and a
+  terminator on every reachable block.
+
+- [ ] Fix the primary module loader's duplicate relative-import identity. A
+  runtime test importing `parser.lm` and `ir.lm` currently reports duplicate
+  private `AstProgram`/`TokenArena` types instead of reusing one module.
+
+- [ ] Pre-register every linked declaration before resolving any imported
+  field or return types. The type checker still needs a declaration-first pass
+  so module-linked names like `__lumen.module.*.TokenArena` stop looking
+  unknown.
+
 - [ ] Replace `IrModule` summaries with a complete typed IR.
   Model arbitrary functions, parameters, structs, basic blocks, instructions,
   values, and terminators. Remove the program string map, `irToProgram`, fixed

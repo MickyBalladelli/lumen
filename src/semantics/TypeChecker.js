@@ -17,20 +17,21 @@ export class TypeChecker {
     this.diagnostics = diagnostics
     this.nextSyntheticSymbolId = 1
     const scope = new Scope()
+    const structs = []
+    const enums = []
 
     for (const node of program.body) {
       if (node.kind === 'StructDeclaration') {
         const symbol = this.symbolFor(node, {
           kind: 'struct'
         })
-        this.attempt(() => this.registerStruct(node))
         scope.define(node.name.name, symbol)
+        structs.push(node)
       }
       if (node.kind === 'EnumDeclaration') {
         const symbol = this.symbolFor(node, {
           kind: 'enum'
         })
-        this.attempt(() => this.registerEnum(node))
         scope.define(node.name.name, symbol)
         for (const variant of node.variants) {
           scope.define(variant.name, this.symbolFor(variant, {
@@ -40,6 +41,7 @@ export class TypeChecker {
             owner: node.symbol
           }))
         }
+        enums.push(node)
       }
       if (node.kind === 'FunctionDeclaration') {
         const returnType = node.returnType?.name ?? LumenTypes.I32
@@ -67,6 +69,19 @@ export class TypeChecker {
           }))
         }
       }
+    }
+
+    for (const node of structs) {
+      this.typeSystem.registerStruct(node.name.name, [], node, node.symbol)
+    }
+    for (const node of enums) {
+      this.typeSystem.registerEnum(node.name.name, [], node, node.symbol)
+    }
+    for (const node of structs) {
+      this.attempt(() => this.registerStruct(node))
+    }
+    for (const node of enums) {
+      this.attempt(() => this.registerEnum(node))
     }
 
     for (const node of program.body) {
