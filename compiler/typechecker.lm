@@ -1192,10 +1192,26 @@ function checkTypes(ast: AstProgram): TypeResult {
     let current = typeTokenValue(declarationToken)
     let isKeyword = stringEquals(typeTokenKind(declarationToken), "keyword")
     if isKeyword && stringEquals(current, "struct") {
-      variables = registerStructType(tokens, index, variables)
+      let name = typeTokenValue(tokenArenaGet(tokens, index + 1))
+      variables = mapSet(variables, structTypeKey(name), "declared")
+    }
+    if isKeyword && stringEquals(current, "enum") {
+      let name = typeTokenValue(tokenArenaGet(tokens, index + 1))
+      variables = mapSet(variables, structTypeKey(name), "declared")
     }
     if isKeyword && stringEquals(current, "function") {
       functions = registerFunctionType(tokens, index, functions)
+    }
+    index = index + 1
+  }
+
+  index = 0
+  while index < tokens.count do {
+    let token = tokenArenaGet(tokens, index)
+    let current = typeTokenValue(token)
+    let isKeyword = stringEquals(typeTokenKind(token), "keyword")
+    if isKeyword && stringEquals(current, "struct") {
+      variables = registerStructType(tokens, index, variables)
     }
     index = index + 1
   }

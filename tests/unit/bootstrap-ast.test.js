@@ -62,3 +62,10 @@ test('bootstrap semantics stores lexical symbol identities on AST nodes', async 
   assert.match(semantics, /semanticResolveName\(resolver, scopeId, node\.name\)/)
   assert.match(semantics, /semanticFieldKey\(ownerId, fieldName\)/)
 })
+
+test('bootstrap typechecker pre-registers linked struct names before field types', async () => {
+  const source = await readFile('compiler/typechecker.lm', 'utf8')
+
+  assert.match(source, /if isKeyword && stringEquals\(current, "struct"\) \{\n\s+let name = typeTokenValue\(tokenArenaGet\(tokens, index \+ 1\)\)\n\s+variables = mapSet\(variables, structTypeKey\(name\), "declared"\)/)
+  assert.match(source, /if isKeyword && stringEquals\(current, "enum"\) \{\n\s+let name = typeTokenValue\(tokenArenaGet\(tokens, index \+ 1\)\)\n\s+variables = mapSet\(variables, structTypeKey\(name\), "declared"\)/)
+})

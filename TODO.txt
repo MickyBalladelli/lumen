@@ -78,10 +78,19 @@ copy embedded stage-1 LLVM instead of compiling the Lumen source.
   index access, slices, assignment, unary and binary operators, and return
   values. Validate every argument, not only the first one.
 
-- [ ] Port control-flow semantic checks.
-  Check boolean conditions, definite return, use before initialization,
-  break/continue scope, unreachable paths, and consistent assignment across
-  branches and loops.
+- [ ] Finish bootstrap control-flow semantics.
+  The bootstrap compiler still mostly checks loop and switch nesting plus
+  break/continue placement. It still needs boolean conditions, definite return,
+  use before initialization, unreachable-path tracking, and consistent
+  assignment across branches and loops.
+
+- [ ] Remove the remaining bootstrap shortcut markers from compiler source.
+  The real-bootstrap guard still sees `compilerImage`, the `compiler-main`
+  filename switch, and the embedded compiler image paths in `compiler/*.lm`.
+
+- [ ] Make the bootstrap source coverage gate ready.
+  The coverage report is still red because the compiler source uses shortcut
+  paths and fixture-shaped helper paths instead of the generic self-host ones.
 
 - [ ] Give builtins and externs one typed ABI registry.
   Make the Lumen compiler resolve and type-check runtime functions from the
@@ -109,10 +118,9 @@ copy embedded stage-1 LLVM instead of compiling the Lumen source.
   runtime test importing `parser.lm` and `ir.lm` currently reports duplicate
   private `AstProgram`/`TokenArena` types instead of reusing one module.
 
-- [ ] Pre-register every linked declaration before resolving any imported
-  field or return types. The type checker still needs a declaration-first pass
-  so module-linked names like `__lumen.module.*.TokenArena` stop looking
-  unknown.
+- [x] Pre-register every linked declaration before resolving any imported
+  field or return types. The type checker now does a declaration-first pass so
+  module-linked names like `__lumen.module.*.TokenArena` stop looking unknown.
 
 - [ ] Replace `IrModule` summaries with a complete typed IR.
   Model arbitrary functions, parameters, structs, basic blocks, instructions,
