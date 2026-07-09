@@ -544,6 +544,10 @@ function expressionCallArg(tokens: TokenArena, index: i32, offset: i32): string 
 
 function expressionCallArgCount(tokens: TokenArena, index: i32): string {
   if stringEquals(tokenValue(tokenArenaGet(tokens, index + 1)), "(") {
+    if stringEquals(tokenValue(tokenArenaGet(tokens, index + 2)), ")") {
+      return "0"
+    }
+
     if stringEquals(tokenValue(tokenArenaGet(tokens, index + 3)), ")") {
       return "1"
     }

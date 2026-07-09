@@ -739,6 +739,7 @@ function emitFunctionDefinitions(out: string, program: string): string {
     let param0 = mapGet(program, prefix + "Param0")
     let param1 = mapGet(program, prefix + "Param1")
     let paramCount = mapGet(program, prefix + "ParamCount")
+    let returnKind = mapGet(program, prefix + "ReturnKind")
     let operator = mapGet(program, prefix + "ReturnValue")
     let left = mapGet(program, prefix + "ReturnLeftValue")
     let right = mapGet(program, prefix + "ReturnRightValue")
@@ -757,18 +758,24 @@ function emitFunctionDefinitions(out: string, program: string): string {
     out = stringBuilderAppend(out, ") {
 entry:
 ")
-    if stringEquals(operator, "*") {
-      out = stringBuilderAppend(out, "  %fn.ret = mul i32 ")
-    } else {
-      out = stringBuilderAppend(out, "  %fn.ret = add i32 ")
-    }
-    out = emitFunctionAtom(out, left, param0, param1)
-    out = stringBuilderAppend(out, ", ")
-    out = emitFunctionAtom(out, right, param0, param1)
-    out = stringBuilderAppend(out, "
+    if emitFunctionNumberAtom(left, param0, param1) && emitFunctionNumberAtom(right, param0, param1) {
+      if stringEquals(operator, "*") {
+        out = stringBuilderAppend(out, "  %fn.ret = mul i32 ")
+      } else {
+        out = stringBuilderAppend(out, "  %fn.ret = add i32 ")
+      }
+      out = emitFunctionAtom(out, left, param0, param1)
+      out = stringBuilderAppend(out, ", ")
+      out = emitFunctionAtom(out, right, param0, param1)
+      out = stringBuilderAppend(out, "
 ")
-    out = stringBuilderAppend(out, "  ret i32 %fn.ret
-}
+      out = stringBuilderAppend(out, "  ret i32 %fn.ret
+")
+    } else {
+      out = stringBuilderAppend(out, "  ret i32 0
+")
+    }
+    out = stringBuilderAppend(out, "}
 ")
 
     index = index + 1
@@ -786,6 +793,7 @@ function emitFunctionDefinitionsIr(out: string, ir: IrModule, program: string): 
     let param0 = fn.param0
     let param1 = fn.param1
     let paramCount = fn.paramCount
+    let returnKind = fn.returnKind
     let operator = fn.returnValue
     let left = fn.returnLeftValue
     let right = fn.returnRightValue
@@ -804,18 +812,24 @@ function emitFunctionDefinitionsIr(out: string, ir: IrModule, program: string): 
     out = stringBuilderAppend(out, ") {
 entry:
 ")
-    if stringEquals(operator, "*") {
-      out = stringBuilderAppend(out, "  %fn.ret = mul i32 ")
-    } else {
-      out = stringBuilderAppend(out, "  %fn.ret = add i32 ")
-    }
-    out = emitFunctionAtom(out, left, param0, param1)
-    out = stringBuilderAppend(out, ", ")
-    out = emitFunctionAtom(out, right, param0, param1)
-    out = stringBuilderAppend(out, "
+    if emitFunctionNumberAtom(left, param0, param1) && emitFunctionNumberAtom(right, param0, param1) {
+      if stringEquals(operator, "*") {
+        out = stringBuilderAppend(out, "  %fn.ret = mul i32 ")
+      } else {
+        out = stringBuilderAppend(out, "  %fn.ret = add i32 ")
+      }
+      out = emitFunctionAtom(out, left, param0, param1)
+      out = stringBuilderAppend(out, ", ")
+      out = emitFunctionAtom(out, right, param0, param1)
+      out = stringBuilderAppend(out, "
 ")
-    out = stringBuilderAppend(out, "  ret i32 %fn.ret
-}
+      out = stringBuilderAppend(out, "  ret i32 %fn.ret
+")
+    } else {
+      out = stringBuilderAppend(out, "  ret i32 0
+")
+    }
+    out = stringBuilderAppend(out, "}
 ")
 
     index = index + 1
@@ -839,6 +853,18 @@ function emitFunctionAtom(out: string, value: string, param0: string, param1: st
 
   out = stringBuilderAppend(out, value)
   return out
+}
+
+function emitFunctionNumberAtom(value: string, param0: string, param1: string): bool {
+  if !stringEquals(param0, "") && stringEquals(value, param0) {
+    return true
+  }
+
+  if !stringEquals(param1, "") && stringEquals(value, param1) {
+    return true
+  }
+
+  return stringEquals(value, intToString(stringToInt(value)))
 }
 
 function emitCallStatements(out: string, program: string, symbols: string): string {
@@ -901,8 +927,11 @@ function emitCallIr(out: string, slot: string, symbols: string, statement: IrSta
   out = stringBuilderAppend(out, callValueName(slot))
   out = stringBuilderAppend(out, " = call i32 @")
   out = stringBuilderAppend(out, name)
-  out = stringBuilderAppend(out, "(i32 ")
-  out = stringBuilderAppend(out, arg0)
+  out = stringBuilderAppend(out, "(")
+  if !stringEquals(argCount, "0") {
+    out = stringBuilderAppend(out, "i32 ")
+    out = stringBuilderAppend(out, arg0)
+  }
   if stringEquals(argCount, "2") {
     out = stringBuilderAppend(out, ", i32 ")
     out = stringBuilderAppend(out, arg1)
@@ -923,8 +952,11 @@ function emitCall(out: string, slot: string, program: string, symbols: string, p
   out = stringBuilderAppend(out, callValueName(slot))
   out = stringBuilderAppend(out, " = call i32 @")
   out = stringBuilderAppend(out, name)
-  out = stringBuilderAppend(out, "(i32 ")
-  out = stringBuilderAppend(out, arg0)
+  out = stringBuilderAppend(out, "(")
+  if !stringEquals(argCount, "0") {
+    out = stringBuilderAppend(out, "i32 ")
+    out = stringBuilderAppend(out, arg0)
+  }
   if stringEquals(argCount, "2") {
     out = stringBuilderAppend(out, ", i32 ")
     out = stringBuilderAppend(out, arg1)
