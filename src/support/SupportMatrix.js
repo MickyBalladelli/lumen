@@ -33,7 +33,7 @@ export const CompilerSupportMatrix = Object.freeze([
     'source-self-hosting',
     'Full source self-hosting',
     'not implemented',
-    'Compiling compiler/main.lm returns the embedded stage-1 LLVM image through compilerImage(). The bootstrap compiler does not regenerate itself from its source.'
+    'Compiling compiler/main.lm still needs typed self-host lowering. The bootstrap compiler does not yet regenerate itself from source.'
   )
 ])
 

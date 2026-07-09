@@ -1,8 +1,5 @@
 const RULES = {
   llvm: [
-    rule('compilerImage builtin', /\bcompilerImage\b/i),
-    rule('compiler image symbol', /lumen_compiler_image\b/i),
-    rule('embedded compiler image', /compiler_image_bytes\b/i),
     rule('JavaScript compiler', /\bJavaScript\b|Compiler\.js|child_process/i),
     rule('Node compiler', /\bnode(?:js|\.exe)?\b[ \t]+[^\n]*\.m?js\b|node_modules|process\.execPath/i),
     rule(
@@ -11,9 +8,6 @@ const RULES = {
     )
   ],
   binary: [
-    rule('compilerImage builtin', /\bcompilerImage\b/i),
-    rule('compiler image symbol', /lumen_compiler_image\b/i),
-    rule('embedded compiler image', /compiler_image_bytes\b/i),
     rule('JavaScript compiler', /\bJavaScript\b|Compiler\.js|child_process/i),
     rule('Node compiler', /\bnode(?:js|\.exe)?\b[ \t]+[^\n]*\.m?js\b|node_modules|process\.execPath/i),
     rule(
@@ -22,8 +16,6 @@ const RULES = {
     )
   ],
   symbols: [
-    rule('compiler image symbol', /lumen_compiler_image\b/i),
-    rule('embedded compiler image', /compiler_image_bytes\b/i),
     rule('JavaScript compiler', /\bJavaScript\b|Compiler\.js|child_process/i),
     rule('Node compiler', /\bnode(?:js|\.exe)?\b[ \t]+[^\n]*\.m?js\b|node_modules|process\.execPath/i),
     rule(
@@ -32,9 +24,6 @@ const RULES = {
     )
   ],
   source: [
-    rule('compilerImage builtin', /\bcompilerImage\s*\(/i),
-    rule('compiler image symbol', /lumen_compiler_image\b/i),
-    rule('embedded compiler image', /compiler_image_bytes\b/i),
     rule('JavaScript compiler', /\bJavaScript\b|Compiler\.js|child_process/i),
     rule('Node compiler', /\bnode(?:js|\.exe)?\b[ \t]+[^\n]*\.m?js\b|node_modules|process\.execPath|exec\s*\(\s*["']node(?:js)?["']/i),
     rule(

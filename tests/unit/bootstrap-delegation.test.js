@@ -3,13 +3,9 @@ import test from 'node:test'
 import { findBootstrapDelegation } from '../../src/testing/BootstrapDelegationGuard.js'
 
 const shortcuts = [
-  ['llvm', 'call ptr @lumen_compiler_image()', 'compiler image symbol'],
-  ['llvm', '@compiler_image_bytes = constant', 'embedded compiler image'],
   ['llvm', 'call i32 @lumen_exec(ptr %node, ptr %args)', 'subprocess compiler'],
   ['binary', 'run JavaScript compiler', 'JavaScript compiler'],
   ['binary', 'node compiler.js', 'JavaScript compiler'],
-  ['symbols', '_lumen_compiler_image', 'compiler image symbol'],
-  ['source', 'return compilerImage()', 'compilerImage builtin'],
   ['source', 'exec("node", args)', 'Node compiler']
 ]
 

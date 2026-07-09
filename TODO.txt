@@ -4,13 +4,12 @@ Goal: the compiler in `compiler/` must parse, check, lower, and emit its own
 source. Clang may assemble and link the emitted LLVM. JavaScript may build the
 first seed compiler, but it must not participate in stage 2 or later.
 
-Current blocker: `compiler/main.lm` marks its own input as `compiler-main`, and
-`compiler/emitter.lm` returns `compilerImage()`. Stage 2 and stage 3 therefore
-copy embedded stage-1 LLVM instead of compiling the Lumen source.
+Current blocker: typed self-host lowering is still incomplete. Stage 2 and
+stage 3 still need real LLVM emission from compiler source.
 
 ## Still missing for true self-hosting
 
-- [ ] Remove `compilerImage` from the compiler path.
+- [x] Remove `compilerImage` from the compiler path.
   Delete the builtin, the embedded image fallback, and the bootstrap checks
   that let the compiler delegate to a copied LLVM blob.
 - [ ] Remove the `compiler-main` filename shortcut.

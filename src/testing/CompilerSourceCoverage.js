@@ -63,7 +63,7 @@ const SUPPORT = {
   ),
   builtins: support(
     ['println'],
-    ['compilerImage']
+    []
   ),
   operators: support(
     [],
