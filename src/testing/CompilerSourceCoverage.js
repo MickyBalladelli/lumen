@@ -4,25 +4,23 @@ import { builtinSignature } from '../runtime/BuiltinRegistry.js'
 const SUPPORT = {
   syntaxNodes: support(
     [
-      'BlockStatement',
-      'IdentifierExpression',
-      'LiteralExpression',
-      'Program',
-      'ReturnStatement'
-    ],
-    [
       'AssignmentExpression',
       'BinaryExpression',
+      'BlockStatement',
       'BreakStatement',
       'CallExpression',
       'ContinueStatement',
       'ExpressionStatement',
       'FunctionDeclaration',
       'Identifier',
+      'IdentifierExpression',
       'IfStatement',
       'ImportDeclaration',
+      'LiteralExpression',
       'MemberExpression',
+      'Program',
       'RawExpression',
+      'ReturnStatement',
       'SliceExpression',
       'StructDeclaration',
       'StructExpression',
@@ -33,14 +31,14 @@ const SUPPORT = {
       'VariableDeclaration',
       'VariableDeclarator',
       'WhileStatement'
-    ]
+    ],
+    []
   ),
   typeFamilies: support(
-    ['bool', 'i32', 'string', 'void'],
-    ['Result<T>', 'struct']
+    ['bool', 'i32', 'json', 'Result<T>', 'string', 'struct', 'unknown', 'void'],
+    []
   ),
   irOperations: support(
-    [],
     [
       'instruction:declare',
       'instruction:evaluate',
@@ -59,19 +57,27 @@ const SUPPORT = {
       'value:slice',
       'value:struct',
       'value:unary'
-    ]
+    ],
+    []
   ),
   builtins: support(
-    ['println'],
+    [
+      'arenaAppend', 'arenaGetI32', 'arenaGetString', 'arenaLen', 'arenaNew',
+      'arenaSetI32', 'arenaSetString', 'arg', 'argCount', 'errorMessage',
+      'includes', 'intToString', 'isOk', 'json', 'jsonGet', 'jsonGetRaw',
+      'list', 'listGet', 'listLen', 'listPush', 'map', 'mapGet', 'mapHas',
+      'mapSet', 'println', 'readFile', 'resultValue', 'stringBuilder',
+      'stringBuilderAppend', 'stringEquals', 'stringLen', 'stringToInt', 'writeFile'
+    ],
     []
   ),
   operators: support(
-    [],
-    ['!', '+', '-', '<', '<=', '=', '==', '>', '>=', '||']
+    ['!', '!=', '&&', '+', '-', '<', '<=', '=', '==', '>', '>=', '||'],
+    []
   ),
   moduleFeatures: support(
-    ['multi-module', 'named-imports', 'relative-imports', 'transitive-imports'],
-    ['shared-dependency']
+    ['multi-module', 'named-imports', 'relative-imports', 'shared-dependency', 'transitive-imports'],
+    []
   )
 }
 

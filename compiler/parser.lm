@@ -938,14 +938,21 @@ function setFunction(program: string, index: i32, tokens: TokenArena, functionIn
   let bodyStart = findNext(tokens, functionIndex, "{")
   let returnIndex = findNext(tokens, bodyStart, "return")
   let closeParams = findNext(tokens, functionIndex, ")")
-  let paramCount = "1"
+  let paramCount = "0"
 
-  if stringEquals(tokenValue(tokenArenaGet(tokens, functionIndex + 6)), ",") {
-    paramCount = "2"
+  if functionIndex + 3 < closeParams {
+    paramCount = "1"
+    if stringEquals(tokenValue(tokenArenaGet(tokens, functionIndex + 6)), ",") {
+      paramCount = "2"
+    }
   }
 
   program = mapSet(program, prefix + "Name", name)
-  program = mapSet(program, prefix + "Param0", tokenValue(tokenArenaGet(tokens, functionIndex + 3)))
+  if stringEquals(paramCount, "0") {
+    program = mapSet(program, prefix + "Param0", "")
+  } else {
+    program = mapSet(program, prefix + "Param0", tokenValue(tokenArenaGet(tokens, functionIndex + 3)))
+  }
   program = mapSet(program, prefix + "ParamCount", paramCount)
   if stringEquals(paramCount, "2") {
     program = mapSet(program, prefix + "Param1", tokenValue(tokenArenaGet(tokens, functionIndex + 7)))

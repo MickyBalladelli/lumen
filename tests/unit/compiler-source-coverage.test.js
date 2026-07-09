@@ -18,23 +18,14 @@ test('compiler source coverage inventories the complete self-host closure', asyn
   assert.ok(report.inventory.irOperations.includes('value:call'))
   assert.ok(!report.inventory.builtins.includes('compilerImage'))
   assert.ok(report.inventory.moduleFeatures.includes('shared-dependency'))
-  assert.equal(report.ready, false)
+  assert.equal(report.ready, true)
   assert.equal(report.fixturePaths.length, 0)
   assert.doesNotMatch(formatCompilerSourceCoverage(report), /fixture-specific paths:/)
 })
 
-test('compiler source coverage reports unsupported and fixture features', async () => {
+test('compiler source coverage has no unsupported or fixture features', async () => {
   const compilation = await new Compiler().compileFile('compiler/main.lm')
   const report = analyzeCompilerSourceCoverage(compilation)
 
-  assert.ok(report.gaps.some(gap => {
-    return gap.category === 'irOperations' &&
-      gap.name === 'value:call' &&
-      gap.status === 'fixture'
-  }))
-  assert.ok(report.gaps.some(gap => {
-    return gap.category === 'builtins' &&
-      gap.name === 'arenaAppend' &&
-      gap.status === 'unsupported'
-  }))
+  assert.deepEqual(report.gaps, [])
 })

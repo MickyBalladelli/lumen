@@ -745,8 +745,11 @@ function emitFunctionDefinitions(out: string, program: string): string {
 
     out = stringBuilderAppend(out, "define i32 @")
     out = stringBuilderAppend(out, name)
-    out = stringBuilderAppend(out, "(i32 %")
-    out = stringBuilderAppend(out, param0)
+    out = stringBuilderAppend(out, "(")
+    if !stringEquals(paramCount, "0") {
+      out = stringBuilderAppend(out, "i32 %")
+      out = stringBuilderAppend(out, param0)
+    }
     if stringEquals(paramCount, "2") {
       out = stringBuilderAppend(out, ", i32 %")
       out = stringBuilderAppend(out, param1)
@@ -789,8 +792,11 @@ function emitFunctionDefinitionsIr(out: string, ir: IrModule, program: string): 
 
     out = stringBuilderAppend(out, "define i32 @")
     out = stringBuilderAppend(out, name)
-    out = stringBuilderAppend(out, "(i32 %")
-    out = stringBuilderAppend(out, param0)
+    out = stringBuilderAppend(out, "(")
+    if !stringEquals(paramCount, "0") {
+      out = stringBuilderAppend(out, "i32 %")
+      out = stringBuilderAppend(out, param0)
+    }
     if stringEquals(paramCount, "2") {
       out = stringBuilderAppend(out, ", i32 %")
       out = stringBuilderAppend(out, param1)
