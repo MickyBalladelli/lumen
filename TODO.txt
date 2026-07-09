@@ -11,6 +11,8 @@ copy embedded stage-1 LLVM instead of compiling the Lumen source.
 ## Still missing for true self-hosting
 
 - [ ] Remove `compilerImage` from the compiler path.
+  Delete the builtin, the embedded image fallback, and the bootstrap checks
+  that let the compiler delegate to a copied LLVM blob.
 - [ ] Remove the `compiler-main` filename shortcut.
 - [ ] Make the bootstrap source coverage gate pass without fixture paths.
 - [ ] Finish typed IR lowering and typed LLVM emission.

@@ -16,7 +16,7 @@ test('compiler source coverage inventories the complete self-host closure', asyn
   assert.ok(report.inventory.syntaxNodes.includes('WhileStatement'))
   assert.ok(report.inventory.typeNames.includes('Result<string>'))
   assert.ok(report.inventory.irOperations.includes('value:call'))
-  assert.ok(report.inventory.builtins.includes('compilerImage'))
+  assert.ok(!report.inventory.builtins.includes('compilerImage'))
   assert.ok(report.inventory.moduleFeatures.includes('shared-dependency'))
   assert.equal(report.ready, false)
   assert.equal(report.fixturePaths.length, 0)

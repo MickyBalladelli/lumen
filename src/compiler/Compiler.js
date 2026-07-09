@@ -182,15 +182,6 @@ export class Compiler {
     try {
       await this.run(clang, [...flags, '-c', llvmPath, '-o', objectPath])
 
-      if (/@lumen_compiler_image\(\)/.test(llvm)) {
-        const imageSourcePath = `${temporaryPrefix}.compiler-image.c`
-        const imageObjectPath = `${temporaryPrefix}.compiler-image.o`
-        generated.push(imageSourcePath, imageObjectPath)
-        await writeFile(imageSourcePath, createCompilerImageSource(llvm))
-        await this.run(clang, [...flags, '-c', imageSourcePath, '-o', imageObjectPath])
-        sources.push(imageObjectPath)
-      }
-
       sources.push(...runtimeSourcesForLLVM(llvm))
       await this.run(clang, [...flags, ...sources, '-pthread', '-o', executablePath])
       await rename(executablePath, outputPath)
@@ -238,25 +229,4 @@ function uniqueDiagnostics(diagnostics) {
     seen.add(key)
     return true
   })
-}
-
-function createCompilerImageSource(llvm) {
-  const bytes = Buffer.from(llvm, 'utf8')
-  const rows = []
-
-  for (let index = 0; index < bytes.length; index += 32) {
-    rows.push(`  ${[...bytes.subarray(index, index + 32)].join(', ')},`)
-  }
-
-  return [
-    'static const unsigned char lumen_compiler_image_bytes[] = {',
-    ...rows,
-    '  0',
-    '};',
-    '',
-    'const char *lumen_compiler_image(void) {',
-    '  return (const char *)lumen_compiler_image_bytes;',
-    '}',
-    ''
-  ].join('\n')
 }

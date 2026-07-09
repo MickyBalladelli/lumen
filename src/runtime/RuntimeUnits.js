@@ -15,7 +15,6 @@ export const RuntimeUnits = Object.freeze([
     'lumen_assert',
     'lumen_bounds_check',
     'lumen_channel',
-    'lumen_compiler_image',
     'lumen_date',
     'lumen_env',
     'lumen_err',

@@ -311,10 +311,6 @@ void *lumen_exec(const char *command, const char **arguments, int argument_count
   return lumen_runtime_error("process", status, "process terminated abnormally");
 }
 
-__attribute__((weak)) const char *lumen_compiler_image(void) {
-  return "";
-}
-
 void lumen_assert(_Bool condition, const char *message) {
   if (condition) return;
   fprintf(stderr, "assert failed: %s\n", message);

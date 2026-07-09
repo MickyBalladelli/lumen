@@ -4,19 +4,8 @@ function emitIr(ir: IrModule): string {
   if !typedIrValid(ir.typed) {
     return "; invalid typed IR\n"
   }
-  if stringEquals(ir.mode, "compiler-main") {
-    return emitCompilerMainIr(ir)
-  }
 
   return emitStatementMainIr(ir, ir.program)
-}
-
-function emitMain(program: string): string {
-  if stringEquals(mapGet(program, "mode"), "compiler-main") {
-    return emitCompilerMain(program)
-  }
-
-  return emitStatementMain(program)
 }
 
 function statementPrefix(index: i32): string {
@@ -1631,14 +1620,6 @@ function emitIfStatementIr(out: string, slot: string, symbols: string, statement
 ")
 
   return out
-}
-
-function emitCompilerMain(program: string): string {
-  return compilerImage()
-}
-
-function emitCompilerMainIr(ir: IrModule): string {
-  return compilerImage()
 }
 
 function emitStringGlobal(out: string, slot: string, value: string): string {

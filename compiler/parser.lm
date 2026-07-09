@@ -2123,10 +2123,6 @@ function astToProgram(ast: AstProgram): string {
 
     if stringEquals(current, "function") {
       let name = tokenValue(tokenArenaGet(tokens, index + 1))
-      if stringEquals(name, "compileTiny") {
-        program = mapSet(program, "mode", "compiler-main")
-      }
-
       if stringEquals(name, "main") {
         let start = findNext(tokens, index, "{")
         index = start + 1

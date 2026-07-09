@@ -111,9 +111,6 @@ function compileTiny(input: string, output: string): i32 {
   }
 
   let ir = buildIr(ast)
-  if includes(input, "compiler/main.lm") {
-    ir.mode = "compiler-main"
-  }
   let llvm = emitIr(ir)
 
   let writeResult = writeFile(output, llvm)

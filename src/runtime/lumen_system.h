@@ -13,7 +13,6 @@ void *lumen_env(const char *name);
 void *lumen_arg(int index);
 void *lumen_arg_count(void);
 void *lumen_exec(const char *command, const char **arguments, int argument_count);
-const char *lumen_compiler_image(void);
 void lumen_assert(_Bool condition, const char *message);
 int lumen_bounds_check(int index, int length);
 void *lumen_channel(void);
