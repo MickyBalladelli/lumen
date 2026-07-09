@@ -1179,6 +1179,48 @@ function checkSwitchCases(
   return typeOk(1)
 }
 
+function checkIfCondition(
+  tokens: TokenArena,
+  index: i32,
+  variables: string,
+  functions: string
+): TypeResult {
+  let bodyStart = typeFindNext(tokens, index, "{")
+  let actual = inferTypeRange(tokens, index + 1, bodyStart - 1, variables, functions)
+  if !actual.ok {
+    return typeError(actual.message, 1, actual.tokenIndex)
+  }
+  if stringEquals(actual.typeName, "bool") || stringEquals(actual.typeName, "unknown") {
+    return typeOk(1)
+  }
+  return typeError(
+    "compile error: if condition must be bool, got " + actual.typeName,
+    1,
+    index
+  )
+}
+
+function checkWhileCondition(
+  tokens: TokenArena,
+  index: i32,
+  variables: string,
+  functions: string
+): TypeResult {
+  let bodyStart = typeFindNext(tokens, index, "{")
+  let actual = inferTypeRange(tokens, index + 1, bodyStart - 1, variables, functions)
+  if !actual.ok {
+    return typeError(actual.message, 1, actual.tokenIndex)
+  }
+  if stringEquals(actual.typeName, "bool") || stringEquals(actual.typeName, "unknown") {
+    return typeOk(1)
+  }
+  return typeError(
+    "compile error: while condition must be bool, got " + actual.typeName,
+    1,
+    index
+  )
+}
+
 function checkTypes(ast: AstProgram): TypeResult {
   let tokens = ast.tokens
   let variables = map("unused", "unused")
@@ -1324,6 +1366,22 @@ function checkTypes(ast: AstProgram): TypeResult {
 
     if isKeyword && stringEquals(current, "switch") {
       let result = checkSwitchCases(tokens, index, variables, functions)
+      checked = checked + result.checkedCount
+      if !result.ok {
+        return typeError(result.message, checked, result.tokenIndex)
+      }
+    }
+
+    if isKeyword && stringEquals(current, "if") {
+      let result = checkIfCondition(tokens, index, variables, functions)
+      checked = checked + result.checkedCount
+      if !result.ok {
+        return typeError(result.message, checked, result.tokenIndex)
+      }
+    }
+
+    if isKeyword && stringEquals(current, "while") {
+      let result = checkWhileCondition(tokens, index, variables, functions)
       checked = checked + result.checkedCount
       if !result.ok {
         return typeError(result.message, checked, result.tokenIndex)

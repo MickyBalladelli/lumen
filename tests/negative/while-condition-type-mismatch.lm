@@ -1,0 +1,6 @@
+function main(): i32 {
+  while "yes" {
+    return 1
+  }
+  return 0
+}

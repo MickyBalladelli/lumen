@@ -8,6 +8,14 @@ Current blocker: `compiler/main.lm` marks its own input as `compiler-main`, and
 `compiler/emitter.lm` returns `compilerImage()`. Stage 2 and stage 3 therefore
 copy embedded stage-1 LLVM instead of compiling the Lumen source.
 
+## Still missing for true self-hosting
+
+- [ ] Remove `compilerImage` from the compiler path.
+- [ ] Remove the `compiler-main` filename shortcut.
+- [ ] Make the bootstrap source coverage gate pass without fixture paths.
+- [ ] Finish typed IR lowering and typed LLVM emission.
+- [ ] Remove the embedded compiler image from stage 1 and later.
+
 ## P0 - Make self-hosting measurable
 
 - [x] Add a deliberately failing real-bootstrap test.
@@ -79,8 +87,8 @@ copy embedded stage-1 LLVM instead of compiling the Lumen source.
   values. Validate every argument, not only the first one.
 
 - [ ] Finish bootstrap control-flow semantics.
-  The bootstrap compiler still mostly checks loop and switch nesting plus
-  break/continue placement. It still needs boolean conditions, definite return,
+  The bootstrap compiler now checks `if` and `while` conditions plus loop and
+  switch nesting and break/continue placement. It still needs definite return,
   use before initialization, unreachable-path tracking, and consistent
   assignment across branches and loops.
 
