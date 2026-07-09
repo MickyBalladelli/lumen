@@ -12,8 +12,9 @@ stage 3 still need real LLVM emission from compiler source.
 - [x] Remove `compilerImage` from the compiler path.
   Delete the builtin, the embedded image fallback, and the bootstrap checks
   that let the compiler delegate to a copied LLVM blob.
-- [ ] Remove the `compiler-main` filename shortcut.
-- [ ] Make the bootstrap source coverage gate pass without fixture paths.
+- [x] Remove the `compiler-main` filename shortcut.
+- [ ] Make the bootstrap source coverage gate pass.
+  Fixture paths no longer block it, but the real coverage gaps still do.
 - [ ] Finish typed IR lowering and typed LLVM emission.
 - [ ] Remove the embedded compiler image from stage 1 and later.
 

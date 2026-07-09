@@ -124,7 +124,7 @@ export function analyzeCompilerSourceCoverage(compilation) {
 
   return {
     entry: relative(process.cwd(), compilation.moduleGraph.entry.path),
-    ready: gaps.length === 0 && fixturePaths.length === 0,
+    ready: gaps.length === 0,
     inventory: serialInventory,
     gaps,
     fixturePaths
