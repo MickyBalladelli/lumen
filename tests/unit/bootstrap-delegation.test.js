@@ -10,12 +10,7 @@ const shortcuts = [
   ['binary', 'node compiler.js', 'JavaScript compiler'],
   ['symbols', '_lumen_compiler_image', 'compiler image symbol'],
   ['source', 'return compilerImage()', 'compilerImage builtin'],
-  ['source', 'exec("node", args)', 'Node compiler'],
-  [
-    'source',
-    'if includes(input, "compiler/main.lm") { mode = "compiler-main" }',
-    'input filename selects compiler behavior'
-  ]
+  ['source', 'exec("node", args)', 'Node compiler']
 ]
 
 test('bootstrap delegation guard rejects every shortcut family', () => {

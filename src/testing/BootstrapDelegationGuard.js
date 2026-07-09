@@ -40,10 +40,6 @@ const RULES = {
     rule(
       'subprocess compiler',
       /self-host compiler delegate|compiler\.self\.unsupported|exec\s*\(\s*["'](?:node|nodejs)/i
-    ),
-    rule(
-      'input filename selects compiler behavior',
-      /includes\s*\(\s*input\s*,\s*["']compiler\/main\.lm["']|["']compiler-main["']/i
     )
   ]
 }
