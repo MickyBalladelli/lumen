@@ -653,12 +653,6 @@ while.end.")
 
   if stringEquals(value.kind, "local") {
     let valueType = typedIrValueType(module, block, value.operand0)
-    out = stringBuilderAppend(out, "  %local.")
-    out = stringBuilderAppend(out, intToString(valueId))
-    out = stringBuilderAppend(out, ".addr = alloca ")
-    out = stringBuilderAppend(out, valueType)
-    out = stringBuilderAppend(out, "
-")
     out = stringBuilderAppend(out, "  store ")
     out = stringBuilderAppend(out, valueType)
     out = stringBuilderAppend(out, " ")
@@ -929,6 +923,23 @@ while.end.")
   return out
 }
 
+function emitTypedIrLocalStorage(out: string, module: TypedIrModule, block: CompilerIrBlock): string {
+  let valueIndex = block.firstValue
+  while valueIndex < block.firstValue + block.valueCount do {
+    let value = irValueArenaGet(module.values, valueIndex)
+    if stringEquals(value.kind, "local") {
+      out = stringBuilderAppend(out, "  %local.")
+      out = stringBuilderAppend(out, intToString(valueIndex))
+      out = stringBuilderAppend(out, ".addr = alloca ")
+      out = stringBuilderAppend(out, typedIrValueType(module, block, value.operand0))
+      out = stringBuilderAppend(out, "
+")
+    }
+    valueIndex = valueIndex + 1
+  }
+  return out
+}
+
 // One typed function is emitted at a time. The first slice intentionally has
 // no syntax or program-map dependency: it accepts only typed return values.
 function emitTypedIrFunction(module: TypedIrModule, functionIndex: i32): string {
@@ -969,6 +980,7 @@ function emitTypedIrFunction(module: TypedIrModule, functionIndex: i32): string 
   out = stringBuilderAppend(out, ") {
 entry:
 ")
+  out = emitTypedIrLocalStorage(out, module, block)
   valueIndex = block.firstValue
   while valueIndex < block.firstValue + block.valueCount do {
     out = emitTypedIrInstruction(out, module, block, valueIndex)

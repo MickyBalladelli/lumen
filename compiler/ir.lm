@@ -52,6 +52,7 @@ struct TypedIrModule {
   values: IrValueArena
   blocks: IrBlockArena
   functions: IrFunctionArena
+  functionTypes: string
   fieldSlots: string
   fieldTypes: string
   fieldCount: i32
@@ -88,6 +89,7 @@ function typedIrModule(): TypedIrModule {
     values: irValueArena(),
     blocks: irBlockArena(),
     functions: irFunctionArena(),
+    functionTypes: map("unused", "0"),
     fieldSlots: map("unused", "0"),
     fieldTypes: map("unused", "1"),
     fieldCount: 0
@@ -140,6 +142,10 @@ function typedIrStorageTypeId(module: TypedIrModule, name: string): i32 {
 }
 
 function typedIrCallTypeId(module: TypedIrModule, name: string, arguments: i32): i32 {
+  if mapHas(module.functionTypes, name) {
+    return stringToInt(mapGet(module.functionTypes, name))
+  }
+
   let functionIndex: i32 = 0
   while functionIndex < module.functions.count do {
     let fn = irFunctionArenaGet(module.functions, functionIndex)
@@ -176,6 +182,31 @@ function typedIrCallTypeId(module: TypedIrModule, name: string, arguments: i32):
     return 0
   }
   return 1
+}
+
+function typedIrRegisterFunctionTypes(module: TypedIrModule, ast: AstProgram): TypedIrModule {
+  let root = astNodeAt(ast, ast.root)
+  let index: i32 = 0
+
+  while index < root.childCount do {
+    let nodeId = astChildAt(ast, ast.root, index)
+    let node = astNodeAt(ast, nodeId)
+    if stringEquals(node.kind, "FunctionDeclaration") {
+      let returnType: i32 = 0
+      let childIndex: i32 = 0
+      while childIndex < node.childCount do {
+        let child = astNodeAt(ast, astChildAt(ast, nodeId, childIndex))
+        if stringEquals(child.kind, "TypeAnnotation") {
+          returnType = typedIrTypeId(child.typeName)
+        }
+        childIndex = childIndex + 1
+      }
+      module.functionTypes = mapSet(module.functionTypes, node.name, intToString(returnType))
+    }
+    index = index + 1
+  }
+
+  return module
 }
 
 function typedIrFieldSlot(module: TypedIrModule, name: string): i32 {
@@ -387,6 +418,7 @@ function typedIrBlockTerminator(module: TypedIrModule, firstValue: i32): string 
 function buildTypedIr(ast: AstProgram): TypedIrModule {
   let module = typedIrModule()
   let root = astNodeAt(ast, ast.root)
+  module = typedIrRegisterFunctionTypes(module, ast)
   let childIndex: i32 = 0
 
   while childIndex < root.childCount do {
