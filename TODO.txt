@@ -109,6 +109,7 @@ stage 3 still need real LLVM emission from compiler source.
 
 ## P3 - Replace the compatibility IR and emitter
 
+
 ### Next typed-IR slice
 
 - [ ] Lower each `TypedIrModule` function body into typed instructions and
