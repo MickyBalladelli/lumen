@@ -209,6 +209,29 @@ function typedIrRegisterFunctionTypes(module: TypedIrModule, ast: AstProgram): T
   return module
 }
 
+function typedIrRegisterStructFields(module: TypedIrModule, ast: AstProgram): TypedIrModule {
+  let root = astNodeAt(ast, ast.root)
+  let index: i32 = 0
+
+  while index < root.childCount do {
+    let nodeId = astChildAt(ast, ast.root, index)
+    let node = astNodeAt(ast, nodeId)
+    if stringEquals(node.kind, "StructDeclaration") {
+      let childIndex: i32 = 0
+      while childIndex < node.childCount do {
+        let child = astNodeAt(ast, astChildAt(ast, nodeId, childIndex))
+        if stringEquals(child.kind, "StructField") {
+          module = typedIrRegisterField(module, child.name, typedIrTypeId(child.typeName))
+        }
+        childIndex = childIndex + 1
+      }
+    }
+    index = index + 1
+  }
+
+  return module
+}
+
 function typedIrFieldSlot(module: TypedIrModule, name: string): i32 {
   if mapHas(module.fieldSlots, name) {
     return stringToInt(mapGet(module.fieldSlots, name))
@@ -387,7 +410,12 @@ function typedIrLowerNode(module: TypedIrModule, ast: AstProgram, nodeId: i32): 
   } else if stringEquals(kind, "MemberExpression") {
     kind = "member"
     text = node.name
-    typeId = typedIrFieldTypeId(module, node.name)
+    if node.typeId >= 0 {
+      typeId = node.typeId
+    } else {
+      typeId = typedIrFieldTypeId(module, node.name)
+    }
+    module = typedIrRegisterField(module, node.name, typeId)
     operand1 = typedIrFieldSlot(module, node.name)
   } else if stringEquals(kind, "ReturnStatement") {
     kind = "return"
@@ -418,6 +446,7 @@ function typedIrBlockTerminator(module: TypedIrModule, firstValue: i32): string 
 function buildTypedIr(ast: AstProgram): TypedIrModule {
   let module = typedIrModule()
   let root = astNodeAt(ast, ast.root)
+  module = typedIrRegisterStructFields(module, ast)
   module = typedIrRegisterFunctionTypes(module, ast)
   let childIndex: i32 = 0
 
@@ -515,10 +544,14 @@ function typedIrValid(module: TypedIrModule): bool {
         if stringEquals(value.kind, "") {
           return false
         }
-        if value.operand0 >= module.values.count || value.operand1 >= module.values.count {
+        let operand1IsValue = !stringEquals(value.kind, "member") &&
+          !stringEquals(value.kind, "struct.field")
+        if value.operand0 >= module.values.count ||
+          (operand1IsValue && value.operand1 >= module.values.count) {
           return false
         }
-        if value.operand0 >= valueIndex || value.operand1 >= valueIndex {
+        if value.operand0 >= valueIndex ||
+          (operand1IsValue && value.operand1 >= valueIndex) {
           return false
         }
         valueIndex = valueIndex + 1

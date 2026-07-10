@@ -822,12 +822,15 @@ while.end.")
       }
       out = stringBuilderAppend(out, "call ")
       out = stringBuilderAppend(out, rawType)
+      if stringEquals(value.text, "map") {
+        out = stringBuilderAppend(out, " (i32, ...)")
+      }
       out = stringBuilderAppend(out, " @")
       out = stringBuilderAppend(out, builtin)
       out = stringBuilderAppend(out, "(")
       if stringEquals(value.text, "map") {
         out = stringBuilderAppend(out, "i32 ")
-        out = stringBuilderAppend(out, intToString(typedIrArgumentCount(module, value.operand1)))
+        out = stringBuilderAppend(out, intToString(typedIrArgumentCount(module, value.operand1) / 2))
         if value.operand1 >= 0 {
           out = stringBuilderAppend(out, ", ")
         }
