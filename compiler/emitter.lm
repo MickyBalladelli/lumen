@@ -94,6 +94,18 @@ function typedIrStorageType(module: TypedIrModule, block: CompilerIrBlock, name:
   return "i32"
 }
 
+function typedIrStorageId(module: TypedIrModule, block: CompilerIrBlock, valueId: i32, name: string): i32 {
+  let index = valueId - 1
+  while index >= block.firstValue do {
+    let value = irValueArenaGet(module.values, index)
+    if stringEquals(value.kind, "local") && stringEquals(value.text, name) {
+      return index
+    }
+    index = index - 1
+  }
+  return -1
+}
+
 function typedIrFunctionReturnType(module: TypedIrModule, name: string): string {
   let index: i32 = 0
   while index < module.functions.count do {
@@ -632,8 +644,8 @@ while.end.")
     }
     out = stringBuilderAppend(out, " = load ")
     out = stringBuilderAppend(out, valueType)
-    out = stringBuilderAppend(out, ", ptr %")
-    out = stringBuilderAppend(out, value.text)
+    out = stringBuilderAppend(out, ", ptr %local.")
+    out = stringBuilderAppend(out, intToString(typedIrStorageId(module, block, valueId, value.text)))
     out = stringBuilderAppend(out, ".addr
 ")
     return out
@@ -641,8 +653,8 @@ while.end.")
 
   if stringEquals(value.kind, "local") {
     let valueType = typedIrValueType(module, block, value.operand0)
-    out = stringBuilderAppend(out, "  %")
-    out = stringBuilderAppend(out, value.text)
+    out = stringBuilderAppend(out, "  %local.")
+    out = stringBuilderAppend(out, intToString(valueId))
     out = stringBuilderAppend(out, ".addr = alloca ")
     out = stringBuilderAppend(out, valueType)
     out = stringBuilderAppend(out, "
@@ -651,14 +663,48 @@ while.end.")
     out = stringBuilderAppend(out, valueType)
     out = stringBuilderAppend(out, " ")
     out = stringBuilderAppend(out, typedIrValueText(module, value.operand0))
-    out = stringBuilderAppend(out, ", ptr %")
-    out = stringBuilderAppend(out, value.text)
+    out = stringBuilderAppend(out, ", ptr %local.")
+    out = stringBuilderAppend(out, intToString(valueId))
     out = stringBuilderAppend(out, ".addr
 ")
     return out
   }
 
   if includes(value.kind, "binary.") {
+    let leftType = typedIrValueType(module, block, value.operand0)
+    let rightType = typedIrValueType(module, block, value.operand1)
+    if stringEquals(value.kind, "binary.+") &&
+      (stringEquals(leftType, "ptr") || stringEquals(rightType, "ptr")) {
+      let leftValue = typedIrValueText(module, value.operand0)
+      let rightValue = typedIrValueText(module, value.operand1)
+      if !stringEquals(leftType, "ptr") {
+        leftValue = "%string.left." + intToString(valueId)
+        out = stringBuilderAppend(out, "  ")
+        out = stringBuilderAppend(out, leftValue)
+        out = stringBuilderAppend(out, " = call ptr @lumen_int_to_string(i32 ")
+        out = stringBuilderAppend(out, typedIrValueText(module, value.operand0))
+        out = stringBuilderAppend(out, ")
+")
+      }
+      if !stringEquals(rightType, "ptr") {
+        rightValue = "%string.right." + intToString(valueId)
+        out = stringBuilderAppend(out, "  ")
+        out = stringBuilderAppend(out, rightValue)
+        out = stringBuilderAppend(out, " = call ptr @lumen_int_to_string(i32 ")
+        out = stringBuilderAppend(out, typedIrValueText(module, value.operand1))
+        out = stringBuilderAppend(out, ")
+")
+      }
+      out = stringBuilderAppend(out, "  %v.")
+      out = stringBuilderAppend(out, intToString(valueId))
+      out = stringBuilderAppend(out, " = call ptr @lumen_string_concat(ptr ")
+      out = stringBuilderAppend(out, leftValue)
+      out = stringBuilderAppend(out, ", ptr ")
+      out = stringBuilderAppend(out, rightValue)
+      out = stringBuilderAppend(out, ")
+")
+      return out
+    }
     let predicate = ""
     if stringEquals(value.kind, "binary.==") {
       predicate = "eq"
@@ -847,8 +893,8 @@ while.end.")
       out = stringBuilderAppend(out, valueType)
       out = stringBuilderAppend(out, " ")
       out = stringBuilderAppend(out, assignedValue)
-      out = stringBuilderAppend(out, ", ptr %")
-      out = stringBuilderAppend(out, target.text)
+      out = stringBuilderAppend(out, ", ptr %local.")
+      out = stringBuilderAppend(out, intToString(typedIrStorageId(module, block, value.operand0, target.text)))
       out = stringBuilderAppend(out, ".addr
 ")
     } else if stringEquals(target.kind, "member") {
@@ -971,6 +1017,7 @@ function emitTypedIr(module: TypedIrModule): string {
 ")
   }
   out = stringBuilderAppend(out, "declare i1 @lumen_string_contains(ptr, ptr)
+declare ptr @lumen_string_concat(ptr, ptr)
 declare ptr @calloc(i64, i64)
 declare ptr @lumen_string_slice(ptr, i32, i32)
 declare ptr @lumen_int_to_string(i32)
