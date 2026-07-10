@@ -1,5 +1,5 @@
 import { AstProgram, astChildAt, astNodeAt } from "./ast.lm"
-import { CompilerIrBlock, CompilerIrFunction, CompilerIrValue, IrBlockArena, IrFunctionArena, IrValueArena, irBlockArena, irBlockArenaGet, irBlockArenaPush, irFunctionArena, irFunctionArenaGet, irFunctionArenaPush, irValueArena, irValueArenaPush } from "./containers.lm"
+import { CompilerIrBlock, CompilerIrFunction, CompilerIrValue, IrBlockArena, IrFunctionArena, IrValueArena, irBlockArena, irBlockArenaGet, irBlockArenaPush, irFunctionArena, irFunctionArenaGet, irFunctionArenaPush, irValueArena, irValueArenaGet, irValueArenaPush, tokenArenaGet } from "./containers.lm"
 import { astToProgram } from "./parser.lm"
 
 struct IrStatement {
@@ -52,6 +52,9 @@ struct TypedIrModule {
   values: IrValueArena
   blocks: IrBlockArena
   functions: IrFunctionArena
+  fieldSlots: string
+  fieldTypes: string
+  fieldCount: i32
 }
 
 struct IrModule {
@@ -84,34 +87,286 @@ function typedIrModule(): TypedIrModule {
   return TypedIrModule {
     values: irValueArena(),
     blocks: irBlockArena(),
-    functions: irFunctionArena()
+    functions: irFunctionArena(),
+    fieldSlots: map("unused", "0"),
+    fieldTypes: map("unused", "1"),
+    fieldCount: 0
   }
 }
 
-function typedIrValue(nodeKind: string, typeId: i32, parent: i32, text: string): CompilerIrValue {
+function typedIrValue(nodeKind: string, typeId: i32, operand0: i32, operand1: i32, text: string): CompilerIrValue {
   return CompilerIrValue {
     kind: nodeKind,
     typeId: typeId,
-    operand0: parent,
-    operand1: -1,
+    operand0: operand0,
+    operand1: operand1,
     text: text
   }
 }
 
-function typedIrAppendNode(module: TypedIrModule, ast: AstProgram, nodeId: i32): TypedIrModule {
-  let node = astNodeAt(ast, nodeId)
-  module.values = irValueArenaPush(
-    module.values,
-    typedIrValue(node.kind, node.typeId, node.parent, node.text)
-  )
+function typedIrAppendValue(module: TypedIrModule, kind: string, typeId: i32, operand0: i32, operand1: i32, text: string): TypedIrModule {
+  module.values = irValueArenaPush(module.values, typedIrValue(kind, typeId, operand0, operand1, text))
+  return module
+}
 
-  let childIndex: i32 = 0
-  while childIndex < node.childCount do {
-    module = typedIrAppendNode(module, ast, astChildAt(ast, nodeId, childIndex))
-    childIndex = childIndex + 1
+function typedIrTypeId(typeName: string): i32 {
+  if stringEquals(typeName, "i32") || stringEquals(typeName, "bool") ||
+    stringEquals(typeName, "") {
+    return 0
+  }
+  if stringEquals(typeName, "void") {
+    return 4
+  }
+  if stringEquals(typeName, "Result<i32>") {
+    return 2
+  }
+  if includes(typeName, "Result") {
+    return 3
+  }
+  return 1
+}
+
+function typedIrStorageTypeId(module: TypedIrModule, name: string): i32 {
+  let index = module.values.count - 1
+  while index >= 0 do {
+    let value = irValueArenaGet(module.values, index)
+    if (stringEquals(value.kind, "param") || stringEquals(value.kind, "local")) &&
+      stringEquals(value.text, name) {
+      return value.typeId
+    }
+    index = index - 1
+  }
+  return 0
+}
+
+function typedIrCallTypeId(module: TypedIrModule, name: string, arguments: i32): i32 {
+  if stringEquals(name, "writeFile") || stringEquals(name, "argCount") {
+    return 2
+  }
+  if stringEquals(name, "arg") || stringEquals(name, "readFile") ||
+    stringEquals(name, "json") || stringEquals(name, "jsonGet") ||
+    stringEquals(name, "jsonGetRaw") {
+    return 3
+  }
+  if stringEquals(name, "resultValue") && arguments >= 0 {
+    let argument = irValueArenaGet(module.values, arguments)
+    let source = irValueArenaGet(module.values, argument.operand0)
+    if source.typeId == 2 {
+      return 0
+    }
+    return 1
+  }
+  if stringEquals(name, "arenaSetString") || stringEquals(name, "arenaSetI32") {
+    return 4
+  }
+  if stringEquals(name, "arenaAppend") || stringEquals(name, "arenaLen") ||
+    stringEquals(name, "arenaGetI32") || stringEquals(name, "stringLen") ||
+    stringEquals(name, "stringToInt") || stringEquals(name, "listLen") ||
+    stringEquals(name, "isOk") || stringEquals(name, "stringEquals") ||
+    stringEquals(name, "includes") || stringEquals(name, "mapHas") {
+    return 0
+  }
+  return 1
+}
+
+function typedIrFieldSlot(module: TypedIrModule, name: string): i32 {
+  if mapHas(module.fieldSlots, name) {
+    return stringToInt(mapGet(module.fieldSlots, name))
+  }
+  return module.fieldCount
+}
+
+function typedIrFieldTypeId(module: TypedIrModule, name: string): i32 {
+  if mapHas(module.fieldTypes, name) {
+    return stringToInt(mapGet(module.fieldTypes, name))
+  }
+  return 1
+}
+
+function typedIrRegisterField(module: TypedIrModule, name: string, typeId: i32): TypedIrModule {
+  if !mapHas(module.fieldSlots, name) {
+    module.fieldSlots = mapSet(module.fieldSlots, name, intToString(module.fieldCount))
+    module.fieldTypes = mapSet(module.fieldTypes, name, intToString(typeId))
+    module.fieldCount = module.fieldCount + 1
   }
   return module
 }
+
+// AST identifiers describe syntax. IR operands must instead refer to values
+// owned by this block, so the backend never needs to recover AST parents.
+function typedIrLowerNode(module: TypedIrModule, ast: AstProgram, nodeId: i32): TypedIrModule {
+  let node = astNodeAt(ast, nodeId)
+  let firstChild = module.values.count
+  let childIndex: i32 = 0
+
+  if stringEquals(node.kind, "IfStatement") {
+    module = typedIrLowerNode(module, ast, astChildAt(ast, nodeId, 0))
+    let condition = module.values.count - 1
+    module = typedIrAppendValue(module, "if.begin", node.typeId, condition, -1, "")
+    let branch = module.values.count - 1
+    module = typedIrLowerNode(module, ast, astChildAt(ast, nodeId, 1))
+    if node.childCount > 2 {
+      module = typedIrAppendValue(module, "if.else", node.typeId, branch, -1, "")
+      module = typedIrLowerNode(module, ast, astChildAt(ast, nodeId, 2))
+    }
+    return typedIrAppendValue(module, "if.end", node.typeId, branch, -1, "")
+  }
+
+  if stringEquals(node.kind, "WhileStatement") {
+    module = typedIrAppendValue(module, "while.begin", node.typeId, -1, -1, "")
+    let loop = module.values.count - 1
+    module = typedIrLowerNode(module, ast, astChildAt(ast, nodeId, 0))
+    let condition = module.values.count - 1
+    module = typedIrAppendValue(module, "while.condition", node.typeId, condition, loop, "")
+    module = typedIrLowerNode(module, ast, astChildAt(ast, nodeId, 1))
+    return typedIrAppendValue(module, "while.end", node.typeId, loop, -1, "")
+  }
+
+  if stringEquals(node.kind, "StructExpression") {
+    let fields: i32 = -1
+    while childIndex < node.childCount do {
+      module = typedIrLowerNode(module, ast, astChildAt(ast, nodeId, childIndex))
+      let field = module.values.count - 1
+      module = typedIrAppendValue(module, "field.link", 1, field, fields, "")
+      fields = module.values.count - 1
+      childIndex = childIndex + 1
+    }
+    return typedIrAppendValue(module, "struct", 1, -1, fields, node.name)
+  }
+
+  if stringEquals(node.kind, "SliceExpression") {
+    module = typedIrLowerNode(module, ast, astChildAt(ast, nodeId, 0))
+    let object = module.values.count - 1
+    module = typedIrLowerNode(module, ast, astChildAt(ast, nodeId, 1))
+    let start = module.values.count - 1
+    module = typedIrLowerNode(module, ast, astChildAt(ast, nodeId, 2))
+    let end = module.values.count - 1
+    module = typedIrAppendValue(module, "slice.range", 0, start, end, "")
+    return typedIrAppendValue(module, "slice", 1, object, module.values.count - 1, "")
+  }
+
+  if stringEquals(node.kind, "CallExpression") {
+    let callee: i32 = -1
+    let arguments: i32 = -1
+    while childIndex < node.childCount do {
+      module = typedIrLowerNode(module, ast, astChildAt(ast, nodeId, childIndex))
+      let childValue = module.values.count - 1
+      if childIndex == 0 {
+        callee = childValue
+      } else {
+        module = typedIrAppendValue(module, "argument", node.typeId, childValue, arguments, "")
+        arguments = module.values.count - 1
+      }
+      childIndex = childIndex + 1
+    }
+    return typedIrAppendValue(
+      module,
+      "call." + intToString(node.childCount - 1),
+      typedIrCallTypeId(module, node.name, arguments),
+      callee,
+      arguments,
+      node.name
+    )
+  }
+
+  while childIndex < node.childCount do {
+    module = typedIrLowerNode(module, ast, astChildAt(ast, nodeId, childIndex))
+    childIndex = childIndex + 1
+  }
+
+  if stringEquals(node.kind, "RawExpression") ||
+    stringEquals(node.kind, "BlockStatement") ||
+    stringEquals(node.kind, "TypeAnnotation") ||
+    stringEquals(node.kind, "Identifier") {
+    return module
+  }
+
+  let operand0: i32 = -1
+  let operand1: i32 = -1
+  if module.values.count > firstChild {
+    operand0 = firstChild
+  }
+  if module.values.count > firstChild + 1 {
+    operand1 = firstChild + 1
+  }
+
+  let kind = node.kind
+  let typeId = node.typeId
+  let text = node.text
+  if stringEquals(kind, "LiteralExpression") {
+    kind = "literal"
+    text = node.value
+    let token = tokenArenaGet(ast.tokens, node.tokenStart)
+    if stringEquals(token.kind, "string") {
+      typeId = 1
+    } else {
+      typeId = 0
+    }
+  } else if stringEquals(kind, "IdentifierExpression") {
+    kind = "load"
+    text = node.name
+    typeId = typedIrStorageTypeId(module, node.name)
+  } else if stringEquals(kind, "VariableDeclarator") {
+    kind = "local"
+    text = node.name
+    if module.values.count > firstChild {
+      operand0 = module.values.count - 1
+      let initializer = irValueArenaGet(module.values, operand0)
+      typeId = initializer.typeId
+    }
+    if !stringEquals(node.typeName, "") {
+      typeId = typedIrTypeId(node.typeName)
+    }
+  } else if stringEquals(kind, "BinaryExpression") {
+    kind = "binary." + node.operator
+  } else if stringEquals(kind, "AssignmentExpression") {
+    kind = "assign." + node.operator
+    if module.values.count > firstChild + 1 {
+      operand1 = module.values.count - 1
+    }
+  } else if stringEquals(kind, "UnaryExpression") {
+    kind = "unary." + node.operator
+    if module.values.count > firstChild {
+      operand0 = module.values.count - 1
+    }
+  } else if stringEquals(kind, "StructProperty") {
+    kind = "struct.field"
+    text = node.name
+    if module.values.count > firstChild {
+      operand0 = module.values.count - 1
+      let fieldValue = irValueArenaGet(module.values, operand0)
+      typeId = fieldValue.typeId
+    }
+    module = typedIrRegisterField(module, node.name, typeId)
+    operand1 = typedIrFieldSlot(module, node.name)
+  } else if stringEquals(kind, "MemberExpression") {
+    kind = "member"
+    text = node.name
+    typeId = typedIrFieldTypeId(module, node.name)
+    operand1 = typedIrFieldSlot(module, node.name)
+  } else if stringEquals(kind, "ReturnStatement") {
+    kind = "return"
+    if module.values.count > firstChild {
+      operand0 = module.values.count - 1
+    }
+  }
+
+  return typedIrAppendValue(module, kind, typeId, operand0, operand1, text)
+}
+
+function typedIrBlockTerminator(module: TypedIrModule, firstValue: i32): string {
+  let index = firstValue
+  while index < module.values.count do {
+    let value = irValueArenaGet(module.values, index)
+    if stringEquals(value.kind, "return") {
+      return "return"
+    }
+    index = index + 1
+  }
+
+  return "return"
+}
+
 
 // Function ownership is explicit. The LLVM emitter can lower one function
 // without recovering it from a delimiter-sensitive program string.
@@ -125,13 +380,26 @@ function buildTypedIr(ast: AstProgram): TypedIrModule {
     let node = astNodeAt(ast, nodeId)
     if stringEquals(node.kind, "FunctionDeclaration") {
       let firstValue = module.values.count
-      module = typedIrAppendNode(module, ast, nodeId)
+      let returnTypeId: i32 = 0
+      let functionChild: i32 = 0
+      while functionChild < node.childCount do {
+        let functionNodeId = astChildAt(ast, nodeId, functionChild)
+        let functionNode = astNodeAt(ast, functionNodeId)
+        if stringEquals(functionNode.kind, "BlockStatement") {
+          module = typedIrLowerNode(module, ast, functionNodeId)
+        } else if stringEquals(functionNode.kind, "VariableDeclarator") {
+          module = typedIrAppendValue(module, "param", typedIrTypeId(functionNode.typeName), -1, -1, functionNode.name)
+        } else if stringEquals(functionNode.kind, "TypeAnnotation") {
+          returnTypeId = typedIrTypeId(functionNode.typeName)
+        }
+        functionChild = functionChild + 1
+      }
       let blockId = module.blocks.count
       module.blocks = irBlockArenaPush(module.blocks, CompilerIrBlock {
         name: node.name + ".entry",
         firstValue: firstValue,
         valueCount: module.values.count - firstValue,
-        terminator: "fallthrough",
+        terminator: typedIrBlockTerminator(module, firstValue),
         target0: -1,
         target1: -1
       })
@@ -139,7 +407,7 @@ function buildTypedIr(ast: AstProgram): TypedIrModule {
         name: node.name,
         firstBlock: blockId,
         blockCount: 1,
-        returnTypeId: node.typeId
+        returnTypeId: returnTypeId
       })
     }
     childIndex = childIndex + 1
@@ -150,6 +418,7 @@ function buildTypedIr(ast: AstProgram): TypedIrModule {
 function typedIrValid(module: TypedIrModule): bool {
   let functionIndex: i32 = 0
   let previousBlockEnd: i32 = 0
+  let previousValueEnd: i32 = 0
 
   while functionIndex < module.functions.count do {
     let fn = irFunctionArenaGet(module.functions, functionIndex)
@@ -172,9 +441,43 @@ function typedIrValid(module: TypedIrModule): bool {
       if block.firstValue < 0 || block.valueCount < 0 {
         return false
       }
+      if block.firstValue != previousValueEnd {
+        return false
+      }
       if block.firstValue + block.valueCount > module.values.count {
         return false
       }
+      if !stringEquals(block.terminator, "return") &&
+        !stringEquals(block.terminator, "branch") &&
+        !stringEquals(block.terminator, "condbranch") &&
+        !stringEquals(block.terminator, "unreachable") {
+        return false
+      }
+      if stringEquals(block.terminator, "branch") &&
+        (block.target0 < 0 || block.target0 >= module.blocks.count) {
+        return false
+      }
+      if stringEquals(block.terminator, "condbranch") &&
+        (block.target0 < 0 || block.target0 >= module.blocks.count ||
+          block.target1 < 0 || block.target1 >= module.blocks.count) {
+        return false
+      }
+
+      let valueIndex = block.firstValue
+      while valueIndex < block.firstValue + block.valueCount do {
+        let value = irValueArenaGet(module.values, valueIndex)
+        if stringEquals(value.kind, "") {
+          return false
+        }
+        if value.operand0 >= module.values.count || value.operand1 >= module.values.count {
+          return false
+        }
+        if value.operand0 >= valueIndex || value.operand1 >= valueIndex {
+          return false
+        }
+        valueIndex = valueIndex + 1
+      }
+      previousValueEnd = block.firstValue + block.valueCount
       blockIndex = blockIndex + 1
     }
 
@@ -182,7 +485,7 @@ function typedIrValid(module: TypedIrModule): bool {
     functionIndex = functionIndex + 1
   }
 
-  return previousBlockEnd == module.blocks.count
+  return previousBlockEnd == module.blocks.count && previousValueEnd == module.values.count
 }
 
 function irStatement(kind: string): IrStatement {

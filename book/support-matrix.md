@@ -17,7 +17,7 @@ Regenerate it with `npm run docs:support`.
 | Lumen-written bootstrap compiler | Subset | Parses and compiles only the features and diagnostics listed in the parity tables below. |
 | Bootstrap compiler IR | Partial | Uses typed Lumen structs for an IR summary, but still relies on a program map and statement compatibility bridge. It is not the JavaScript compiler typed IR. |
 | Stage-2 and stage-3 bootstrap | Checkpoint | Stage-1 is built by the JavaScript compiler. Later stages reproduce its embedded LLVM checkpoint byte for byte and run the parity fixtures. |
-| Full source self-hosting | Not Implemented | Compiling compiler/main.lm returns the embedded stage-1 LLVM image through compilerImage(). The bootstrap compiler does not regenerate itself from its source. |
+| Full source self-hosting | Not Implemented | Compiling compiler/main.lm still needs typed self-host lowering. The bootstrap compiler does not yet regenerate itself from source. |
 
 ## JavaScript/Bootstrap Parity Features
 

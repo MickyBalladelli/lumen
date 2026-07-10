@@ -1,11 +1,1018 @@
-import { IrModule, IrStatement, IrFunction, irStatementFromProgram, irFunctionFromProgram, typedIrValid } from "./ir.lm"
+import { IrModule, IrStatement, IrFunction, TypedIrModule, irStatementFromProgram, irFunctionFromProgram, typedIrValid } from "./ir.lm"
+import { CompilerIrBlock, irBlockArenaGet, irFunctionArenaGet, irValueArenaGet } from "./containers.lm"
 
 function emitIr(ir: IrModule): string {
   if !typedIrValid(ir.typed) {
-    return "; invalid typed IR\n"
+    return "; invalid typed IR
+"
   }
 
-  return emitStatementMainIr(ir, ir.program)
+  if typedIrCanEmit(ir.typed) {
+    return emitTypedIr(ir.typed)
+  }
+
+  return "; typed fallback: " + typedIrUnsupportedKind(ir.typed) + "
+" + emitStatementMainIr(ir, ir.program)
+}
+
+function typedIrValueText(module: TypedIrModule, valueId: i32): string {
+  if valueId < 0 || valueId >= module.values.count {
+    return "0"
+  }
+
+  let value = irValueArenaGet(module.values, valueId)
+  if stringEquals(value.kind, "literal") {
+    if value.typeId == 1 {
+      let size = stringLen(value.text) + 1
+      return "getelementptr inbounds ([" + intToString(size) +
+        " x i8], ptr @.typed.str." + intToString(valueId) + ", i64 0, i64 0)"
+    }
+    if stringEquals(value.text, "true") {
+      return "1"
+    }
+    if stringEquals(value.text, "false") {
+      return "0"
+    }
+    return llvmI32Atom(value.text)
+  }
+  if stringEquals(value.kind, "load") {
+    return "%v." + intToString(valueId)
+  }
+  if includes(value.kind, "binary.") || includes(value.kind, "unary.") ||
+    includes(value.kind, "call.") ||
+    stringEquals(value.kind, "struct") || stringEquals(value.kind, "member") ||
+    stringEquals(value.kind, "slice") {
+    return "%v." + intToString(valueId)
+  }
+  if stringEquals(value.kind, "local") {
+    return typedIrValueText(module, value.operand0)
+  }
+
+  return "0"
+}
+
+function typedIrLLVMType(typeId: i32): string {
+  if typeId == 4 {
+    return "void"
+  }
+  if typeId > 0 {
+    return "ptr"
+  }
+  return "i32"
+}
+
+function typedIrEscapeString(value: string): string {
+  let out = stringBuilder()
+  let index: i32 = 0
+  while index < stringLen(value) do {
+    let ch = value[index..index + 1]
+    if stringEquals(ch, '"') {
+      out = stringBuilderAppend(out, '\22')
+    } else if stringEquals(ch, '\') {
+      out = stringBuilderAppend(out, '\5C')
+    } else if stringEquals(ch, "
+") {
+      out = stringBuilderAppend(out, '\0A')
+    } else {
+      out = stringBuilderAppend(out, ch)
+    }
+    index = index + 1
+  }
+  return out
+}
+
+function typedIrStorageType(module: TypedIrModule, block: CompilerIrBlock, name: string): string {
+  let index = block.firstValue
+  while index < block.firstValue + block.valueCount do {
+    let value = irValueArenaGet(module.values, index)
+    if (stringEquals(value.kind, "param") || stringEquals(value.kind, "local")) &&
+      stringEquals(value.text, name) {
+      return typedIrLLVMType(value.typeId)
+    }
+    index = index + 1
+  }
+  return "i32"
+}
+
+function typedIrFunctionReturnType(module: TypedIrModule, name: string): string {
+  let index: i32 = 0
+  while index < module.functions.count do {
+    let fn = irFunctionArenaGet(module.functions, index)
+    if stringEquals(fn.name, name) {
+      return typedIrLLVMType(fn.returnTypeId)
+    }
+    index = index + 1
+  }
+  return "i32"
+}
+
+function typedIrValueType(module: TypedIrModule, block: CompilerIrBlock, valueId: i32): string {
+  if valueId < 0 || valueId >= module.values.count {
+    return "i32"
+  }
+  let value = irValueArenaGet(module.values, valueId)
+  if stringEquals(value.kind, "load") {
+    return typedIrStorageType(module, block, value.text)
+  }
+  if includes(value.kind, "call.") {
+    if typedIrBuiltinExists(value.text) {
+      return typedIrLLVMType(value.typeId)
+    }
+    return typedIrFunctionReturnType(module, value.text)
+  }
+  if stringEquals(value.kind, "argument") {
+    return typedIrValueType(module, block, value.operand0)
+  }
+  if stringEquals(value.kind, "struct") {
+    return "ptr"
+  }
+  if stringEquals(value.kind, "slice") {
+    return "ptr"
+  }
+  if stringEquals(value.kind, "member") {
+    return typedIrLLVMType(value.typeId)
+  }
+  return typedIrLLVMType(value.typeId)
+}
+
+function typedIrFieldCount(module: TypedIrModule): i32 {
+  return module.fieldCount
+}
+
+function typedIrFunctionExists(module: TypedIrModule, name: string): bool {
+  let functionIndex: i32 = 0
+  while functionIndex < module.functions.count do {
+    let fn = irFunctionArenaGet(module.functions, functionIndex)
+    if stringEquals(fn.name, name) {
+      return true
+    }
+    functionIndex = functionIndex + 1
+  }
+  return false
+}
+
+function typedIrBuiltinSymbol(name: string): string {
+  if stringEquals(name, "includes") { return "lumen_string_contains"
+  }
+  if stringEquals(name, "intToString") { return "lumen_int_to_string"
+  }
+  if stringEquals(name, "stringEquals") { return "lumen_string_equals"
+  }
+  if stringEquals(name, "stringLen") { return "lumen_string_len"
+  }
+  if stringEquals(name, "stringToInt") { return "lumen_string_to_int"
+  }
+  if stringEquals(name, "stringBuilder") { return "lumen_string_builder"
+  }
+  if stringEquals(name, "stringBuilderAppend") { return "lumen_string_builder_append"
+  }
+  if stringEquals(name, "arg") { return "lumen_arg"
+  }
+  if stringEquals(name, "argCount") { return "lumen_arg_count"
+  }
+  if stringEquals(name, "errorMessage") { return "lumen_error_message"
+  }
+  if stringEquals(name, "isOk") { return "lumen_is_ok"
+  }
+  if stringEquals(name, "resultValue") { return "lumen_result_value"
+  }
+  if stringEquals(name, "json") { return "lumen_json"
+  }
+  if stringEquals(name, "jsonGet") { return "lumen_json_get"
+  }
+  if stringEquals(name, "jsonGetRaw") { return "lumen_json_get_raw"
+  }
+  if stringEquals(name, "list") { return "lumen_list"
+  }
+  if stringEquals(name, "listGet") { return "lumen_list_get"
+  }
+  if stringEquals(name, "listLen") { return "lumen_list_len"
+  }
+  if stringEquals(name, "listPush") { return "lumen_list_push"
+  }
+  if stringEquals(name, "map") { return "lumen_map"
+  }
+  if stringEquals(name, "mapGet") { return "lumen_map_get"
+  }
+  if stringEquals(name, "mapHas") { return "lumen_map_has"
+  }
+  if stringEquals(name, "mapSet") { return "lumen_map_set"
+  }
+  if stringEquals(name, "arenaNew") { return "lumen_arena_new"
+  }
+  if stringEquals(name, "arenaAppend") { return "lumen_arena_append"
+  }
+  if stringEquals(name, "arenaLen") { return "lumen_arena_len"
+  }
+  if stringEquals(name, "arenaSetString") { return "lumen_arena_set_string"
+  }
+  if stringEquals(name, "arenaSetI32") { return "lumen_arena_set_i32"
+  }
+  if stringEquals(name, "arenaGetString") { return "lumen_arena_get_string"
+  }
+  if stringEquals(name, "arenaGetI32") { return "lumen_arena_get_i32"
+  }
+  if stringEquals(name, "readFile") { return "lumen_read_file"
+  }
+  if stringEquals(name, "writeFile") { return "lumen_write_file"
+  }
+  return ""
+}
+
+function typedIrBuiltinExists(name: string): bool {
+  return !stringEquals(typedIrBuiltinSymbol(name), "")
+}
+
+function typedIrIsCallTarget(module: TypedIrModule, block: CompilerIrBlock, valueId: i32): bool {
+  let index = valueId + 1
+  while index < block.firstValue + block.valueCount do {
+    let value = irValueArenaGet(module.values, index)
+    if includes(value.kind, "call.") && value.operand0 == valueId {
+      return true
+    }
+    index = index + 1
+  }
+  return false
+}
+
+function typedIrHasStorage(module: TypedIrModule, block: CompilerIrBlock, name: string): bool {
+  let index = block.firstValue
+  while index < block.firstValue + block.valueCount do {
+    let value = irValueArenaGet(module.values, index)
+    if (stringEquals(value.kind, "param") || stringEquals(value.kind, "local")) &&
+      stringEquals(value.text, name) {
+      return true
+    }
+    index = index + 1
+  }
+  return false
+}
+
+function typedIrValueSupported(module: TypedIrModule, block: CompilerIrBlock, valueId: i32): bool {
+  let value = irValueArenaGet(module.values, valueId)
+  if stringEquals(value.kind, "param") || stringEquals(value.kind, "local") ||
+    stringEquals(value.kind, "return") ||
+    stringEquals(value.kind, "argument") ||
+    stringEquals(value.kind, "VariableDeclaration") ||
+    stringEquals(value.kind, "ExpressionStatement") ||
+    stringEquals(value.kind, "struct.field") || stringEquals(value.kind, "field.link") ||
+    stringEquals(value.kind, "struct") || stringEquals(value.kind, "member") ||
+    stringEquals(value.kind, "slice.range") || stringEquals(value.kind, "slice") ||
+    stringEquals(value.kind, "BreakStatement") || stringEquals(value.kind, "ContinueStatement") {
+    return true
+  }
+  if stringEquals(value.kind, "literal") {
+    return true
+  }
+  if stringEquals(value.kind, "load") {
+    return typedIrIsCallTarget(module, block, valueId) ||
+      typedIrHasStorage(module, block, value.text)
+  }
+  if stringEquals(value.kind, "binary.+") || stringEquals(value.kind, "binary.-") ||
+    stringEquals(value.kind, "binary.*") || stringEquals(value.kind, "binary./") ||
+    stringEquals(value.kind, "binary.==") || stringEquals(value.kind, "binary.!=") ||
+    stringEquals(value.kind, "binary.<") || stringEquals(value.kind, "binary.<=") ||
+    stringEquals(value.kind, "binary.>") || stringEquals(value.kind, "binary.>=") ||
+    stringEquals(value.kind, "binary.&&") || stringEquals(value.kind, "binary.||") ||
+    stringEquals(value.kind, "assign.=") || stringEquals(value.kind, "assign.++") ||
+    stringEquals(value.kind, "assign.--") {
+    return true
+  }
+  if stringEquals(value.kind, "unary.-") || stringEquals(value.kind, "unary.+") ||
+    stringEquals(value.kind, "unary.!") {
+    return true
+  }
+  if stringEquals(value.kind, "if.begin") || stringEquals(value.kind, "if.else") ||
+    stringEquals(value.kind, "if.end") || stringEquals(value.kind, "while.begin") ||
+    stringEquals(value.kind, "while.condition") || stringEquals(value.kind, "while.end") {
+    return true
+  }
+  if includes(value.kind, "call.") {
+    return stringEquals(value.text, "println") || typedIrBuiltinExists(value.text) ||
+      typedIrFunctionExists(module, value.text)
+  }
+  return false
+}
+
+function typedIrCanEmit(module: TypedIrModule): bool {
+  if module.functions.count < 1 {
+    return false
+  }
+  let blockIndex: i32 = 0
+  while blockIndex < module.blocks.count do {
+    let block = irBlockArenaGet(module.blocks, blockIndex)
+    let valueIndex = block.firstValue
+    while valueIndex < block.firstValue + block.valueCount do {
+      if !typedIrValueSupported(module, block, valueIndex) {
+        return false
+      }
+      valueIndex = valueIndex + 1
+    }
+    blockIndex = blockIndex + 1
+  }
+  return true
+}
+
+function typedIrUnsupportedKind(module: TypedIrModule): string {
+  let blockIndex: i32 = 0
+  while blockIndex < module.blocks.count do {
+    let block = irBlockArenaGet(module.blocks, blockIndex)
+    let valueIndex = block.firstValue
+    while valueIndex < block.firstValue + block.valueCount do {
+      if !typedIrValueSupported(module, block, valueIndex) {
+        let value = irValueArenaGet(module.values, valueIndex)
+        if includes(value.kind, "call.") {
+          return value.kind + ":" + value.text
+        }
+        return value.kind
+      }
+      valueIndex = valueIndex + 1
+    }
+    blockIndex = blockIndex + 1
+  }
+  return "empty module"
+}
+
+function typedIrIsParameter(module: TypedIrModule, block: CompilerIrBlock, name: string): bool {
+  let valueIndex = block.firstValue
+  while valueIndex < block.firstValue + block.valueCount do {
+    let value = irValueArenaGet(module.values, valueIndex)
+    if stringEquals(value.kind, "param") && stringEquals(value.text, name) {
+      return true
+    }
+    valueIndex = valueIndex + 1
+  }
+  return false
+}
+
+function emitTypedIrArguments(out: string, module: TypedIrModule, block: CompilerIrBlock, argumentId: i32): string {
+  if argumentId < 0 {
+    return out
+  }
+  let argument = irValueArenaGet(module.values, argumentId)
+  if argument.operand1 >= 0 {
+    out = emitTypedIrArguments(out, module, block, argument.operand1)
+    out = stringBuilderAppend(out, ", ")
+  }
+  out = stringBuilderAppend(out, typedIrValueType(module, block, argument.operand0))
+  out = stringBuilderAppend(out, " ")
+  out = stringBuilderAppend(out, typedIrValueText(module, argument.operand0))
+  return out
+}
+
+function typedIrArgumentCount(module: TypedIrModule, argumentId: i32): i32 {
+  let count: i32 = 0
+  while argumentId >= 0 do {
+    let argument = irValueArenaGet(module.values, argumentId)
+    count = count + 1
+    argumentId = argument.operand1
+  }
+  return count
+}
+
+function emitTypedStructFields(out: string, module: TypedIrModule, block: CompilerIrBlock, linkId: i32, structId: i32): string {
+  if linkId < 0 {
+    return out
+  }
+  let link = irValueArenaGet(module.values, linkId)
+  if link.operand1 >= 0 {
+    out = emitTypedStructFields(out, module, block, link.operand1, structId)
+  }
+  let field = irValueArenaGet(module.values, link.operand0)
+  let fieldType = typedIrValueType(module, block, field.operand0)
+  let fieldValue = typedIrValueText(module, field.operand0)
+  out = stringBuilderAppend(out, "  %field.")
+  out = stringBuilderAppend(out, intToString(link.operand0))
+  out = stringBuilderAppend(out, " = getelementptr ptr, ptr %v.")
+  out = stringBuilderAppend(out, intToString(structId))
+  out = stringBuilderAppend(out, ", i64 ")
+  out = stringBuilderAppend(out, intToString(field.operand1))
+  out = stringBuilderAppend(out, "
+")
+  if stringEquals(fieldType, "i32") {
+    out = stringBuilderAppend(out, "  %boxed.")
+    out = stringBuilderAppend(out, intToString(link.operand0))
+    out = stringBuilderAppend(out, " = inttoptr i32 ")
+    out = stringBuilderAppend(out, fieldValue)
+    out = stringBuilderAppend(out, " to ptr
+  store ptr %boxed.")
+    out = stringBuilderAppend(out, intToString(link.operand0))
+  } else {
+    out = stringBuilderAppend(out, "  store ptr ")
+    out = stringBuilderAppend(out, fieldValue)
+  }
+  out = stringBuilderAppend(out, ", ptr %field.")
+  out = stringBuilderAppend(out, intToString(link.operand0))
+  out = stringBuilderAppend(out, "
+")
+  return out
+}
+
+function typedIrHasElse(module: TypedIrModule, block: CompilerIrBlock, branchId: i32): bool {
+  let index = branchId + 1
+  while index < block.firstValue + block.valueCount do {
+    let value = irValueArenaGet(module.values, index)
+    if stringEquals(value.kind, "if.else") && value.operand0 == branchId {
+      return true
+    }
+    if stringEquals(value.kind, "if.end") && value.operand0 == branchId {
+      return false
+    }
+    index = index + 1
+  }
+  return false
+}
+
+function typedIrLoopEnd(module: TypedIrModule, block: CompilerIrBlock, valueId: i32): i32 {
+  let begin = valueId - 1
+  while begin >= block.firstValue do {
+    let candidate = irValueArenaGet(module.values, begin)
+    if stringEquals(candidate.kind, "while.begin") {
+      let end = valueId + 1
+      while end < block.firstValue + block.valueCount do {
+        let marker = irValueArenaGet(module.values, end)
+        if stringEquals(marker.kind, "while.end") && marker.operand0 == begin {
+          return begin
+        }
+        end = end + 1
+      }
+    }
+    begin = begin - 1
+  }
+  return -1
+}
+
+function emitTypedIrInstruction(out: string, module: TypedIrModule, block: CompilerIrBlock, valueId: i32): string {
+  let value = irValueArenaGet(module.values, valueId)
+
+  if stringEquals(value.kind, "BreakStatement") || stringEquals(value.kind, "ContinueStatement") {
+    let loop = typedIrLoopEnd(module, block, valueId)
+    if loop >= 0 {
+      if stringEquals(value.kind, "BreakStatement") {
+        out = stringBuilderAppend(out, "  br label %while.end.")
+      } else {
+        out = stringBuilderAppend(out, "  br label %while.cond.")
+      }
+      out = stringBuilderAppend(out, intToString(loop))
+      out = stringBuilderAppend(out, "
+after.control.")
+      out = stringBuilderAppend(out, intToString(valueId))
+      out = stringBuilderAppend(out, ":
+")
+    }
+    return out
+  }
+
+  if stringEquals(value.kind, "struct") {
+    out = stringBuilderAppend(out, "  %v.")
+    out = stringBuilderAppend(out, intToString(valueId))
+    out = stringBuilderAppend(out, " = call ptr @calloc(i64 ")
+    out = stringBuilderAppend(out, intToString(typedIrFieldCount(module)))
+    out = stringBuilderAppend(out, ", i64 8)
+")
+    return emitTypedStructFields(out, module, block, value.operand1, valueId)
+  }
+
+  if stringEquals(value.kind, "slice") {
+    let range = irValueArenaGet(module.values, value.operand1)
+    out = stringBuilderAppend(out, "  %v.")
+    out = stringBuilderAppend(out, intToString(valueId))
+    out = stringBuilderAppend(out, " = call ptr @lumen_string_slice(ptr ")
+    out = stringBuilderAppend(out, typedIrValueText(module, value.operand0))
+    out = stringBuilderAppend(out, ", i32 ")
+    out = stringBuilderAppend(out, typedIrValueText(module, range.operand0))
+    out = stringBuilderAppend(out, ", i32 ")
+    out = stringBuilderAppend(out, typedIrValueText(module, range.operand1))
+    out = stringBuilderAppend(out, ")
+")
+    return out
+  }
+
+  if stringEquals(value.kind, "member") {
+    let memberType = typedIrLLVMType(value.typeId)
+    out = stringBuilderAppend(out, "  %member.ptr.")
+    out = stringBuilderAppend(out, intToString(valueId))
+    out = stringBuilderAppend(out, " = getelementptr ptr, ptr ")
+    out = stringBuilderAppend(out, typedIrValueText(module, value.operand0))
+    out = stringBuilderAppend(out, ", i64 ")
+    out = stringBuilderAppend(out, intToString(value.operand1))
+    out = stringBuilderAppend(out, "
+  %member.raw.")
+    out = stringBuilderAppend(out, intToString(valueId))
+    out = stringBuilderAppend(out, " = load ptr, ptr %member.ptr.")
+    out = stringBuilderAppend(out, intToString(valueId))
+    out = stringBuilderAppend(out, "
+")
+    if stringEquals(memberType, "i32") {
+      out = stringBuilderAppend(out, "  %v.")
+      out = stringBuilderAppend(out, intToString(valueId))
+      out = stringBuilderAppend(out, " = ptrtoint ptr %member.raw.")
+      out = stringBuilderAppend(out, intToString(valueId))
+      out = stringBuilderAppend(out, " to i32
+")
+    } else {
+      out = stringBuilderAppend(out, "  %v.")
+      out = stringBuilderAppend(out, intToString(valueId))
+      out = stringBuilderAppend(out, " = getelementptr i8, ptr %member.raw.")
+      out = stringBuilderAppend(out, intToString(valueId))
+      out = stringBuilderAppend(out, ", i64 0
+")
+    }
+    return out
+  }
+
+  if stringEquals(value.kind, "if.begin") {
+    out = stringBuilderAppend(out, "  %if.cond.")
+    out = stringBuilderAppend(out, intToString(valueId))
+    out = stringBuilderAppend(out, " = icmp ne i32 ")
+    out = stringBuilderAppend(out, typedIrValueText(module, value.operand0))
+    out = stringBuilderAppend(out, ", 0
+  br i1 %if.cond.")
+    out = stringBuilderAppend(out, intToString(valueId))
+    out = stringBuilderAppend(out, ", label %if.then.")
+    out = stringBuilderAppend(out, intToString(valueId))
+    if typedIrHasElse(module, block, valueId) {
+      out = stringBuilderAppend(out, ", label %if.else.")
+    } else {
+      out = stringBuilderAppend(out, ", label %if.end.")
+    }
+    out = stringBuilderAppend(out, intToString(valueId))
+    out = stringBuilderAppend(out, "
+if.then.")
+    out = stringBuilderAppend(out, intToString(valueId))
+    out = stringBuilderAppend(out, ":
+")
+    return out
+  }
+
+  if stringEquals(value.kind, "if.else") {
+    out = stringBuilderAppend(out, "  br label %if.end.")
+    out = stringBuilderAppend(out, intToString(value.operand0))
+    out = stringBuilderAppend(out, "
+if.else.")
+    out = stringBuilderAppend(out, intToString(value.operand0))
+    out = stringBuilderAppend(out, ":
+")
+    return out
+  }
+
+  if stringEquals(value.kind, "if.end") {
+    out = stringBuilderAppend(out, "  br label %if.end.")
+    out = stringBuilderAppend(out, intToString(value.operand0))
+    out = stringBuilderAppend(out, "
+if.end.")
+    out = stringBuilderAppend(out, intToString(value.operand0))
+    out = stringBuilderAppend(out, ":
+")
+    return out
+  }
+
+  if stringEquals(value.kind, "while.begin") {
+    out = stringBuilderAppend(out, "  br label %while.cond.")
+    out = stringBuilderAppend(out, intToString(valueId))
+    out = stringBuilderAppend(out, "
+while.cond.")
+    out = stringBuilderAppend(out, intToString(valueId))
+    out = stringBuilderAppend(out, ":
+")
+    return out
+  }
+
+  if stringEquals(value.kind, "while.condition") {
+    out = stringBuilderAppend(out, "  %while.test.")
+    out = stringBuilderAppend(out, intToString(value.operand1))
+    out = stringBuilderAppend(out, " = icmp ne i32 ")
+    out = stringBuilderAppend(out, typedIrValueText(module, value.operand0))
+    out = stringBuilderAppend(out, ", 0
+  br i1 %while.test.")
+    out = stringBuilderAppend(out, intToString(value.operand1))
+    out = stringBuilderAppend(out, ", label %while.body.")
+    out = stringBuilderAppend(out, intToString(value.operand1))
+    out = stringBuilderAppend(out, ", label %while.end.")
+    out = stringBuilderAppend(out, intToString(value.operand1))
+    out = stringBuilderAppend(out, "
+while.body.")
+    out = stringBuilderAppend(out, intToString(value.operand1))
+    out = stringBuilderAppend(out, ":
+")
+    return out
+  }
+
+  if stringEquals(value.kind, "while.end") {
+    out = stringBuilderAppend(out, "  br label %while.cond.")
+    out = stringBuilderAppend(out, intToString(value.operand0))
+    out = stringBuilderAppend(out, "
+while.end.")
+    out = stringBuilderAppend(out, intToString(value.operand0))
+    out = stringBuilderAppend(out, ":
+")
+    return out
+  }
+
+  if stringEquals(value.kind, "load") {
+    if typedIrIsCallTarget(module, block, valueId) {
+      return out
+    }
+    out = stringBuilderAppend(out, "  %v.")
+    out = stringBuilderAppend(out, intToString(valueId))
+    let valueType = typedIrStorageType(module, block, value.text)
+    if typedIrIsParameter(module, block, value.text) {
+      if stringEquals(valueType, "ptr") {
+        out = stringBuilderAppend(out, " = getelementptr i8, ptr %")
+        out = stringBuilderAppend(out, value.text)
+        out = stringBuilderAppend(out, ", i64 0
+")
+      } else {
+        out = stringBuilderAppend(out, " = add i32 %")
+        out = stringBuilderAppend(out, value.text)
+        out = stringBuilderAppend(out, ", 0
+")
+      }
+      return out
+    }
+    out = stringBuilderAppend(out, " = load ")
+    out = stringBuilderAppend(out, valueType)
+    out = stringBuilderAppend(out, ", ptr %")
+    out = stringBuilderAppend(out, value.text)
+    out = stringBuilderAppend(out, ".addr
+")
+    return out
+  }
+
+  if stringEquals(value.kind, "local") {
+    let valueType = typedIrValueType(module, block, value.operand0)
+    out = stringBuilderAppend(out, "  %")
+    out = stringBuilderAppend(out, value.text)
+    out = stringBuilderAppend(out, ".addr = alloca ")
+    out = stringBuilderAppend(out, valueType)
+    out = stringBuilderAppend(out, "
+")
+    out = stringBuilderAppend(out, "  store ")
+    out = stringBuilderAppend(out, valueType)
+    out = stringBuilderAppend(out, " ")
+    out = stringBuilderAppend(out, typedIrValueText(module, value.operand0))
+    out = stringBuilderAppend(out, ", ptr %")
+    out = stringBuilderAppend(out, value.text)
+    out = stringBuilderAppend(out, ".addr
+")
+    return out
+  }
+
+  if includes(value.kind, "binary.") {
+    let predicate = ""
+    if stringEquals(value.kind, "binary.==") {
+      predicate = "eq"
+    } else if stringEquals(value.kind, "binary.!=") {
+      predicate = "ne"
+    } else if stringEquals(value.kind, "binary.<") {
+      predicate = "slt"
+    } else if stringEquals(value.kind, "binary.<=") {
+      predicate = "sle"
+    } else if stringEquals(value.kind, "binary.>") {
+      predicate = "sgt"
+    } else if stringEquals(value.kind, "binary.>=") {
+      predicate = "sge"
+    }
+    if !stringEquals(predicate, "") {
+      out = stringBuilderAppend(out, "  %cmp.")
+      out = stringBuilderAppend(out, intToString(valueId))
+      out = stringBuilderAppend(out, " = icmp ")
+      out = stringBuilderAppend(out, predicate)
+      out = stringBuilderAppend(out, " i32 ")
+      out = stringBuilderAppend(out, typedIrValueText(module, value.operand0))
+      out = stringBuilderAppend(out, ", ")
+      out = stringBuilderAppend(out, typedIrValueText(module, value.operand1))
+      out = stringBuilderAppend(out, "
+  %v.")
+      out = stringBuilderAppend(out, intToString(valueId))
+      out = stringBuilderAppend(out, " = zext i1 %cmp.")
+      out = stringBuilderAppend(out, intToString(valueId))
+      out = stringBuilderAppend(out, " to i32
+")
+      return out
+    }
+    let opcode = "add"
+    if stringEquals(value.kind, "binary.-") {
+      opcode = "sub"
+    } else if stringEquals(value.kind, "binary.*") {
+      opcode = "mul"
+    } else if stringEquals(value.kind, "binary./") {
+      opcode = "sdiv"
+    } else if stringEquals(value.kind, "binary.&&") {
+      opcode = "and"
+    } else if stringEquals(value.kind, "binary.||") {
+      opcode = "or"
+    }
+    out = stringBuilderAppend(out, "  %v.")
+    out = stringBuilderAppend(out, intToString(valueId))
+    out = stringBuilderAppend(out, " = ")
+    out = stringBuilderAppend(out, opcode)
+    out = stringBuilderAppend(out, " i32 ")
+    out = stringBuilderAppend(out, typedIrValueText(module, value.operand0))
+    out = stringBuilderAppend(out, ", ")
+    out = stringBuilderAppend(out, typedIrValueText(module, value.operand1))
+    out = stringBuilderAppend(out, "
+")
+    return out
+  }
+
+  if includes(value.kind, "unary.") {
+    if stringEquals(value.kind, "unary.!") {
+      out = stringBuilderAppend(out, "  %unary.test.")
+      out = stringBuilderAppend(out, intToString(valueId))
+      out = stringBuilderAppend(out, " = icmp eq i32 ")
+      out = stringBuilderAppend(out, typedIrValueText(module, value.operand0))
+      out = stringBuilderAppend(out, ", 0
+  %v.")
+      out = stringBuilderAppend(out, intToString(valueId))
+      out = stringBuilderAppend(out, " = zext i1 %unary.test.")
+      out = stringBuilderAppend(out, intToString(valueId))
+      out = stringBuilderAppend(out, " to i32
+")
+      return out
+    }
+    out = stringBuilderAppend(out, "  %v.")
+    out = stringBuilderAppend(out, intToString(valueId))
+    if stringEquals(value.kind, "unary.-") {
+      out = stringBuilderAppend(out, " = sub i32 0, ")
+    } else {
+      out = stringBuilderAppend(out, " = add i32 0, ")
+    }
+    out = stringBuilderAppend(out, typedIrValueText(module, value.operand0))
+    out = stringBuilderAppend(out, "
+")
+    return out
+  }
+
+  if includes(value.kind, "call.") {
+    if stringEquals(value.text, "println") {
+      let argument = irValueArenaGet(module.values, value.operand1)
+      let argumentType = typedIrValueType(module, block, argument.operand0)
+      out = stringBuilderAppend(out, "  call i32 (ptr, ...) @printf(ptr ")
+      if stringEquals(argumentType, "ptr") {
+        out = stringBuilderAppend(out, "getelementptr inbounds ([4 x i8], ptr @.typed.fmt.str, i64 0, i64 0), ptr ")
+      } else {
+        out = stringBuilderAppend(out, "getelementptr inbounds ([4 x i8], ptr @.typed.fmt.int, i64 0, i64 0), i32 ")
+      }
+      out = stringBuilderAppend(out, typedIrValueText(module, argument.operand0))
+      out = stringBuilderAppend(out, ")
+")
+      return out
+    }
+    let builtin = typedIrBuiltinSymbol(value.text)
+    if !stringEquals(builtin, "") {
+      let rawType = typedIrLLVMType(value.typeId)
+      if stringEquals(value.text, "isOk") || stringEquals(value.text, "stringEquals") ||
+        stringEquals(value.text, "includes") || stringEquals(value.text, "mapHas") {
+        rawType = "i1"
+      } else if stringEquals(value.text, "resultValue") {
+        rawType = "ptr"
+      }
+      if !stringEquals(rawType, "void") {
+        if stringEquals(rawType, "i1") ||
+          (stringEquals(value.text, "resultValue") && value.typeId == 0) {
+          out = stringBuilderAppend(out, "  %raw.")
+        } else {
+          out = stringBuilderAppend(out, "  %v.")
+        }
+        out = stringBuilderAppend(out, intToString(valueId))
+        out = stringBuilderAppend(out, " = ")
+      } else {
+        out = stringBuilderAppend(out, "  ")
+      }
+      out = stringBuilderAppend(out, "call ")
+      out = stringBuilderAppend(out, rawType)
+      out = stringBuilderAppend(out, " @")
+      out = stringBuilderAppend(out, builtin)
+      out = stringBuilderAppend(out, "(")
+      if stringEquals(value.text, "map") {
+        out = stringBuilderAppend(out, "i32 ")
+        out = stringBuilderAppend(out, intToString(typedIrArgumentCount(module, value.operand1)))
+        if value.operand1 >= 0 {
+          out = stringBuilderAppend(out, ", ")
+        }
+      }
+      out = emitTypedIrArguments(out, module, block, value.operand1)
+      out = stringBuilderAppend(out, ")
+")
+      if stringEquals(rawType, "i1") {
+        out = stringBuilderAppend(out, "  %v.")
+        out = stringBuilderAppend(out, intToString(valueId))
+        out = stringBuilderAppend(out, " = zext i1 %raw.")
+        out = stringBuilderAppend(out, intToString(valueId))
+        out = stringBuilderAppend(out, " to i32
+")
+      } else if stringEquals(value.text, "resultValue") && value.typeId == 0 {
+        out = stringBuilderAppend(out, "  %v.")
+        out = stringBuilderAppend(out, intToString(valueId))
+        out = stringBuilderAppend(out, " = ptrtoint ptr %raw.")
+        out = stringBuilderAppend(out, intToString(valueId))
+        out = stringBuilderAppend(out, " to i32
+")
+      }
+      return out
+    }
+    out = stringBuilderAppend(out, "  %v.")
+    out = stringBuilderAppend(out, intToString(valueId))
+    out = stringBuilderAppend(out, " = call ")
+    out = stringBuilderAppend(out, typedIrFunctionReturnType(module, value.text))
+    out = stringBuilderAppend(out, " @")
+    out = stringBuilderAppend(out, value.text)
+    out = stringBuilderAppend(out, "(")
+    out = emitTypedIrArguments(out, module, block, value.operand1)
+    out = stringBuilderAppend(out, ")
+")
+    return out
+  }
+
+  if includes(value.kind, "assign.") {
+    let target = irValueArenaGet(module.values, value.operand0)
+    let assignedValue = typedIrValueText(module, value.operand1)
+    if stringEquals(value.kind, "assign.++") || stringEquals(value.kind, "assign.--") {
+      out = stringBuilderAppend(out, "  %assign.next.")
+      out = stringBuilderAppend(out, intToString(valueId))
+      if stringEquals(value.kind, "assign.++") {
+        out = stringBuilderAppend(out, " = add i32 ")
+      } else {
+        out = stringBuilderAppend(out, " = sub i32 ")
+      }
+      out = stringBuilderAppend(out, typedIrValueText(module, value.operand0))
+      out = stringBuilderAppend(out, ", 1
+")
+      assignedValue = "%assign.next." + intToString(valueId)
+    }
+    if stringEquals(target.kind, "load") && !typedIrIsParameter(module, block, target.text) {
+      let valueType = typedIrStorageType(module, block, target.text)
+      out = stringBuilderAppend(out, "  store ")
+      out = stringBuilderAppend(out, valueType)
+      out = stringBuilderAppend(out, " ")
+      out = stringBuilderAppend(out, assignedValue)
+      out = stringBuilderAppend(out, ", ptr %")
+      out = stringBuilderAppend(out, target.text)
+      out = stringBuilderAppend(out, ".addr
+")
+    } else if stringEquals(target.kind, "member") {
+      let valueType = typedIrValueType(module, block, value.operand1)
+      out = stringBuilderAppend(out, "  %assign.field.")
+      out = stringBuilderAppend(out, intToString(valueId))
+      out = stringBuilderAppend(out, " = getelementptr ptr, ptr ")
+      out = stringBuilderAppend(out, typedIrValueText(module, target.operand0))
+      out = stringBuilderAppend(out, ", i64 ")
+      out = stringBuilderAppend(out, intToString(target.operand1))
+      out = stringBuilderAppend(out, "
+")
+      if stringEquals(valueType, "i32") {
+        out = stringBuilderAppend(out, "  %assign.boxed.")
+        out = stringBuilderAppend(out, intToString(valueId))
+        out = stringBuilderAppend(out, " = inttoptr i32 ")
+        out = stringBuilderAppend(out, assignedValue)
+        out = stringBuilderAppend(out, " to ptr
+  store ptr %assign.boxed.")
+        out = stringBuilderAppend(out, intToString(valueId))
+      } else {
+        out = stringBuilderAppend(out, "  store ptr ")
+        out = stringBuilderAppend(out, assignedValue)
+      }
+      out = stringBuilderAppend(out, ", ptr %assign.field.")
+      out = stringBuilderAppend(out, intToString(valueId))
+      out = stringBuilderAppend(out, "
+")
+    }
+  }
+
+  return out
+}
+
+// One typed function is emitted at a time. The first slice intentionally has
+// no syntax or program-map dependency: it accepts only typed return values.
+function emitTypedIrFunction(module: TypedIrModule, functionIndex: i32): string {
+  let fn = irFunctionArenaGet(module.functions, functionIndex)
+  let block = irBlockArenaGet(module.blocks, fn.firstBlock)
+  let returnValue = "0"
+  let valueIndex = block.firstValue
+
+  while valueIndex < block.firstValue + block.valueCount do {
+    let value = irValueArenaGet(module.values, valueIndex)
+    if stringEquals(value.kind, "return") {
+      returnValue = typedIrValueText(module, value.operand0)
+    }
+    valueIndex = valueIndex + 1
+  }
+
+  let out = stringBuilder()
+  out = stringBuilderAppend(out, "define ")
+  out = stringBuilderAppend(out, typedIrFunctionReturnType(module, fn.name))
+  out = stringBuilderAppend(out, " @")
+  out = stringBuilderAppend(out, fn.name)
+  out = stringBuilderAppend(out, "(")
+  valueIndex = block.firstValue
+  let parameterCount: i32 = 0
+  while valueIndex < block.firstValue + block.valueCount do {
+    let value = irValueArenaGet(module.values, valueIndex)
+    if stringEquals(value.kind, "param") {
+      if parameterCount > 0 {
+        out = stringBuilderAppend(out, ", ")
+      }
+      out = stringBuilderAppend(out, typedIrLLVMType(value.typeId))
+      out = stringBuilderAppend(out, " %")
+      out = stringBuilderAppend(out, value.text)
+      parameterCount = parameterCount + 1
+    }
+    valueIndex = valueIndex + 1
+  }
+  out = stringBuilderAppend(out, ") {
+entry:
+")
+  valueIndex = block.firstValue
+  while valueIndex < block.firstValue + block.valueCount do {
+    out = emitTypedIrInstruction(out, module, block, valueIndex)
+    valueIndex = valueIndex + 1
+  }
+  out = stringBuilderAppend(out, "  ret ")
+  out = stringBuilderAppend(out, typedIrFunctionReturnType(module, fn.name))
+  out = stringBuilderAppend(out, " ")
+  out = stringBuilderAppend(out, returnValue)
+  out = stringBuilderAppend(out, "
+}
+")
+  return out
+}
+
+function emitTypedIr(module: TypedIrModule): string {
+  let out = stringBuilder()
+  out = stringBuilderAppend(out, "; Lumen self-host LLVM IR
+")
+  let usesPrint: bool = false
+  let valueIndex: i32 = 0
+  while valueIndex < module.values.count do {
+    let value = irValueArenaGet(module.values, valueIndex)
+    if stringEquals(value.kind, "literal") && value.typeId == 1 {
+      let size = stringLen(value.text) + 1
+      out = stringBuilderAppend(out, "@.typed.str.")
+      out = stringBuilderAppend(out, intToString(valueIndex))
+      out = stringBuilderAppend(out, " = private unnamed_addr constant [")
+      out = stringBuilderAppend(out, intToString(size))
+      out = stringBuilderAppend(out, ' x i8] c"')
+      out = stringBuilderAppend(out, typedIrEscapeString(value.text))
+      out = stringBuilderAppend(out, '\00"
+')
+    }
+    if includes(value.kind, "call.") && stringEquals(value.text, "println") {
+      usesPrint = true
+    }
+    valueIndex = valueIndex + 1
+  }
+  if usesPrint {
+    out = stringBuilderAppend(out, '@.typed.fmt.str = private unnamed_addr constant [4 x i8] c"%s\0A\00"
+')
+    out = stringBuilderAppend(out, '@.typed.fmt.int = private unnamed_addr constant [4 x i8] c"%d\0A\00"
+')
+    out = stringBuilderAppend(out, "declare i32 @printf(ptr, ...)
+")
+  }
+  out = stringBuilderAppend(out, "declare i1 @lumen_string_contains(ptr, ptr)
+declare ptr @calloc(i64, i64)
+declare ptr @lumen_string_slice(ptr, i32, i32)
+declare ptr @lumen_int_to_string(i32)
+declare i1 @lumen_string_equals(ptr, ptr)
+declare i32 @lumen_string_len(ptr)
+declare i32 @lumen_string_to_int(ptr)
+declare ptr @lumen_string_builder()
+declare ptr @lumen_string_builder_append(ptr, ptr)
+declare ptr @lumen_arg(i32)
+declare ptr @lumen_arg_count()
+declare ptr @lumen_error_message(ptr)
+declare i1 @lumen_is_ok(ptr)
+declare ptr @lumen_result_value(ptr)
+declare ptr @lumen_json(ptr)
+declare ptr @lumen_json_get(ptr, ptr)
+declare ptr @lumen_json_get_raw(ptr, ptr)
+declare ptr @lumen_list()
+declare ptr @lumen_list_get(ptr, i32)
+declare i32 @lumen_list_len(ptr)
+declare ptr @lumen_list_push(ptr, ptr)
+declare ptr @lumen_map(i32, ...)
+declare ptr @lumen_map_get(ptr, ptr)
+declare i1 @lumen_map_has(ptr, ptr)
+declare ptr @lumen_map_set(ptr, ptr, ptr)
+declare ptr @lumen_arena_new()
+declare i32 @lumen_arena_append(ptr)
+declare i32 @lumen_arena_len(ptr)
+declare void @lumen_arena_set_string(ptr, i32, i32, ptr)
+declare void @lumen_arena_set_i32(ptr, i32, i32, i32)
+declare ptr @lumen_arena_get_string(ptr, i32, i32)
+declare i32 @lumen_arena_get_i32(ptr, i32, i32)
+declare ptr @lumen_read_file(ptr)
+declare ptr @lumen_write_file(ptr, ptr)
+")
+  let functionIndex: i32 = 0
+
+  while functionIndex < module.functions.count do {
+    out = stringBuilderAppend(out, emitTypedIrFunction(module, functionIndex))
+    functionIndex = functionIndex + 1
+  }
+
+  return out
 }
 
 function statementPrefix(index: i32): string {
@@ -27,6 +1034,19 @@ function callValueName(slot: string): string {
   out = stringBuilderAppend(out, "%call.")
   out = stringBuilderAppend(out, slot)
   return out
+}
+
+// The compatibility emitter only knows numeric SSA values. Never put an AST
+// name into LLVM where an i32 value is required while typed lowering takes
+// over that expression family.
+function llvmI32Atom(value: string): string {
+  if includes(value, "%") {
+    return value
+  }
+  if stringEquals(value, intToString(stringToInt(value))) {
+    return value
+  }
+  return "0"
 }
 
 function statementAt(ir: IrModule, program: string, index: i32): IrStatement {
@@ -511,6 +1531,34 @@ function emitStatementMainIr(ir: IrModule, program: string): string {
 
   out = stringBuilderAppend(out, "declare i32 @printf(ptr, ...)
 ")
+  out = stringBuilderAppend(out, "declare ptr @lumen_arg_count()
+")
+  out = stringBuilderAppend(out, "declare ptr @lumen_arg(i32)
+")
+  out = stringBuilderAppend(out, "declare ptr @lumen_result_value(ptr)
+")
+  out = stringBuilderAppend(out, "define i32 @argCount() {
+entry:
+  %raw = call ptr @lumen_arg_count()
+  %value = ptrtoint ptr %raw to i32
+  ret i32 %value
+}
+")
+  out = stringBuilderAppend(out, "define i32 @arg(i32 %index) {
+entry:
+  %raw = call ptr @lumen_arg(i32 %index)
+  %value = ptrtoint ptr %raw to i32
+  ret i32 %value
+}
+")
+  out = stringBuilderAppend(out, "define i32 @resultValue(i32 %result) {
+entry:
+  %raw = inttoptr i32 %result to ptr
+  %value = call ptr @lumen_result_value(ptr %raw)
+  %number = ptrtoint ptr %value to i32
+  ret i32 %number
+}
+")
   out = stringBuilderAppend(out, "define i32 @main() {
 ")
   out = stringBuilderAppend(out, "entry:
@@ -541,7 +1589,7 @@ function emitStatementMainIr(ir: IrModule, program: string): string {
   }
 
   out = stringBuilderAppend(out, "  ret i32 ")
-  out = stringBuilderAppend(out, returnValue)
+  out = stringBuilderAppend(out, llvmI32Atom(returnValue))
   out = stringBuilderAppend(out, "
 }
 ")
@@ -628,7 +1676,7 @@ function emitStatementMain(program: string): string {
   }
 
   out = stringBuilderAppend(out, "  ret i32 ")
-  out = stringBuilderAppend(out, returnValue)
+  out = stringBuilderAppend(out, llvmI32Atom(returnValue))
   out = stringBuilderAppend(out, "
 }
 ")
@@ -1589,6 +2637,10 @@ function emitIfStatement(out: string, slot: string, program: string, symbols: st
   let rightValue = mapGet(program, prefix + "ExprRightValue")
   let leftValue = mapGet(symbols, leftName + "Value")
 
+  if stringEquals(leftValue, "") || stringEquals(rightValue, "") {
+    return out
+  }
+
   out = stringBuilderAppend(out, "  %if.cond.")
   out = stringBuilderAppend(out, slot)
   out = stringBuilderAppend(out, " = icmp eq i32 ")
@@ -1626,6 +2678,10 @@ function emitIfStatementIr(out: string, slot: string, symbols: string, statement
   let leftName = statement.expressionLeftValue
   let rightValue = statement.expressionRightValue
   let leftValue = mapGet(symbols, leftName + "Value")
+
+  if stringEquals(leftValue, "") || stringEquals(rightValue, "") {
+    return out
+  }
 
   out = stringBuilderAppend(out, "  %if.cond.")
   out = stringBuilderAppend(out, slot)
