@@ -106,6 +106,18 @@ function typedIrStorageId(module: TypedIrModule, block: CompilerIrBlock, valueId
   return -1
 }
 
+function typedIrParameterId(module: TypedIrModule, block: CompilerIrBlock, name: string): i32 {
+  let index = block.firstValue
+  while index < block.firstValue + block.valueCount do {
+    let value = irValueArenaGet(module.values, index)
+    if stringEquals(value.kind, "param") && stringEquals(value.text, name) {
+      return index
+    }
+    index = index + 1
+  }
+  return -1
+}
+
 function typedIrFunctionReturnType(module: TypedIrModule, name: string): string {
   let index: i32 = 0
   while index < module.functions.count do {
@@ -621,6 +633,21 @@ while.end.")
     return out
   }
 
+  if stringEquals(value.kind, "return") {
+    let valueType = typedIrValueType(module, block, value.operand0)
+    out = stringBuilderAppend(out, "  store ")
+    out = stringBuilderAppend(out, valueType)
+    out = stringBuilderAppend(out, " ")
+    out = stringBuilderAppend(out, typedIrValueText(module, value.operand0))
+    out = stringBuilderAppend(out, ", ptr %return.addr
+  br label %function.return
+after.return.")
+    out = stringBuilderAppend(out, intToString(valueId))
+    out = stringBuilderAppend(out, ":
+")
+    return out
+  }
+
   if stringEquals(value.kind, "load") {
     if typedIrIsCallTarget(module, block, valueId) {
       return out
@@ -629,17 +656,12 @@ while.end.")
     out = stringBuilderAppend(out, intToString(valueId))
     let valueType = typedIrStorageType(module, block, value.text)
     if typedIrIsParameter(module, block, value.text) {
-      if stringEquals(valueType, "ptr") {
-        out = stringBuilderAppend(out, " = getelementptr i8, ptr %")
-        out = stringBuilderAppend(out, value.text)
-        out = stringBuilderAppend(out, ", i64 0
+      out = stringBuilderAppend(out, " = load ")
+      out = stringBuilderAppend(out, valueType)
+      out = stringBuilderAppend(out, ", ptr %param.")
+      out = stringBuilderAppend(out, intToString(typedIrParameterId(module, block, value.text)))
+      out = stringBuilderAppend(out, ".addr
 ")
-      } else {
-        out = stringBuilderAppend(out, " = add i32 %")
-        out = stringBuilderAppend(out, value.text)
-        out = stringBuilderAppend(out, ", 0
-")
-      }
       return out
     }
     out = stringBuilderAppend(out, " = load ")
@@ -848,9 +870,9 @@ while.end.")
       } else if stringEquals(value.text, "resultValue") && value.typeId == 0 {
         out = stringBuilderAppend(out, "  %v.")
         out = stringBuilderAppend(out, intToString(valueId))
-        out = stringBuilderAppend(out, " = ptrtoint ptr %raw.")
+        out = stringBuilderAppend(out, " = call i32 @lumen_string_to_int(ptr %raw.")
         out = stringBuilderAppend(out, intToString(valueId))
-        out = stringBuilderAppend(out, " to i32
+        out = stringBuilderAppend(out, ")
 ")
       }
       return out
@@ -884,16 +906,23 @@ while.end.")
 ")
       assignedValue = "%assign.next." + intToString(valueId)
     }
-    if stringEquals(target.kind, "load") && !typedIrIsParameter(module, block, target.text) {
+    if stringEquals(target.kind, "load") {
       let valueType = typedIrStorageType(module, block, target.text)
       out = stringBuilderAppend(out, "  store ")
       out = stringBuilderAppend(out, valueType)
       out = stringBuilderAppend(out, " ")
       out = stringBuilderAppend(out, assignedValue)
-      out = stringBuilderAppend(out, ", ptr %local.")
-      out = stringBuilderAppend(out, intToString(typedIrStorageId(module, block, value.operand0, target.text)))
-      out = stringBuilderAppend(out, ".addr
+      if typedIrIsParameter(module, block, target.text) {
+        out = stringBuilderAppend(out, ", ptr %param.")
+        out = stringBuilderAppend(out, intToString(typedIrParameterId(module, block, target.text)))
+        out = stringBuilderAppend(out, ".addr
 ")
+      } else {
+        out = stringBuilderAppend(out, ", ptr %local.")
+        out = stringBuilderAppend(out, intToString(typedIrStorageId(module, block, value.operand0, target.text)))
+        out = stringBuilderAppend(out, ".addr
+")
+      }
     } else if stringEquals(target.kind, "member") {
       let valueType = typedIrValueType(module, block, value.operand1)
       out = stringBuilderAppend(out, "  %assign.field.")
@@ -930,13 +959,31 @@ function emitTypedIrLocalStorage(out: string, module: TypedIrModule, block: Comp
   let valueIndex = block.firstValue
   while valueIndex < block.firstValue + block.valueCount do {
     let value = irValueArenaGet(module.values, valueIndex)
-    if stringEquals(value.kind, "local") {
-      out = stringBuilderAppend(out, "  %local.")
+    if stringEquals(value.kind, "param") || stringEquals(value.kind, "local") {
+      if stringEquals(value.kind, "param") {
+        out = stringBuilderAppend(out, "  %param.")
+      } else {
+        out = stringBuilderAppend(out, "  %local.")
+      }
       out = stringBuilderAppend(out, intToString(valueIndex))
       out = stringBuilderAppend(out, ".addr = alloca ")
-      out = stringBuilderAppend(out, typedIrValueType(module, block, value.operand0))
+      if stringEquals(value.kind, "param") {
+        out = stringBuilderAppend(out, typedIrLLVMType(value.typeId))
+      } else {
+        out = stringBuilderAppend(out, typedIrValueType(module, block, value.operand0))
+      }
       out = stringBuilderAppend(out, "
 ")
+      if stringEquals(value.kind, "param") {
+        out = stringBuilderAppend(out, "  store ")
+        out = stringBuilderAppend(out, typedIrLLVMType(value.typeId))
+        out = stringBuilderAppend(out, " %")
+        out = stringBuilderAppend(out, value.text)
+        out = stringBuilderAppend(out, ", ptr %param.")
+        out = stringBuilderAppend(out, intToString(valueIndex))
+        out = stringBuilderAppend(out, ".addr
+")
+      }
     }
     valueIndex = valueIndex + 1
   }
@@ -948,24 +995,15 @@ function emitTypedIrLocalStorage(out: string, module: TypedIrModule, block: Comp
 function emitTypedIrFunction(module: TypedIrModule, functionIndex: i32): string {
   let fn = irFunctionArenaGet(module.functions, functionIndex)
   let block = irBlockArenaGet(module.blocks, fn.firstBlock)
-  let returnValue = "0"
-  let valueIndex = block.firstValue
-
-  while valueIndex < block.firstValue + block.valueCount do {
-    let value = irValueArenaGet(module.values, valueIndex)
-    if stringEquals(value.kind, "return") {
-      returnValue = typedIrValueText(module, value.operand0)
-    }
-    valueIndex = valueIndex + 1
-  }
+  let returnType = typedIrFunctionReturnType(module, fn.name)
 
   let out = stringBuilder()
   out = stringBuilderAppend(out, "define ")
-  out = stringBuilderAppend(out, typedIrFunctionReturnType(module, fn.name))
+  out = stringBuilderAppend(out, returnType)
   out = stringBuilderAppend(out, " @")
   out = stringBuilderAppend(out, fn.name)
   out = stringBuilderAppend(out, "(")
-  valueIndex = block.firstValue
+  let valueIndex = block.firstValue
   let parameterCount: i32 = 0
   while valueIndex < block.firstValue + block.valueCount do {
     let value = irValueArenaGet(module.values, valueIndex)
@@ -983,16 +1021,32 @@ function emitTypedIrFunction(module: TypedIrModule, functionIndex: i32): string 
   out = stringBuilderAppend(out, ") {
 entry:
 ")
+  out = stringBuilderAppend(out, "  %return.addr = alloca ")
+  out = stringBuilderAppend(out, returnType)
+  out = stringBuilderAppend(out, "
+")
+  if stringEquals(returnType, "i32") {
+    out = stringBuilderAppend(out, "  store i32 0, ptr %return.addr
+")
+  } else if stringEquals(returnType, "ptr") {
+    out = stringBuilderAppend(out, "  store ptr null, ptr %return.addr
+")
+  }
   out = emitTypedIrLocalStorage(out, module, block)
   valueIndex = block.firstValue
   while valueIndex < block.firstValue + block.valueCount do {
     out = emitTypedIrInstruction(out, module, block, valueIndex)
     valueIndex = valueIndex + 1
   }
-  out = stringBuilderAppend(out, "  ret ")
-  out = stringBuilderAppend(out, typedIrFunctionReturnType(module, fn.name))
+  out = stringBuilderAppend(out, "  br label %function.return
+function.return:
+  %return.value = load ")
+  out = stringBuilderAppend(out, returnType)
+  out = stringBuilderAppend(out, ", ptr %return.addr
+  ret ")
+  out = stringBuilderAppend(out, returnType)
   out = stringBuilderAppend(out, " ")
-  out = stringBuilderAppend(out, returnValue)
+  out = stringBuilderAppend(out, "%return.value")
   out = stringBuilderAppend(out, "
 }
 ")

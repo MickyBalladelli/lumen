@@ -1269,6 +1269,16 @@ function astParseExpressionNode(program: AstProgram, tokens: TokenArena, start: 
   }
 
   let first = tokenValue(tokenArenaGet(tokens, start))
+  let token = tokenArenaGet(tokens, start)
+  if stringEquals(token.kind, "number") || stringEquals(token.kind, "string") ||
+    stringEquals(first, "true") || stringEquals(first, "false") ||
+    stringEquals(first, "null") {
+    let literal = astNodeSpec("LiteralExpression", start, end)
+    literal.value = tokenValue(token)
+    literal.text = astTokenText(tokens, start, end)
+    return astAdd(program, tokens, parent, literal)
+  }
+
   if stringEquals(first, "!") || stringEquals(first, "-") || stringEquals(first, "+") {
     let spec = astNodeSpec("UnaryExpression", start, end)
     spec.operator = first
@@ -1397,16 +1407,6 @@ function astParseExpressionNode(program: AstProgram, tokens: TokenArena, start: 
     let memberId = program.lastNode
     program = astParseExpressionNode(program, tokens, start, dot - 1, memberId)
     return astAddIdentifier(program, tokens, memberId, dot + 1)
-  }
-
-  let token = tokenArenaGet(tokens, start)
-  if stringEquals(token.kind, "number") || stringEquals(token.kind, "string") ||
-    stringEquals(first, "true") || stringEquals(first, "false") ||
-    stringEquals(first, "null") {
-    let literal = astNodeSpec("LiteralExpression", start, end)
-    literal.value = tokenValue(token)
-    literal.text = astTokenText(tokens, start, end)
-    return astAdd(program, tokens, parent, literal)
   }
 
   let identifier = astNodeSpec("IdentifierExpression", start, end)

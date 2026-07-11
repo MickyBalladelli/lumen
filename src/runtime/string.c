@@ -24,10 +24,12 @@ char *lumen_string_builder_append(const char *builder, const char *value) {
 }
 
 int lumen_string_len(const char *value) {
+  if ((uintptr_t)value < 4096) return 0;
   return (int)strlen(value);
 }
 
 _Bool lumen_string_equals(const char *left, const char *right) {
+  if ((uintptr_t)left < 4096 || (uintptr_t)right < 4096) return 0;
   return strcmp(left, right) == 0;
 }
 
@@ -147,6 +149,7 @@ int lumen_string_last_index_of(const char *value, const char *needle) {
 }
 
 _Bool lumen_string_contains(const char *value, const char *needle) {
+  if ((uintptr_t)value < 4096 || (uintptr_t)needle < 4096) return 0;
   return strstr(value, needle) != NULL;
 }
 
