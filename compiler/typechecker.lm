@@ -1,4 +1,5 @@
 import { AstProgram } from "./ast.lm"
+import { compilerAbiParameter, compilerAbiSignature } from "./abi.lm"
 import { CompilerToken, TokenArena, tokenArenaGet } from "./containers.lm"
 import { typeArrayElement, typeCanAssign, typeCanCompare, typeIsArray, typeIsNullable, typeIsNumeric, typeIsResult, typeIsTask, typeNonNullable, typeResultValue, typeTaskValue, typeWidest } from "./types.lm"
 
@@ -442,8 +443,17 @@ function inferCallType(
   let cursor = open + 1
   let argumentCount: i32 = 0
   let expectedCount: i32 = -1
+  let minimumCount: i32 = -1
+  let maximumCount: i32 = -1
+  let signature = compilerAbiSignature(name)
   if mapHas(functions, functionCountKey(name)) {
     expectedCount = stringToInt(mapGet(functions, functionCountKey(name)))
+    minimumCount = expectedCount
+    maximumCount = expectedCount
+  } else if signature.found {
+    expectedCount = signature.parameterCount
+    minimumCount = signature.minArity
+    maximumCount = signature.maxArity
   }
 
   while cursor < close do {
@@ -462,8 +472,13 @@ function inferCallType(
     if !actual.ok {
       return actual
     }
-    if expectedCount >= 0 && argumentCount < expectedCount {
-      let expected = mapGet(functions, functionParamKey(name, argumentCount))
+    if expectedCount >= 0 && (argumentCount < expectedCount || signature.variadic) {
+      let expected = "unknown"
+      if signature.found {
+        expected = compilerAbiParameter(signature, argumentCount)
+      } else {
+        expected = mapGet(functions, functionParamKey(name, argumentCount))
+      }
       if !typeCanAssign(actual.typeName, expected) {
         return typeValueError(
           "compile error: cannot pass " + actual.typeName + " to " + expected,
@@ -479,7 +494,10 @@ function inferCallType(
     }
   }
 
-  if expectedCount >= 0 && argumentCount != expectedCount {
+  if minimumCount >= 0 && argumentCount < minimumCount {
+    return typeValueError("compile error: invalid call to " + name, start)
+  }
+  if maximumCount >= 0 && argumentCount > maximumCount {
     return typeValueError("compile error: invalid call to " + name, start)
   }
 
@@ -591,6 +609,9 @@ function inferCallType(
 
   if mapHas(functions, functionReturnKey(name)) {
     return typeValue(mapGet(functions, functionReturnKey(name)))
+  }
+  if signature.found {
+    return typeValue(signature.returnType)
   }
   return typeValue("unknown")
 }

@@ -1,4 +1,5 @@
 import { AstProgram, astChildAt, astNodeAt } from "./ast.lm"
+import { compilerAbiSignature } from "./abi.lm"
 import { CompilerIrBlock, CompilerIrFunction, CompilerIrValue, IrBlockArena, IrFunctionArena, IrValueArena, irBlockArena, irBlockArenaGet, irBlockArenaPush, irFunctionArena, irFunctionArenaGet, irFunctionArenaPush, irValueArena, irValueArenaGet, irValueArenaPush, tokenArenaGet } from "./containers.lm"
 import { astToProgram } from "./parser.lm"
 
@@ -156,14 +157,6 @@ function typedIrCallTypeId(module: TypedIrModule, name: string, arguments: i32):
     functionIndex = functionIndex + 1
   }
 
-  if stringEquals(name, "writeFile") || stringEquals(name, "argCount") {
-    return 2
-  }
-  if stringEquals(name, "arg") || stringEquals(name, "readFile") ||
-    stringEquals(name, "json") || stringEquals(name, "jsonGet") ||
-    stringEquals(name, "jsonGetRaw") {
-    return 3
-  }
   if stringEquals(name, "resultValue") && arguments >= 0 {
     let argument = irValueArenaGet(module.values, arguments)
     let source = irValueArenaGet(module.values, argument.operand0)
@@ -172,15 +165,9 @@ function typedIrCallTypeId(module: TypedIrModule, name: string, arguments: i32):
     }
     return 1
   }
-  if stringEquals(name, "arenaSetString") || stringEquals(name, "arenaSetI32") {
-    return 4
-  }
-  if stringEquals(name, "arenaAppend") || stringEquals(name, "arenaLen") ||
-    stringEquals(name, "arenaGetI32") || stringEquals(name, "stringLen") ||
-    stringEquals(name, "stringToInt") || stringEquals(name, "listLen") ||
-    stringEquals(name, "isOk") || stringEquals(name, "stringEquals") ||
-    stringEquals(name, "includes") || stringEquals(name, "mapHas") {
-    return 0
+  let signature = compilerAbiSignature(name)
+  if signature.found {
+    return typedIrTypeId(signature.returnType)
   }
   return 1
 }

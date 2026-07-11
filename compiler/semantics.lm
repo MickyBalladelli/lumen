@@ -1,4 +1,5 @@
 import { AstProgram, astChildAt, astNodeAt } from "./ast.lm"
+import { compilerAbiSignature } from "./abi.lm"
 import { CompilerSymbol, CompilerToken, SymbolArena, TokenArena, astArenaSet, symbolArena, symbolArenaGet, symbolArenaPush, tokenArenaGet } from "./containers.lm"
 
 struct SemanticResult {
@@ -501,13 +502,12 @@ function semanticResolveNode(
       if callee.symbolId < 0 {
         let existing = semanticResolveName(resolver, resolver.rootScope, callee.name)
         if existing < 0 {
-          resolver = semanticBind(
-            resolver,
-            resolver.rootScope,
-            callee.name,
-            "builtin",
-            calleeId
-          )
+          let signature = compilerAbiSignature(callee.name)
+          let symbolKind = "builtin"
+          if signature.found {
+            symbolKind = "runtime"
+          }
+          resolver = semanticBind(resolver, resolver.rootScope, callee.name, symbolKind, calleeId)
           existing = semanticResolveName(resolver, resolver.rootScope, callee.name)
         }
         resolver = semanticSetNodeSymbol(resolver, calleeId, existing)

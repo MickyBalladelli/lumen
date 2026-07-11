@@ -1,4 +1,5 @@
 import { IrModule, IrStatement, IrFunction, TypedIrModule, irStatementFromProgram, irFunctionFromProgram, typedIrValid } from "./ir.lm"
+import { compilerAbiDeclaration, compilerAbiDeclarations, compilerAbiSignature } from "./abi.lm"
 import { CompilerIrBlock, irBlockArenaGet, irFunctionArenaGet, irValueArenaGet } from "./containers.lm"
 
 function emitIr(ir: IrModule): string {
@@ -176,75 +177,13 @@ function typedIrFunctionExists(module: TypedIrModule, name: string): bool {
 }
 
 function typedIrBuiltinSymbol(name: string): string {
-  if stringEquals(name, "includes") { return "lumen_string_contains"
-  }
-  if stringEquals(name, "intToString") { return "lumen_int_to_string"
-  }
-  if stringEquals(name, "stringEquals") { return "lumen_string_equals"
-  }
-  if stringEquals(name, "stringLen") { return "lumen_string_len"
-  }
-  if stringEquals(name, "stringToInt") { return "lumen_string_to_int"
-  }
-  if stringEquals(name, "stringBuilder") { return "lumen_string_builder"
-  }
-  if stringEquals(name, "stringBuilderAppend") { return "lumen_string_builder_append"
-  }
-  if stringEquals(name, "arg") { return "lumen_arg"
-  }
-  if stringEquals(name, "argCount") { return "lumen_arg_count"
-  }
-  if stringEquals(name, "errorMessage") { return "lumen_error_message"
-  }
-  if stringEquals(name, "isOk") { return "lumen_is_ok"
-  }
-  if stringEquals(name, "resultValue") { return "lumen_result_value"
-  }
-  if stringEquals(name, "json") { return "lumen_json"
-  }
-  if stringEquals(name, "jsonGet") { return "lumen_json_get"
-  }
-  if stringEquals(name, "jsonGetRaw") { return "lumen_json_get_raw"
-  }
-  if stringEquals(name, "list") { return "lumen_list"
-  }
-  if stringEquals(name, "listGet") { return "lumen_list_get"
-  }
-  if stringEquals(name, "listLen") { return "lumen_list_len"
-  }
-  if stringEquals(name, "listPush") { return "lumen_list_push"
-  }
-  if stringEquals(name, "map") { return "lumen_map"
-  }
-  if stringEquals(name, "mapGet") { return "lumen_map_get"
-  }
-  if stringEquals(name, "mapHas") { return "lumen_map_has"
-  }
-  if stringEquals(name, "mapSet") { return "lumen_map_set"
-  }
-  if stringEquals(name, "arenaNew") { return "lumen_arena_new"
-  }
-  if stringEquals(name, "arenaAppend") { return "lumen_arena_append"
-  }
-  if stringEquals(name, "arenaLen") { return "lumen_arena_len"
-  }
-  if stringEquals(name, "arenaSetString") { return "lumen_arena_set_string"
-  }
-  if stringEquals(name, "arenaSetI32") { return "lumen_arena_set_i32"
-  }
-  if stringEquals(name, "arenaGetString") { return "lumen_arena_get_string"
-  }
-  if stringEquals(name, "arenaGetI32") { return "lumen_arena_get_i32"
-  }
-  if stringEquals(name, "readFile") { return "lumen_read_file"
-  }
-  if stringEquals(name, "writeFile") { return "lumen_write_file"
-  }
-  return ""
+  let signature = compilerAbiSignature(name)
+  return signature.symbol
 }
 
 function typedIrBuiltinExists(name: string): bool {
-  return !stringEquals(typedIrBuiltinSymbol(name), "")
+  let signature = compilerAbiSignature(name)
+  return signature.found
 }
 
 function typedIrIsCallTarget(module: TypedIrModule, block: CompilerIrBlock, valueId: i32): bool {
@@ -887,13 +826,8 @@ after.return.")
     }
     let builtin = typedIrBuiltinSymbol(value.text)
     if !stringEquals(builtin, "") {
-      let rawType = typedIrLLVMType(value.typeId)
-      if stringEquals(value.text, "isOk") || stringEquals(value.text, "stringEquals") ||
-        stringEquals(value.text, "includes") || stringEquals(value.text, "mapHas") {
-        rawType = "i1"
-      } else if stringEquals(value.text, "resultValue") {
-        rawType = "ptr"
-      }
+      let signature = compilerAbiSignature(value.text)
+      let rawType = signature.llvmReturnType
       if !stringEquals(rawType, "void") {
         if stringEquals(rawType, "i1") ||
           (stringEquals(value.text, "resultValue") && value.typeId == 0) {
@@ -1146,45 +1080,9 @@ function emitTypedIr(module: TypedIrModule): string {
 ')
     out = stringBuilderAppend(out, '@.typed.fmt.int = private unnamed_addr constant [4 x i8] c"%d\0A\00"
 ')
-    out = stringBuilderAppend(out, "declare i32 @printf(ptr, ...)
-")
+    out = stringBuilderAppend(out, compilerAbiDeclaration(compilerAbiSignature("println")))
   }
-  out = stringBuilderAppend(out, "declare i1 @lumen_string_contains(ptr, ptr)
-declare ptr @lumen_string_concat(ptr, ptr)
-declare ptr @calloc(i64, i64)
-declare ptr @lumen_string_slice(ptr, i32, i32)
-declare ptr @lumen_int_to_string(i32)
-declare i1 @lumen_string_equals(ptr, ptr)
-declare i32 @lumen_string_len(ptr)
-declare i32 @lumen_string_to_int(ptr)
-declare ptr @lumen_string_builder()
-declare ptr @lumen_string_builder_append(ptr, ptr)
-declare ptr @lumen_arg(i32)
-declare ptr @lumen_arg_count()
-declare ptr @lumen_error_message(ptr)
-declare i1 @lumen_is_ok(ptr)
-declare ptr @lumen_result_value(ptr)
-declare ptr @lumen_json(ptr)
-declare ptr @lumen_json_get(ptr, ptr)
-declare ptr @lumen_json_get_raw(ptr, ptr)
-declare ptr @lumen_list()
-declare ptr @lumen_list_get(ptr, i32)
-declare i32 @lumen_list_len(ptr)
-declare ptr @lumen_list_push(ptr, ptr)
-declare ptr @lumen_map(i32, ...)
-declare ptr @lumen_map_get(ptr, ptr)
-declare i1 @lumen_map_has(ptr, ptr)
-declare ptr @lumen_map_set(ptr, ptr, ptr)
-declare ptr @lumen_arena_new()
-declare i32 @lumen_arena_append(ptr)
-declare i32 @lumen_arena_len(ptr)
-declare void @lumen_arena_set_string(ptr, i32, i32, ptr)
-declare void @lumen_arena_set_i32(ptr, i32, i32, i32)
-declare ptr @lumen_arena_get_string(ptr, i32, i32)
-declare i32 @lumen_arena_get_i32(ptr, i32, i32)
-declare ptr @lumen_read_file(ptr)
-declare ptr @lumen_write_file(ptr, ptr)
-")
+  out = stringBuilderAppend(out, compilerAbiDeclarations())
   let functionIndex: i32 = 0
 
   while functionIndex < module.functions.count do {

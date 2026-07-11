@@ -1,0 +1,238 @@
+struct CompilerAbiSignature {
+  found: bool
+  name: string
+  symbol: string
+  returnType: string
+  parameter0: string
+  parameter1: string
+  parameter2: string
+  parameter3: string
+  parameterCount: i32
+  minArity: i32
+  maxArity: i32
+  variadic: bool
+  llvmReturnType: string
+  llvmParameters: string
+  runtimeUnit: string
+}
+
+function compilerAbi(
+  name: string,
+  symbol: string,
+  returnType: string,
+  parameter0: string,
+  parameter1: string,
+  parameter2: string,
+  parameter3: string,
+  parameterCount: i32,
+  minArity: i32,
+  maxArity: i32,
+  variadic: bool,
+  llvmReturnType: string,
+  llvmParameters: string,
+  runtimeUnit: string
+): CompilerAbiSignature {
+  return CompilerAbiSignature {
+    found: true,
+    name: name,
+    symbol: symbol,
+    returnType: returnType,
+    parameter0: parameter0,
+    parameter1: parameter1,
+    parameter2: parameter2,
+    parameter3: parameter3,
+    parameterCount: parameterCount,
+    minArity: minArity,
+    maxArity: maxArity,
+    variadic: variadic,
+    llvmReturnType: llvmReturnType,
+    llvmParameters: llvmParameters,
+    runtimeUnit: runtimeUnit
+  }
+}
+
+function compilerAbiMissing(name: string): CompilerAbiSignature {
+  let signature = compilerAbi(name, "", "unknown", "", "", "", "", 0, 0, 0, false, "", "", "")
+  signature.found = false
+  return signature
+}
+
+function compilerAbiSignature(name: string): CompilerAbiSignature {
+  if stringEquals(name, "println") {
+    return compilerAbi(name, "printf", "void", "unknown", "", "", "", 1, 1, 1, true, "i32", "ptr, ...", "libc")
+  }
+  if stringEquals(name, "includes") {
+    return compilerAbi(name, "lumen_string_contains", "bool", "string", "string", "", "", 2, 2, 2, false, "i1", "ptr, ptr", "string")
+  }
+  if stringEquals(name, "intToString") {
+    return compilerAbi(name, "lumen_int_to_string", "string", "i32", "", "", "", 1, 1, 1, false, "ptr", "i32", "string")
+  }
+  if stringEquals(name, "stringEquals") {
+    return compilerAbi(name, "lumen_string_equals", "bool", "string", "string", "", "", 2, 2, 2, false, "i1", "ptr, ptr", "string")
+  }
+  if stringEquals(name, "stringLen") {
+    return compilerAbi(name, "lumen_string_len", "i32", "string", "", "", "", 1, 1, 1, false, "i32", "ptr", "string")
+  }
+  if stringEquals(name, "stringToInt") {
+    return compilerAbi(name, "lumen_string_to_int", "i32", "string", "", "", "", 1, 1, 1, false, "i32", "ptr", "string")
+  }
+  if stringEquals(name, "stringBuilder") {
+    return compilerAbi(name, "lumen_string_builder", "string", "", "", "", "", 0, 0, 0, false, "ptr", "", "string")
+  }
+  if stringEquals(name, "stringBuilderAppend") {
+    return compilerAbi(name, "lumen_string_builder_append", "string", "string", "string", "", "", 2, 2, 2, false, "ptr", "ptr, ptr", "string")
+  }
+  if stringEquals(name, "arg") {
+    return compilerAbi(name, "lumen_arg", "Result<string>", "i32", "", "", "", 1, 1, 1, false, "ptr", "i32", "system")
+  }
+  if stringEquals(name, "argCount") {
+    return compilerAbi(name, "lumen_arg_count", "Result<i32>", "", "", "", "", 0, 0, 0, false, "ptr", "", "system")
+  }
+  if stringEquals(name, "errorMessage") {
+    return compilerAbi(name, "lumen_error_message", "string", "Result<unknown>", "", "", "", 1, 1, 1, false, "ptr", "ptr", "system")
+  }
+  if stringEquals(name, "isOk") {
+    return compilerAbi(name, "lumen_is_ok", "bool", "Result<unknown>", "", "", "", 1, 1, 1, false, "i1", "ptr", "system")
+  }
+  if stringEquals(name, "resultValue") {
+    return compilerAbi(name, "lumen_result_value", "unknown", "Result<unknown>", "", "", "", 1, 1, 1, false, "ptr", "ptr", "system")
+  }
+  if stringEquals(name, "json") {
+    return compilerAbi(name, "lumen_json", "Result<json>", "string", "", "", "", 1, 1, 1, false, "ptr", "ptr", "collections")
+  }
+  if stringEquals(name, "jsonGet") {
+    return compilerAbi(name, "lumen_json_get", "Result<string>", "json", "string", "", "", 2, 2, 2, false, "ptr", "ptr, ptr", "collections")
+  }
+  if stringEquals(name, "jsonGetRaw") {
+    return compilerAbi(name, "lumen_json_get_raw", "Result<string>", "json", "string", "", "", 2, 2, 2, false, "ptr", "ptr, ptr", "collections")
+  }
+  if stringEquals(name, "list") {
+    return compilerAbi(name, "lumen_list", "string", "", "", "", "", 0, 0, 0, false, "ptr", "", "collections")
+  }
+  if stringEquals(name, "listGet") {
+    return compilerAbi(name, "lumen_list_get", "string", "string", "i32", "", "", 2, 2, 2, false, "ptr", "ptr, i32", "collections")
+  }
+  if stringEquals(name, "listLen") {
+    return compilerAbi(name, "lumen_list_len", "i32", "string", "", "", "", 1, 1, 1, false, "i32", "ptr", "collections")
+  }
+  if stringEquals(name, "listPush") {
+    return compilerAbi(name, "lumen_list_push", "string", "string", "string", "", "", 2, 2, 2, false, "ptr", "ptr, ptr", "collections")
+  }
+  if stringEquals(name, "map") {
+    return compilerAbi(name, "lumen_map", "string", "unknown", "", "", "", 1, 0, -1, true, "ptr", "i32, ...", "collections")
+  }
+  if stringEquals(name, "mapGet") {
+    return compilerAbi(name, "lumen_map_get", "string", "string", "string", "", "", 2, 2, 2, false, "ptr", "ptr, ptr", "collections")
+  }
+  if stringEquals(name, "mapHas") {
+    return compilerAbi(name, "lumen_map_has", "bool", "string", "string", "", "", 2, 2, 2, false, "i1", "ptr, ptr", "collections")
+  }
+  if stringEquals(name, "mapSet") {
+    return compilerAbi(name, "lumen_map_set", "string", "string", "string", "string", "", 3, 3, 3, false, "ptr", "ptr, ptr, ptr", "collections")
+  }
+  if stringEquals(name, "arenaNew") {
+    return compilerAbi(name, "lumen_arena_new", "string", "", "", "", "", 0, 0, 0, false, "ptr", "", "arena")
+  }
+  if stringEquals(name, "arenaAppend") {
+    return compilerAbi(name, "lumen_arena_append", "i32", "string", "", "", "", 1, 1, 1, false, "i32", "ptr", "arena")
+  }
+  if stringEquals(name, "arenaLen") {
+    return compilerAbi(name, "lumen_arena_len", "i32", "string", "", "", "", 1, 1, 1, false, "i32", "ptr", "arena")
+  }
+  if stringEquals(name, "arenaSetString") {
+    return compilerAbi(name, "lumen_arena_set_string", "void", "string", "i32", "i32", "string", 4, 4, 4, false, "void", "ptr, i32, i32, ptr", "arena")
+  }
+  if stringEquals(name, "arenaSetI32") {
+    return compilerAbi(name, "lumen_arena_set_i32", "void", "string", "i32", "i32", "i32", 4, 4, 4, false, "void", "ptr, i32, i32, i32", "arena")
+  }
+  if stringEquals(name, "arenaGetString") {
+    return compilerAbi(name, "lumen_arena_get_string", "string", "string", "i32", "i32", "", 3, 3, 3, false, "ptr", "ptr, i32, i32", "arena")
+  }
+  if stringEquals(name, "arenaGetI32") {
+    return compilerAbi(name, "lumen_arena_get_i32", "i32", "string", "i32", "i32", "", 3, 3, 3, false, "i32", "ptr, i32, i32", "arena")
+  }
+  if stringEquals(name, "readFile") {
+    return compilerAbi(name, "lumen_read_file", "Result<string>", "string", "", "", "", 1, 1, 1, false, "ptr", "ptr", "fs")
+  }
+  if stringEquals(name, "writeFile") {
+    return compilerAbi(name, "lumen_write_file", "Result<i32>", "string", "string", "", "", 2, 2, 2, false, "ptr", "ptr, ptr", "fs")
+  }
+  if stringEquals(name, "__stringConcat") {
+    return compilerAbi(name, "lumen_string_concat", "string", "string", "string", "", "", 2, 2, 2, false, "ptr", "ptr, ptr", "string")
+  }
+  if stringEquals(name, "__stringSlice") {
+    return compilerAbi(name, "lumen_string_slice", "string", "string", "i32", "i32", "", 3, 3, 3, false, "ptr", "ptr, i32, i32", "string")
+  }
+  if stringEquals(name, "__calloc") {
+    return compilerAbi(name, "calloc", "string", "i64", "i64", "", "", 2, 2, 2, false, "ptr", "i64, i64", "libc")
+  }
+  return compilerAbiMissing(name)
+}
+
+function compilerAbiParameter(signature: CompilerAbiSignature, index: i32): string {
+  if signature.variadic && index >= signature.parameterCount {
+    return signature.parameter0
+  }
+  if index == 0 { return signature.parameter0
+  }
+  if index == 1 { return signature.parameter1
+  }
+  if index == 2 { return signature.parameter2
+  }
+  if index == 3 { return signature.parameter3
+  }
+  return ""
+}
+
+function compilerAbiDeclaration(signature: CompilerAbiSignature): string {
+  if !signature.found || stringEquals(signature.symbol, "") {
+    return ""
+  }
+  return "declare " + signature.llvmReturnType + " @" + signature.symbol +
+    "(" + signature.llvmParameters + ")
+"
+}
+
+function compilerAbiAppendDeclaration(out: string, name: string): string {
+  return stringBuilderAppend(out, compilerAbiDeclaration(compilerAbiSignature(name)))
+}
+
+function compilerAbiDeclarations(): string {
+  let out = stringBuilder()
+  out = compilerAbiAppendDeclaration(out, "includes")
+  out = compilerAbiAppendDeclaration(out, "intToString")
+  out = compilerAbiAppendDeclaration(out, "stringEquals")
+  out = compilerAbiAppendDeclaration(out, "stringLen")
+  out = compilerAbiAppendDeclaration(out, "stringToInt")
+  out = compilerAbiAppendDeclaration(out, "stringBuilder")
+  out = compilerAbiAppendDeclaration(out, "stringBuilderAppend")
+  out = compilerAbiAppendDeclaration(out, "arg")
+  out = compilerAbiAppendDeclaration(out, "argCount")
+  out = compilerAbiAppendDeclaration(out, "errorMessage")
+  out = compilerAbiAppendDeclaration(out, "isOk")
+  out = compilerAbiAppendDeclaration(out, "resultValue")
+  out = compilerAbiAppendDeclaration(out, "json")
+  out = compilerAbiAppendDeclaration(out, "jsonGet")
+  out = compilerAbiAppendDeclaration(out, "jsonGetRaw")
+  out = compilerAbiAppendDeclaration(out, "list")
+  out = compilerAbiAppendDeclaration(out, "listGet")
+  out = compilerAbiAppendDeclaration(out, "listLen")
+  out = compilerAbiAppendDeclaration(out, "listPush")
+  out = compilerAbiAppendDeclaration(out, "map")
+  out = compilerAbiAppendDeclaration(out, "mapGet")
+  out = compilerAbiAppendDeclaration(out, "mapHas")
+  out = compilerAbiAppendDeclaration(out, "mapSet")
+  out = compilerAbiAppendDeclaration(out, "arenaNew")
+  out = compilerAbiAppendDeclaration(out, "arenaAppend")
+  out = compilerAbiAppendDeclaration(out, "arenaLen")
+  out = compilerAbiAppendDeclaration(out, "arenaSetString")
+  out = compilerAbiAppendDeclaration(out, "arenaSetI32")
+  out = compilerAbiAppendDeclaration(out, "arenaGetString")
+  out = compilerAbiAppendDeclaration(out, "arenaGetI32")
+  out = compilerAbiAppendDeclaration(out, "readFile")
+  out = compilerAbiAppendDeclaration(out, "writeFile")
+  out = compilerAbiAppendDeclaration(out, "__stringConcat")
+  out = compilerAbiAppendDeclaration(out, "__stringSlice")
+  out = compilerAbiAppendDeclaration(out, "__calloc")
+  return out
+}

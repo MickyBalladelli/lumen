@@ -99,7 +99,7 @@ compatibility-IR cleanup still need to be completed.
 
 - [x] Make the bootstrap source coverage gate ready.
 
-- [ ] Give builtins and externs one typed ABI registry.
+- [x] Give builtins and externs one typed ABI registry.
   Make the Lumen compiler resolve and type-check runtime functions from the
   same signatures used for LLVM declarations and runtime linking.
 
