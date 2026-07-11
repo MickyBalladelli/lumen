@@ -4,8 +4,8 @@ Goal: the compiler in `compiler/` must parse, check, lower, and emit its own
 source. Clang may assemble and link the emitted LLVM. JavaScript may build the
 first seed compiler, but it must not participate in stage 2 or later.
 
-Current blocker: typed self-host lowering is still incomplete. Stage 2 and
-stage 3 still need real LLVM emission from compiler source.
+Current blocker: bootstrap control-flow semantics and the remaining
+compatibility-IR cleanup still need to be completed.
 
 ## Still missing for true self-hosting
 
@@ -16,7 +16,7 @@ stage 3 still need real LLVM emission from compiler source.
 - [x] Make the bootstrap source coverage gate pass.
   The complete compiler-source inventory is now generic: compiler builtins,
   syntax, IR operations, module graph features, and `json` / `unknown` types.
-- [ ] Finish typed IR lowering and typed LLVM emission.
+- [x] Finish typed IR lowering and typed LLVM emission.
 - [x] Remove the embedded compiler image from stage 1 and later.
 
 ## P0 - Make self-hosting measurable
