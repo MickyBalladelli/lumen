@@ -4,6 +4,23 @@
 
 #include "lumen_collections.h"
 
+typedef struct LumenStringBuilder {
+  char *value;
+  size_t capacity;
+  struct LumenStringBuilder *next;
+} LumenStringBuilder;
+
+static LumenStringBuilder *lumen_string_builders = NULL;
+
+static LumenStringBuilder *lumen_string_builder_find(const char *value) {
+  LumenStringBuilder *builder = lumen_string_builders;
+  while (builder) {
+    if (builder->value == value) return builder;
+    builder = builder->next;
+  }
+  return NULL;
+}
+
 char *lumen_string_concat(const char *left, const char *right) {
   size_t left_length = strlen(left);
   size_t right_length = strlen(right);
@@ -16,11 +33,40 @@ char *lumen_string_concat(const char *left, const char *right) {
 }
 
 char *lumen_string_builder(void) {
-  return lumen_strdup("");
+  LumenStringBuilder *builder = malloc(sizeof(LumenStringBuilder));
+  if (!builder) return "";
+
+  builder->capacity = 64;
+  builder->value = malloc(builder->capacity);
+  if (!builder->value) return "";
+
+  builder->value[0] = '\0';
+  builder->next = lumen_string_builders;
+  lumen_string_builders = builder;
+  return builder->value;
 }
 
 char *lumen_string_builder_append(const char *builder, const char *value) {
-  return lumen_string_concat(builder, value);
+  LumenStringBuilder *state = lumen_string_builder_find(builder);
+  if (!state) return lumen_string_concat(builder, value);
+
+  size_t builder_length = strlen(state->value);
+  size_t value_length = strlen(value);
+  size_t needed = builder_length + value_length + 1;
+  if (needed > state->capacity) {
+    size_t capacity = state->capacity;
+    while (capacity < needed) capacity *= 2;
+
+    char *next = malloc(capacity);
+    if (!next) return state->value;
+    memcpy(next, state->value, builder_length + 1);
+    free(state->value);
+    state->value = next;
+    state->capacity = capacity;
+  }
+
+  memcpy(state->value + builder_length, value, value_length + 1);
+  return state->value;
 }
 
 int lumen_string_len(const char *value) {

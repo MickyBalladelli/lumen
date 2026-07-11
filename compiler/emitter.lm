@@ -1222,12 +1222,12 @@ function resolvedStatementExprValue(statement: IrStatement, symbols: string): st
   }
 
   if includes(kind, "identifier") {
-    let resolvedKind = mapGet(symbols, value + "Kind")
+    let symbolKind = mapGet(symbols, value + "Kind")
     let resolved = mapGet(symbols, value + "Value")
-    if includes(resolvedKind, "string") {
+    if includes(symbolKind, "string") {
       return resolved
     }
-    if includes(resolvedKind, "number") {
+    if includes(symbolKind, "number") {
       return resolved
     }
   }
@@ -1419,12 +1419,12 @@ function resolvedExprValue(program: string, symbols: string, prefix: string): st
   }
 
   if includes(kind, "identifier") {
-    let resolvedKind = mapGet(symbols, value + "Kind")
+    let symbolKind = mapGet(symbols, value + "Kind")
     let resolved = mapGet(symbols, value + "Value")
-    if includes(resolvedKind, "string") {
+    if includes(symbolKind, "string") {
       return resolved
     }
-    if includes(resolvedKind, "number") {
+    if includes(symbolKind, "number") {
       return resolved
     }
   }

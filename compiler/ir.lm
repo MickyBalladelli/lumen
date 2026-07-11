@@ -53,6 +53,7 @@ struct TypedIrModule {
   blocks: IrBlockArena
   functions: IrFunctionArena
   functionTypes: string
+  localTypes: string
   fieldSlots: string
   fieldTypes: string
   fieldCount: i32
@@ -90,6 +91,7 @@ function typedIrModule(): TypedIrModule {
     blocks: irBlockArena(),
     functions: irFunctionArena(),
     functionTypes: map("unused", "0"),
+    localTypes: map("unused", "0"),
     fieldSlots: map("unused", "0"),
     fieldTypes: map("unused", "1"),
     fieldCount: 0
@@ -108,6 +110,9 @@ function typedIrValue(nodeKind: string, typeId: i32, operand0: i32, operand1: i3
 
 function typedIrAppendValue(module: TypedIrModule, kind: string, typeId: i32, operand0: i32, operand1: i32, text: string): TypedIrModule {
   module.values = irValueArenaPush(module.values, typedIrValue(kind, typeId, operand0, operand1, text))
+  if stringEquals(kind, "param") || stringEquals(kind, "local") {
+    module.localTypes = mapSet(module.localTypes, text, intToString(typeId))
+  }
   return module
 }
 
@@ -129,14 +134,8 @@ function typedIrTypeId(typeName: string): i32 {
 }
 
 function typedIrStorageTypeId(module: TypedIrModule, name: string): i32 {
-  let index = module.values.count - 1
-  while index >= 0 do {
-    let value = irValueArenaGet(module.values, index)
-    if (stringEquals(value.kind, "param") || stringEquals(value.kind, "local")) &&
-      stringEquals(value.text, name) {
-      return value.typeId
-    }
-    index = index - 1
+  if mapHas(module.localTypes, name) {
+    return stringToInt(mapGet(module.localTypes, name))
   }
   return 0
 }
@@ -454,6 +453,7 @@ function buildTypedIr(ast: AstProgram): TypedIrModule {
     let nodeId = astChildAt(ast, ast.root, childIndex)
     let node = astNodeAt(ast, nodeId)
     if stringEquals(node.kind, "FunctionDeclaration") {
+      module.localTypes = map("unused", "0")
       let firstValue = module.values.count
       let returnTypeId: i32 = 0
       let functionChild: i32 = 0

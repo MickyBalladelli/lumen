@@ -229,11 +229,13 @@ function formatJSDiagnostic(diagnostic) {
 }
 
 function normalizeSelfDiagnostic(stdout) {
-  const line = stdout.match(/\bat line (\d+)/i)
-  const message = stdout.match(/compile error:\s*(.*?)(?:\s+at line|$)/i)
+  const line = stdout.match(/\bat line (\d+)|\bat \S+:(\d+):\d+/i)
+  const message = stdout.match(
+    /compile error:\s*(.*?)(?:\s+at (?:line \d+|\S+:\d+:\d+)|$)/i
+  )
   return {
     message: normalizeMessage(message?.[1] ?? stdout),
-    line: line ? Number(line[1]) : null
+    line: line ? Number(line[1] ?? line[2]) : null
   }
 }
 
