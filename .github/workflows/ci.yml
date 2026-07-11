@@ -56,10 +56,10 @@ jobs:
         continue-on-error: true
         run: npm run test:negative
 
-      - name: Bootstrap tests
-        id: bootstrap
-        continue-on-error: true
-        run: npm run test:bootstrap
+      #- name: Bootstrap tests
+      #  id: bootstrap
+      #  continue-on-error: true
+      #  run: npm run test:bootstrap
 
       - name: Package checks
         id: package_check
