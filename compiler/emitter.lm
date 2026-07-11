@@ -41,7 +41,7 @@ function typedIrValueText(module: TypedIrModule, valueId: i32): string {
   if includes(value.kind, "binary.") || includes(value.kind, "unary.") ||
     includes(value.kind, "call.") ||
     stringEquals(value.kind, "struct") || stringEquals(value.kind, "member") ||
-    stringEquals(value.kind, "slice") {
+    stringEquals(value.kind, "slice") || stringEquals(value.kind, "match") {
     return "%v." + intToString(valueId)
   }
   if stringEquals(value.kind, "local") {
@@ -282,6 +282,8 @@ function typedIrValueSupported(module: TypedIrModule, block: CompilerIrBlock, va
     stringEquals(value.kind, "struct.field") || stringEquals(value.kind, "field.link") ||
     stringEquals(value.kind, "struct") || stringEquals(value.kind, "member") ||
     stringEquals(value.kind, "slice.range") || stringEquals(value.kind, "slice") ||
+    stringEquals(value.kind, "match.wildcard") || stringEquals(value.kind, "match.arm") ||
+    stringEquals(value.kind, "match") ||
     stringEquals(value.kind, "BreakStatement") || stringEquals(value.kind, "ContinueStatement") {
     return true
   }
@@ -466,6 +468,64 @@ function typedIrLoopEnd(module: TypedIrModule, block: CompilerIrBlock, valueId: 
   return -1
 }
 
+function emitTypedMatch(out: string, module: TypedIrModule, block: CompilerIrBlock, valueId: i32): string {
+  let matchValue = irValueArenaGet(module.values, valueId)
+  let armId = matchValue.operand1
+  if armId < 0 {
+    return out
+  }
+  let arm = irValueArenaGet(module.values, armId)
+  let resultType = typedIrValueType(module, block, arm.operand1)
+  let selected = typedIrValueText(module, arm.operand1)
+  armId = stringToInt(arm.text)
+
+  while armId >= 0 do {
+    arm = irValueArenaGet(module.values, armId)
+    let pattern = irValueArenaGet(module.values, arm.operand0)
+    if stringEquals(pattern.kind, "match.wildcard") {
+      selected = typedIrValueText(module, arm.operand1)
+    } else {
+      out = stringBuilderAppend(out, "  %match.test.")
+      out = stringBuilderAppend(out, intToString(armId))
+      out = stringBuilderAppend(out, " = icmp eq i32 ")
+      out = stringBuilderAppend(out, typedIrValueText(module, matchValue.operand0))
+      out = stringBuilderAppend(out, ", ")
+      out = stringBuilderAppend(out, typedIrValueText(module, arm.operand0))
+      out = stringBuilderAppend(out, "
+  %match.select.")
+      out = stringBuilderAppend(out, intToString(armId))
+      out = stringBuilderAppend(out, " = select i1 %match.test.")
+      out = stringBuilderAppend(out, intToString(armId))
+      out = stringBuilderAppend(out, ", ")
+      out = stringBuilderAppend(out, resultType)
+      out = stringBuilderAppend(out, " ")
+      out = stringBuilderAppend(out, typedIrValueText(module, arm.operand1))
+      out = stringBuilderAppend(out, ", ")
+      out = stringBuilderAppend(out, resultType)
+      out = stringBuilderAppend(out, " ")
+      out = stringBuilderAppend(out, selected)
+      out = stringBuilderAppend(out, "
+")
+      selected = "%match.select." + intToString(armId)
+    }
+    armId = stringToInt(arm.text)
+  }
+
+  out = stringBuilderAppend(out, "  %v.")
+  out = stringBuilderAppend(out, intToString(valueId))
+  out = stringBuilderAppend(out, " = select i1 true, ")
+  out = stringBuilderAppend(out, resultType)
+  out = stringBuilderAppend(out, " ")
+  out = stringBuilderAppend(out, selected)
+  out = stringBuilderAppend(out, ", ")
+  out = stringBuilderAppend(out, resultType)
+  out = stringBuilderAppend(out, " ")
+  out = stringBuilderAppend(out, selected)
+  out = stringBuilderAppend(out, "
+")
+  return out
+}
+
 function emitTypedIrInstruction(out: string, module: TypedIrModule, block: CompilerIrBlock, valueId: i32): string {
   let value = irValueArenaGet(module.values, valueId)
 
@@ -495,6 +555,10 @@ after.control.")
     out = stringBuilderAppend(out, ", i64 8)
 ")
     return emitTypedStructFields(out, module, block, value.operand1, valueId)
+  }
+
+  if stringEquals(value.kind, "match") {
+    return emitTypedMatch(out, module, block, valueId)
   }
 
   if stringEquals(value.kind, "slice") {

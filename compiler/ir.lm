@@ -54,6 +54,7 @@ struct TypedIrModule {
   functions: IrFunctionArena
   functionTypes: string
   localTypes: string
+  enumValues: string
   fieldSlots: string
   fieldTypes: string
   fieldCount: i32
@@ -92,6 +93,7 @@ function typedIrModule(): TypedIrModule {
     functions: irFunctionArena(),
     functionTypes: map("unused", "0"),
     localTypes: map("unused", "0"),
+    enumValues: map("unused", "0"),
     fieldSlots: map("unused", "0"),
     fieldTypes: map("unused", "1"),
     fieldCount: 0
@@ -231,6 +233,29 @@ function typedIrRegisterStructFields(module: TypedIrModule, ast: AstProgram): Ty
   return module
 }
 
+function typedIrRegisterEnumValues(module: TypedIrModule, ast: AstProgram): TypedIrModule {
+  let root = astNodeAt(ast, ast.root)
+  let nodeIndex: i32 = 0
+  while nodeIndex < root.childCount do {
+    let nodeId = astChildAt(ast, ast.root, nodeIndex)
+    let node = astNodeAt(ast, nodeId)
+    if stringEquals(node.kind, "EnumDeclaration") {
+      let childIndex: i32 = 0
+      let value: i32 = 0
+      while childIndex < node.childCount do {
+        let child = astNodeAt(ast, astChildAt(ast, nodeId, childIndex))
+        if stringEquals(child.kind, "EnumVariant") {
+          module.enumValues = mapSet(module.enumValues, child.name, intToString(value))
+          value = value + 1
+        }
+        childIndex = childIndex + 1
+      }
+    }
+    nodeIndex = nodeIndex + 1
+  }
+  return module
+}
+
 function typedIrFieldSlot(module: TypedIrModule, name: string): i32 {
   if mapHas(module.fieldSlots, name) {
     return stringToInt(mapGet(module.fieldSlots, name))
@@ -309,6 +334,30 @@ function typedIrLowerNode(module: TypedIrModule, ast: AstProgram, nodeId: i32): 
     return typedIrAppendValue(module, "slice", 1, object, module.values.count - 1, "")
   }
 
+  if stringEquals(node.kind, "MatchExpression") {
+    module = typedIrLowerNode(module, ast, astChildAt(ast, nodeId, 0))
+    let subject = module.values.count - 1
+    let arms: i32 = -1
+    let resultType: i32 = 1
+    childIndex = 1
+    while childIndex < node.childCount do {
+      let armId = astChildAt(ast, nodeId, childIndex)
+      let arm = astNodeAt(ast, armId)
+      if stringEquals(arm.kind, "MatchArm") {
+        module = typedIrLowerNode(module, ast, astChildAt(ast, armId, 0))
+        let pattern = module.values.count - 1
+        module = typedIrLowerNode(module, ast, astChildAt(ast, armId, 1))
+        let result = module.values.count - 1
+        let resultValue = irValueArenaGet(module.values, result)
+        resultType = resultValue.typeId
+        module = typedIrAppendValue(module, "match.arm", 1, pattern, result, intToString(arms))
+        arms = module.values.count - 1
+      }
+      childIndex = childIndex + 1
+    }
+    return typedIrAppendValue(module, "match", resultType, subject, arms, "")
+  }
+
   if stringEquals(node.kind, "CallExpression") {
     let callee: i32 = -1
     let arguments: i32 = -1
@@ -365,9 +414,19 @@ function typedIrLowerNode(module: TypedIrModule, ast: AstProgram, nodeId: i32): 
       typeId = 0
     }
   } else if stringEquals(kind, "IdentifierExpression") {
-    kind = "load"
-    text = node.name
-    typeId = typedIrStorageTypeId(module, node.name)
+    if stringEquals(node.name, "_") {
+      kind = "match.wildcard"
+      text = ""
+      typeId = 0
+    } else if mapHas(module.enumValues, node.name) {
+      kind = "literal"
+      text = mapGet(module.enumValues, node.name)
+      typeId = 0
+    } else {
+      kind = "load"
+      text = node.name
+      typeId = typedIrStorageTypeId(module, node.name)
+    }
   } else if stringEquals(kind, "VariableDeclarator") {
     kind = "local"
     text = node.name
@@ -446,6 +505,7 @@ function buildTypedIr(ast: AstProgram): TypedIrModule {
   let module = typedIrModule()
   let root = astNodeAt(ast, ast.root)
   module = typedIrRegisterStructFields(module, ast)
+  module = typedIrRegisterEnumValues(module, ast)
   module = typedIrRegisterFunctionTypes(module, ast)
   let childIndex: i32 = 0
 
