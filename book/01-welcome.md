@@ -15,9 +15,9 @@ function main(): i32 {
 
 The goal is simple: write readable programs, compile them to native code, and
 grow the language until it can own more of its compiler. Today, the primary
-compiler is JavaScript. The Lumen-written bootstrap compiler handles a tested
-subset and reproduces an embedded LLVM checkpoint; it is not fully
-self-hosting from source.
+compiler is the Lumen-written compiler. JavaScript remains the stage-0 seed and
+recovery compiler. The native compiler rebuilds itself from source through a
+verified three-stage bootstrap.
 
 The [generated feature and support matrix](support-matrix.md) is the source of
 truth for compiler parity, package maturity, and platform support.
@@ -218,16 +218,13 @@ incomplete. Their exact limits are listed in the
 ## Bootstrap Compiler
 
 The compiler in `compiler/` is written in Lumen. It tokenizes, parses, runs
-semantic analysis, type checks, builds a partial IR summary, and emits LLVM for
-the parity-tested subset. Stage-1 is built by the JavaScript compiler. When
-compiling its own entry point, it returns the embedded stage-1 LLVM checkpoint.
-Stage-2 and stage-3 reproduce that checkpoint byte-for-byte and run parity
-fixtures independently. This is deterministic checkpoint bootstrapping, not
-full source self-hosting.
+semantic analysis, type checks, builds typed IR, and emits LLVM. Stage-1 is
+built by the JavaScript seed. Stage-1 compiles the compiler sources into
+stage-2, and stage-2 does the same for stage-3. CI compares generated LLVM and
+native behavior and rejects compiler-delegation shortcuts.
 
 ## Missing
 
-- Full source self-hosting and parity with the primary compiler
-- Removal of the bootstrap compiler's program-map/statement bridge
+- Full language parity between the Lumen compiler and JavaScript seed
 - Better HTTP routing and production-ready runtime hardening
 - Windows runtime and toolchain support

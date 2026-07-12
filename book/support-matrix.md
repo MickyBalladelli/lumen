@@ -15,9 +15,9 @@ Regenerate it with `npm run docs:support`.
 | JavaScript compiler pipeline | Supported | Primary compiler: tokenizer, parser, semantic analysis, type checking, typed IR validation, and LLVM lowering. |
 | JavaScript compiler IR | Supported | Uses typed IR modules, functions, blocks, instructions, values, and terminators. The LLVM backend consumes this IR. |
 | Lumen-written bootstrap compiler | Subset | Parses and compiles only the features and diagnostics listed in the parity tables below. |
-| Bootstrap compiler IR | Partial | Uses typed Lumen structs for an IR summary, but still relies on a program map and statement compatibility bridge. It is not the JavaScript compiler typed IR. |
-| Stage-2 and stage-3 bootstrap | Checkpoint | Stage-1 is built by the JavaScript compiler. Later stages reproduce its embedded LLVM checkpoint byte for byte and run the parity fixtures. |
-| Full source self-hosting | Not Implemented | Compiling compiler/main.lm still needs typed self-host lowering. The bootstrap compiler does not yet regenerate itself from source. |
+| Bootstrap compiler IR | Supported | Uses typed function, block, and value arenas. The Lumen LLVM emitter consumes this typed IR directly. |
+| Stage-2 and stage-3 bootstrap | Source Bootstrap | Stage-1 is built by the JavaScript seed. Stage-2 and stage-3 compile compiler/main.lm from source and are checked for equivalent LLVM and behavior. |
+| Full source self-hosting | Supported Subset | The Lumen compiler regenerates itself from source through three stages. Language-wide parity remains limited to the documented fixtures. |
 
 ## JavaScript/Bootstrap Parity Features
 
@@ -70,7 +70,7 @@ features than the bootstrap subset.
 | Platform | Status | Actual behavior |
 | --- | --- | --- |
 | macOS | Targeted | Development target with Clang and POSIX runtime support. |
-| Linux | Targeted | Has Linux argument, crypto, and WebSocket providers. Automated Linux CI is not present yet. |
+| Linux | Targeted | Has Linux runtime providers and automated three-stage bootstrap coverage. |
 | Windows | Unsupported | The native runtime and build flow require POSIX APIs and pthreads. |
 
 ## Bundled Package Support

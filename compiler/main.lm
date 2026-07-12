@@ -6,6 +6,7 @@ import { checkTypes } from "./typechecker.lm"
 import { analyzeControlFlow } from "./controlflow.lm"
 import { buildIr } from "./ir.lm"
 import { emitIr, emitIrError } from "./emitter.lm"
+import { compilerAbiRuntimeLinkInputs } from "./abi.lm"
 
 function diagnosticMessage(entryPath: string, tokens: TokenArena, message: string, tokenIndex: i32): string {
   let token = tokenArenaGet(tokens, tokenIndex)
@@ -80,55 +81,6 @@ function compileTiny(input: string, output: string): i32 {
   return resultValue(writeResult)
 }
 
-function responsePath(out: string, root: string, unit: string): string {
-  return stringBuilderAppend(out, '"' + root + "/" + unit + '.c"
-')
-}
-
-function runtimeLinkInputs(llvm: string, runtimeRoot: string): string {
-  let out = stringBuilder()
-  let needsSystem = includes(llvm, "@lumen_")
-  let needsCollections = includes(llvm, "@lumen_json") ||
-    includes(llvm, "@lumen_list") || includes(llvm, "@lumen_map") ||
-    includes(llvm, "@lumen_array_join")
-  let needsString = includes(llvm, "@lumen_string_") ||
-    includes(llvm, "@lumen_int_to_string") || includes(llvm, "@lumen_parse_") ||
-    includes(llvm, "@lumen_source_snippet") || includes(llvm, "@lumen_tokenize_source")
-  if needsString {
-    needsCollections = true
-  }
-  if needsSystem {
-    out = responsePath(out, runtimeRoot, "system")
-  }
-  if includes(llvm, "@lumen_read_file") || includes(llvm, "@lumen_write_file") ||
-    includes(llvm, "@lumen_atomic_replace") || includes(llvm, "@lumen_remove_file") {
-    out = responsePath(out, runtimeRoot, "fs")
-  }
-  if needsCollections {
-    out = responsePath(out, runtimeRoot, "collections")
-  }
-  if includes(llvm, "@lumen_arena_") {
-    out = responsePath(out, runtimeRoot, "arena")
-  }
-  if needsString {
-    out = responsePath(out, runtimeRoot, "string")
-  }
-  if includes(llvm, "@lumen_encrypt") || includes(llvm, "@lumen_decrypt") {
-    out = responsePath(out, runtimeRoot, "crypto")
-  }
-  if includes(llvm, "@lumen_thread_") || includes(llvm, "@lumen_semaphore_") ||
-    includes(llvm, "@lumen_append_file") {
-    out = responsePath(out, runtimeRoot, "thread")
-  }
-  if includes(llvm, "@lumen_task_") {
-    out = responsePath(out, runtimeRoot, "task")
-  }
-  if includes(llvm, "@lumen_http_") || includes(llvm, "@lumen_socketio_") {
-    out = responsePath(out, runtimeRoot, "http")
-  }
-  return out
-}
-
 function cleanupCompilerFile(path: string): i32 {
   let cleanup = removeFile(path)
   if !isOk(cleanup) {
@@ -170,7 +122,7 @@ function buildNative(input: string, output: string, clang: string, runtimeRoot: 
     cleanupCompilerFile(llvmPath)
     return 1
   }
-  let responseResult = writeFile(responseFile, runtimeLinkInputs(resultValue(llvmResult), runtimeRoot))
+  let responseResult = writeFile(responseFile, compilerAbiRuntimeLinkInputs(resultValue(llvmResult), runtimeRoot))
   if !isOk(responseResult) {
     println(errorMessage(responseResult))
     cleanupCompilerFile(llvmPath)

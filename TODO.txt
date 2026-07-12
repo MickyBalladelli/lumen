@@ -6,66 +6,66 @@ first seed compiler, but it must not participate in stage 2 or later.
 
 ### Next typed-IR slice
 
-- [ ] Lower each `TypedIrModule` function body into typed instructions and
+- [x] Lower each `TypedIrModule` function body into typed instructions and
   terminators. The new function, block, and value arenas exist; do not add new
   fields to `IrModule` or the program string map.
 
-- [ ] Make the LLVM emitter accept `TypedIrModule` for one function at a time,
+- [x] Make the LLVM emitter accept `TypedIrModule` for one function at a time,
   starting with locals, calls, returns, and integer/string literals.
 
-- [ ] Add typed-IR verifier tests for block ownership, value ranges, and a
+- [x] Add typed-IR verifier tests for block ownership, value ranges, and a
   terminator on every reachable block.
 
-- [ ] Fix the primary module loader's duplicate relative-import identity. A
+- [x] Fix the primary module loader's duplicate relative-import identity. A
   runtime test importing `parser.lm` and `ir.lm` currently reports duplicate
   private `AstProgram`/`TokenArena` types instead of reusing one module.
 
 
-- [ ] Replace `IrModule` summaries with a complete typed IR.
+- [x] Replace `IrModule` summaries with a complete typed IR.
   Model arbitrary functions, parameters, structs, basic blocks, instructions,
   values, and terminators. Remove the program string map, `irToProgram`, fixed
   `statement0` fields, and AST-to-map compatibility bridge.
 
-- [ ] Lower typed AST to IR generically.
+- [x] Lower typed AST to IR generically.
   Cover every operation used by the compiler itself: declarations, calls,
   structs, field access, slicing, assignment, unary/binary expressions,
   conditionals, loops, break/continue, and returns.
 
-- [ ] Implement a Lumen IR verifier.
+- [x] Implement a Lumen IR verifier.
   Reject invalid types, missing terminators, bad branch targets, malformed
   values, duplicate blocks, and invalid control-flow before LLVM emission.
 
-- [ ] Make the LLVM emitter consume typed IR only.
+- [x] Make the LLVM emitter consume typed IR only.
   Emit arbitrary functions and control flow with deterministic symbol and block
   numbering. Remove token inspection, name guessing, summary-map reads, and
   duplicated legacy emission paths.
 
-- [ ] Complete LLVM type and value lowering for the compiler closure.
+- [x] Complete LLVM type and value lowering for the compiler closure.
   Correctly lower strings, booleans, integers, structs, arrays, Results,
   pointers, calls, slices, comparisons, and mutable locals. Escape and
   deduplicate string globals safely.
 
-- [ ] Emit runtime declarations and link inputs from the ABI registry.
+- [x] Emit runtime declarations and link inputs from the ABI registry.
   Select required runtime units from referenced symbols instead of hard-coded
   compiler cases. Run Clang verification on every generated module.
 
 ## P4 - Remove the checkpoint and use the Lumen compiler
 
-- [ ] Delete compiler-image mode.
+- [x] Delete compiler-image mode.
   Remove the `compiler-main` filename switch, both `emitCompilerMain` paths,
   the `compilerImage` builtin, `lumen_compiler_image`, image embedding in the
   JavaScript linker, and all checkpoint-specific tests and documentation.
 
-- [ ] Add a Lumen-native compiler driver.
+- [x] Add a Lumen-native compiler driver.
   Support module loading, diagnostics, LLVM output, Clang invocation, runtime
   linking, exit codes, temporary files, and atomic output publishing. Keep
   Clang as the external machine-code tool.
 
-- [ ] Make stage 2 independent of the checkout's JavaScript compiler.
+- [x] Make stage 2 independent of the checkout's JavaScript compiler.
   Build and test stage 2 in a clean directory containing only the Lumen compiler
   sources, runtime sources, required package metadata, and external tools.
 
-- [ ] Move `lumen emit`, `lumen build`, and `lumen run` to the Lumen compiler.
+- [x] Move `lumen emit`, `lumen build`, and `lumen run` to the Lumen compiler.
   Keep JavaScript only as the documented stage-0 seed or recovery compiler.
   Normal user compilation must not execute the JavaScript compiler pipeline.
 
@@ -86,7 +86,7 @@ first seed compiler, but it must not participate in stage 2 or later.
   limits for recursion, memory use, malformed input, deep nesting, and large
   modules.
 
-- [ ] Run the real three-stage bootstrap on Linux and macOS CI.
+- [x] Run the real three-stage bootstrap on Linux and macOS CI.
   Start from a clean checkout, retain stage artifacts for diagnosis, and never
   cache generated compilers or LLVM between stages.
 
