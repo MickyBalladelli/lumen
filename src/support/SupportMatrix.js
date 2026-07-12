@@ -1,39 +1,39 @@
 export const CompilerSupportMatrix = Object.freeze([
   support(
     'javascript-pipeline',
-    'JavaScript compiler pipeline',
-    'supported',
-    'Primary compiler: tokenizer, parser, semantic analysis, type checking, typed IR validation, and LLVM lowering.'
+    'JavaScript stage-0 pipeline',
+    'recovery',
+    'Explicit seed and differential reference. Normal compilation does not select this pipeline.'
   ),
   support(
     'javascript-ir',
-    'JavaScript compiler IR',
+    'JavaScript stage-0 IR',
     'supported',
     'Uses typed IR modules, functions, blocks, instructions, values, and terminators. The LLVM backend consumes this IR.'
   ),
   support(
     'bootstrap-pipeline',
-    'Lumen-written bootstrap compiler',
-    'subset',
-    'Parses and compiles only the features and diagnostics listed in the parity tables below.'
+    'Lumen native compiler',
+    'canonical',
+    'Normal emit, build, run, helper, and diagnostics paths use the packaged native compiler.'
   ),
   support(
     'bootstrap-ir',
-    'Bootstrap compiler IR',
-    'partial',
-    'Uses typed Lumen structs for an IR summary, but still relies on a program map and statement compatibility bridge. It is not the JavaScript compiler typed IR.'
+    'Lumen compiler IR',
+    'supported',
+    'Uses typed function, block, and value arenas. The Lumen LLVM emitter consumes this typed IR directly.'
   ),
   support(
     'bootstrap-stages',
     'Stage-2 and stage-3 bootstrap',
-    'checkpoint',
-    'Stage-1 is built by the JavaScript compiler. Later stages reproduce its embedded LLVM checkpoint byte for byte and run the parity fixtures.'
+    'source bootstrap',
+    'Stage-1 is built by the JavaScript seed. Stage-2 and stage-3 compile compiler/main.lm from source and are checked for equivalent LLVM and behavior.'
   ),
   support(
     'source-self-hosting',
     'Full source self-hosting',
-    'not implemented',
-    'Compiling compiler/main.lm still needs typed self-host lowering. The bootstrap compiler does not yet regenerate itself from source.'
+    'supported subset',
+    'The Lumen compiler regenerates itself from source through three stages. Language-wide parity remains limited to the documented fixtures.'
   )
 ])
 
@@ -42,13 +42,13 @@ export const PlatformSupportMatrix = Object.freeze([
     'macos',
     'macOS',
     'targeted',
-    'Development target with Clang and POSIX runtime support.'
+    'Native compiler release artifact, Clang linking, POSIX runtime support, and three-stage CI.'
   ),
   support(
     'linux',
     'Linux',
     'targeted',
-    'Has Linux argument, crypto, and WebSocket providers. Automated Linux CI is not present yet.'
+    'Native compiler release artifact, runtime providers, and automated three-stage bootstrap coverage.'
   ),
   support(
     'windows',

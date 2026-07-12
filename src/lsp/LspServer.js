@@ -11,11 +11,13 @@ import {
 export class LspServer {
   constructor({
     compilerFactory = () => new Compiler(),
+    nativeDiagnostics = null,
     documents = new Map(),
     write = () => {},
     diagnosticDelayMs = 75
   } = {}) {
     this.compilerFactory = compilerFactory
+    this.nativeDiagnostics = nativeDiagnostics
     this.documents = documents
     this.write = write
     this.diagnosticDelayMs = diagnosticDelayMs
@@ -250,6 +252,19 @@ export class LspServer {
     const diagnostics = []
     let dependencies = null
     let intelligence = null
+    let usedNativeDiagnostics = false
+
+    if (this.nativeDiagnostics && uri.startsWith('file:')) {
+      try {
+        diagnostics.push(...await this.nativeDiagnostics.diagnoseFile(
+          fileURLToPath(uri),
+          source
+        ))
+        usedNativeDiagnostics = true
+      } catch (error) {
+        diagnostics.push(error)
+      }
+    }
 
     try {
       const compiler = this.compilerFactory()
@@ -274,7 +289,14 @@ export class LspServer {
       }
     } catch (error) {
       const errors = diagnosticsFrom(error)
-      diagnostics.push(...(errors.length > 0 ? errors : [error]))
+      const nativeReachedUnsupportedIr = diagnostics.some(diagnostic => {
+        return String(diagnostic.rawMessage ?? diagnostic.message)
+          .startsWith('unsupported typed IR')
+      })
+      if (!usedNativeDiagnostics || nativeReachedUnsupportedIr) {
+        if (nativeReachedUnsupportedIr) diagnostics.length = 0
+        diagnostics.push(...(errors.length > 0 ? errors : [error]))
+      }
       if (error?.moduleGraph) {
         intelligence = LanguageIndex.fromModuleGraph(error.moduleGraph)
         dependencies = new Set(

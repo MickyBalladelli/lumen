@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 import { LspServer } from '../lsp/LspServer.js'
+import { NativeDiagnostics } from '../compiler/NativeDiagnostics.js'
 
 let buffer = Buffer.alloc(0)
 const server = new LspServer({
+  nativeDiagnostics: new NativeDiagnostics(),
   write
 })
 

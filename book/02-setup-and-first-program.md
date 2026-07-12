@@ -230,8 +230,8 @@ This comprehensive test suite runs:
    analyzer, type checker, module graph, formatter, and compiler
 2. **Example tests** — compiles every example in `examples/`, links the
    binaries, runs them, and checks expected output
-3. **Bootstrap tests** — builds stage-1 with the JavaScript compiler, verifies
-   stage-2 and stage-3 checkpoint equality, and runs stage-3 independently
+3. **Bootstrap tests** — builds stage-1 with the explicit JavaScript seed, then
+   verifies source-built stage-2 and stage-3 equality and runs stage-3 independently
 4. **Negative tests** — verifies that invalid programs produce compiler errors
    with nonzero exit codes
 5. **Sanitizer tests** — runs compiled programs under ASan and UBSan to verify

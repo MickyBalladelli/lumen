@@ -153,7 +153,7 @@ test('lumen package exposes the command', async () => {
     'utf8'
   ))
 
-  assert.equal(packageJson.bin.lumen, './src/cli/lumen.js')
+  assert.equal(packageJson.bin.lumen, './bin/lumen')
 })
 
 test('lumen reports invalid config', async () => {

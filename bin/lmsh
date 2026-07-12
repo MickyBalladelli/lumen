@@ -1,0 +1,27 @@
+#!/bin/sh
+
+PROGRAM=$0
+while [ -h "$PROGRAM" ]; do
+  LINK_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "$PROGRAM")" && pwd)
+  LINK_TARGET=$(readlink "$PROGRAM")
+  case "$LINK_TARGET" in
+    /*) PROGRAM=$LINK_TARGET ;;
+    *) PROGRAM=$LINK_DIRECTORY/$LINK_TARGET ;;
+  esac
+done
+ROOT=$(CDPATH= cd -- "$(dirname -- "$PROGRAM")/.." && pwd)
+
+if [ "$#" -lt 1 ]; then
+  echo "usage: lmsh file.lm [args...]" >&2
+  exit 1
+fi
+
+SOURCE=$1
+shift
+OUTPUT=${TMPDIR:-/tmp}/lumen-lmsh-$$
+"$ROOT/bin/lumen" build "$SOURCE" -o "$OUTPUT" || exit $?
+"$OUTPUT" "$@"
+STATUS=$?
+mkdir -p "${TMPDIR:-/tmp}/Trash"
+mv "$OUTPUT" "${TMPDIR:-/tmp}/Trash/lmsh-$$-$STATUS" 2>/dev/null || true
+exit $STATUS

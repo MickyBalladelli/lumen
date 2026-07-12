@@ -1,11 +1,11 @@
 import { readdir, stat } from 'node:fs/promises'
 import { basename, join } from 'node:path'
-import { Compiler } from '../compiler/Compiler.js'
+import { SelfHostedCompiler } from '../compiler/SelfHostedCompiler.js'
 import { RuntimeUnits } from '../runtime/RuntimeUnits.js'
 
 const examplesDir = 'examples'
 const outputDir = 'build'
-const compiler = new Compiler()
+const compiler = new SelfHostedCompiler()
 const files = (await readdir(examplesDir))
   .filter(file => file.endsWith('.lm'))
   .sort()

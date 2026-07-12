@@ -33,5 +33,8 @@ char *lumen_some(const char *value);
 char *lumen_none(void);
 _Bool lumen_has_value(const char *option);
 char *lumen_value_or(const char *option, const char *fallback);
+char *lumen_lsp_read_message(void);
+void lumen_stdout_write(const char *value);
+void lumen_lsp_write_message(const char *value);
 
 #endif

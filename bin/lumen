@@ -1,0 +1,41 @@
+#!/bin/sh
+
+PROGRAM=$0
+while [ -h "$PROGRAM" ]; do
+  LINK_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "$PROGRAM")" && pwd)
+  LINK_TARGET=$(readlink "$PROGRAM")
+  case "$LINK_TARGET" in
+    /*) PROGRAM=$LINK_TARGET ;;
+    *) PROGRAM=$LINK_DIRECTORY/$LINK_TARGET ;;
+  esac
+done
+ROOT=$(CDPATH= cd -- "$(dirname -- "$PROGRAM")/.." && pwd)
+
+case "$(uname -s)" in
+  Darwin) PLATFORM=darwin ;;
+  Linux) PLATFORM=linux ;;
+  *) echo "Unsupported Lumen platform: $(uname -s)" >&2; exit 1 ;;
+esac
+
+case "$(uname -m)" in
+  arm64|aarch64) ARCH=arm64 ;;
+  x86_64|amd64) ARCH=x64 ;;
+  *) echo "Unsupported Lumen architecture: $(uname -m)" >&2; exit 1 ;;
+esac
+
+COMPILER="$ROOT/native/$PLATFORM-$ARCH/lumen-compiler"
+if [ ! -x "$COMPILER" ]; then
+  echo "No native Lumen compiler for $PLATFORM-$ARCH" >&2
+  exit 1
+fi
+
+PREVIOUS=
+for ARGUMENT in "$@"; do
+  if [ "$PREVIOUS" = "-o" ]; then
+    mkdir -p "$(dirname -- "$ARGUMENT")"
+    break
+  fi
+  PREVIOUS=$ARGUMENT
+done
+
+exec "$COMPILER" "$@"

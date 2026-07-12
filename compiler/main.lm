@@ -6,6 +6,7 @@ import { checkTypes } from "./typechecker.lm"
 import { analyzeControlFlow } from "./controlflow.lm"
 import { buildIr } from "./ir.lm"
 import { emitIr, emitIrError } from "./emitter.lm"
+import { compilerAbiRuntimeLinkInputs } from "./abi.lm"
 
 function diagnosticMessage(entryPath: string, tokens: TokenArena, message: string, tokenIndex: i32): string {
   let token = tokenArenaGet(tokens, tokenIndex)
@@ -19,22 +20,35 @@ function diagnosticMessage(entryPath: string, tokens: TokenArena, message: strin
     " near " + token.lexeme
 }
 
-function compileTiny(input: string, output: string): i32 {
+function reportCompilerDiagnostic(machine: bool, file: string, line: i32, column: i32, message: string): i32 {
+  if machine {
+    println("LUMEN_DIAGNOSTIC|" + file + "|" + intToString(line) + "|" + intToString(column) + "|" + message)
+  } else {
+    println(message)
+  }
+  return 1
+}
+
+function compileTiny(input: string, output: string, machine: bool): i32 {
   let graph = loadModuleGraph(input)
   if !graph.ok {
     let diagnosticIndex: i32 = 0
     while diagnosticIndex < graph.diagnostics.count do {
       let diagnostic = diagnosticArenaGet(graph.diagnostics, diagnosticIndex)
-      println(
-        "compile error: " +
-        diagnostic.message +
-        " at " +
-        diagnostic.file +
-        ":" +
-        intToString(diagnostic.line) +
-        ":" +
-        intToString(diagnostic.column)
-      )
+      if machine {
+        reportCompilerDiagnostic(
+          true,
+          diagnostic.file,
+          diagnostic.line,
+          diagnostic.column,
+          "compile error: " + diagnostic.message
+        )
+      } else {
+        println(
+          "compile error: " + diagnostic.message + " at " + diagnostic.file +
+          ":" + intToString(diagnostic.line) + ":" + intToString(diagnostic.column)
+        )
+      }
       diagnosticIndex = diagnosticIndex + 1
     }
     return 1
@@ -46,6 +60,10 @@ function compileTiny(input: string, output: string): i32 {
   if semanticResult.ok {
     let checked = 1
   } else {
+    let token = tokenArenaGet(tokens, semanticResult.tokenIndex)
+    if machine {
+      return reportCompilerDiagnostic(true, token.file, token.line, token.column, semanticResult.message)
+    }
     println(diagnosticMessage(graph.entryPath, tokens, semanticResult.message, semanticResult.tokenIndex))
     return 1
   }
@@ -54,12 +72,20 @@ function compileTiny(input: string, output: string): i32 {
   if typeResult.ok {
     let checkedTypes = 1
   } else {
+    let token = tokenArenaGet(tokens, typeResult.tokenIndex)
+    if machine {
+      return reportCompilerDiagnostic(true, token.file, token.line, token.column, typeResult.message)
+    }
     println(diagnosticMessage(graph.entryPath, tokens, typeResult.message, typeResult.tokenIndex))
     return 1
   }
 
   let flow = analyzeControlFlow(ast, semanticResult.symbols)
   if !flow.ok {
+    let token = tokenArenaGet(tokens, flow.tokenIndex)
+    if machine {
+      return reportCompilerDiagnostic(true, token.file, token.line, token.column, flow.message)
+    }
     println(diagnosticMessage(graph.entryPath, tokens, flow.message, flow.tokenIndex))
     return 1
   }
@@ -67,66 +93,23 @@ function compileTiny(input: string, output: string): i32 {
   let ir = buildIr(ast)
   let backendError = emitIrError(ir)
   if !stringEquals(backendError, "") {
+    if machine {
+      return reportCompilerDiagnostic(true, graph.entryPath, 1, 1, backendError)
+    }
     println(backendError)
     return 1
   }
   let llvm = emitIr(ir)
 
+  if machine {
+    return 0
+  }
   let writeResult = writeFile(output, llvm)
   if !isOk(writeResult) {
     println(errorMessage(writeResult))
     return 1
   }
   return resultValue(writeResult)
-}
-
-function responsePath(out: string, root: string, unit: string): string {
-  return stringBuilderAppend(out, '"' + root + "/" + unit + '.c"
-')
-}
-
-function runtimeLinkInputs(llvm: string, runtimeRoot: string): string {
-  let out = stringBuilder()
-  let needsSystem = includes(llvm, "@lumen_")
-  let needsCollections = includes(llvm, "@lumen_json") ||
-    includes(llvm, "@lumen_list") || includes(llvm, "@lumen_map") ||
-    includes(llvm, "@lumen_array_join")
-  let needsString = includes(llvm, "@lumen_string_") ||
-    includes(llvm, "@lumen_int_to_string") || includes(llvm, "@lumen_parse_") ||
-    includes(llvm, "@lumen_source_snippet") || includes(llvm, "@lumen_tokenize_source")
-  if needsString {
-    needsCollections = true
-  }
-  if needsSystem {
-    out = responsePath(out, runtimeRoot, "system")
-  }
-  if includes(llvm, "@lumen_read_file") || includes(llvm, "@lumen_write_file") ||
-    includes(llvm, "@lumen_atomic_replace") || includes(llvm, "@lumen_remove_file") {
-    out = responsePath(out, runtimeRoot, "fs")
-  }
-  if needsCollections {
-    out = responsePath(out, runtimeRoot, "collections")
-  }
-  if includes(llvm, "@lumen_arena_") {
-    out = responsePath(out, runtimeRoot, "arena")
-  }
-  if needsString {
-    out = responsePath(out, runtimeRoot, "string")
-  }
-  if includes(llvm, "@lumen_encrypt") || includes(llvm, "@lumen_decrypt") {
-    out = responsePath(out, runtimeRoot, "crypto")
-  }
-  if includes(llvm, "@lumen_thread_") || includes(llvm, "@lumen_semaphore_") ||
-    includes(llvm, "@lumen_append_file") {
-    out = responsePath(out, runtimeRoot, "thread")
-  }
-  if includes(llvm, "@lumen_task_") {
-    out = responsePath(out, runtimeRoot, "task")
-  }
-  if includes(llvm, "@lumen_http_") || includes(llvm, "@lumen_socketio_") {
-    out = responsePath(out, runtimeRoot, "http")
-  }
-  return out
 }
 
 function cleanupCompilerFile(path: string): i32 {
@@ -137,9 +120,61 @@ function cleanupCompilerFile(path: string): i32 {
   return 0
 }
 
+function compilerDirname(path: string): string {
+  let end = lastIndexOf(path, "/")
+  if end < 0 {
+    return "."
+  }
+  if end == 0 {
+    return "/"
+  }
+  return path[0..end]
+}
+
+function compilerRuntimeRoot(): string {
+  let executableResult = arg(0)
+  if !isOk(executableResult) {
+    return "src/runtime"
+  }
+  let platformDirectory = compilerDirname(resultValue(executableResult))
+  let nativeDirectory = compilerDirname(platformDirectory)
+  let packageDirectory = compilerDirname(nativeDirectory)
+  return packageDirectory + "/src/runtime"
+}
+
+function compilerOutputArgument(args: i32, input: string, extension: string): string {
+  if args >= 5 {
+    let optionResult = arg(3)
+    let outputResult = arg(4)
+    if isOk(optionResult) && isOk(outputResult) && stringEquals(resultValue(optionResult), "-o") {
+      return resultValue(outputResult)
+    }
+  }
+  if args >= 4 {
+    let outputResult = arg(3)
+    if isOk(outputResult) {
+      return resultValue(outputResult)
+    }
+  }
+  return input + extension
+}
+
+function compilerPrintHelp(): i32 {
+  println("usage: lumen <command> [file.lm] [options]")
+  println("commands:")
+  println("  build [file.lm]       build a native executable")
+  println("  emit [file.lm]        emit LLVM IR")
+  println("  run [file.lm]         build and run a program")
+  println("options:")
+  println("  -o <path>             set output path")
+  println("  -h, --help            show help")
+  println("  -V, --version         show version")
+  return 0
+}
+
 function emitAtomic(input: string, output: string): i32 {
   let temporary = output + "." + uuid() + ".tmp"
-  let code = compileTiny(input, temporary)
+  let code = compileTiny(input, temporary, false)
   if code != 0 {
     cleanupCompilerFile(temporary)
     return code
@@ -158,7 +193,7 @@ function buildNative(input: string, output: string, clang: string, runtimeRoot: 
   let llvmPath = output + "." + nonce + ".tmp.ll"
   let responseFile = output + "." + nonce + ".rsp.tmp"
   let executable = output + "." + nonce + ".exe.tmp"
-  let compileCode = compileTiny(input, llvmPath)
+  let compileCode = compileTiny(input, llvmPath, false)
   if compileCode != 0 {
     cleanupCompilerFile(llvmPath)
     return compileCode
@@ -170,7 +205,7 @@ function buildNative(input: string, output: string, clang: string, runtimeRoot: 
     cleanupCompilerFile(llvmPath)
     return 1
   }
-  let responseResult = writeFile(responseFile, runtimeLinkInputs(resultValue(llvmResult), runtimeRoot))
+  let responseResult = writeFile(responseFile, compilerAbiRuntimeLinkInputs(resultValue(llvmResult), runtimeRoot))
   if !isOk(responseResult) {
     println(errorMessage(responseResult))
     cleanupCompilerFile(llvmPath)
@@ -219,51 +254,77 @@ function main(): i32 {
   }
   let args = resultValue(argsResult)
 
-  if args < 3 {
-    println("usage: lumen-compiler [emit|build] input.lm output [clang runtime-root]")
+  if args < 2 {
+    compilerPrintHelp()
     return 1
   }
 
   let firstResult = arg(1)
-  let secondResult = arg(2)
-  if !isOk(firstResult) || !isOk(secondResult) {
+  if !isOk(firstResult) {
     println("cannot read compiler arguments")
     return 1
   }
   let first = resultValue(firstResult)
+
+  if stringEquals(first, "--version") || stringEquals(first, "-V") {
+    println("0.1.0")
+    return 0
+  }
+  if stringEquals(first, "--help") || stringEquals(first, "-h") || stringEquals(first, "help") {
+    return compilerPrintHelp()
+  }
+  if args < 3 {
+    compilerPrintHelp()
+    return 1
+  }
+
+  let secondResult = arg(2)
+  if !isOk(secondResult) {
+    println("cannot read compiler input")
+    return 1
+  }
   let second = resultValue(secondResult)
 
   if stringEquals(first, "emit") {
-    if args < 4 {
-      println("usage: lumen-compiler emit input.lm output.ll")
-      return 1
-    }
-    let outputResult = arg(3)
-    if !isOk(outputResult) {
-      println(errorMessage(outputResult))
-      return 1
-    }
-    return emitAtomic(second, resultValue(outputResult))
+    return emitAtomic(second, compilerOutputArgument(args, second, ".ll"))
+  }
+
+  if stringEquals(first, "diagnose") {
+    return compileTiny(second, "", true)
   }
 
   if stringEquals(first, "build") {
-    if args < 6 {
-      println("usage: lumen-compiler build input.lm output clang runtime-root")
+    if args >= 6 {
+      let outputResult = arg(3)
+      let clangResult = arg(4)
+      let runtimeResult = arg(5)
+      if !isOk(outputResult) || !isOk(clangResult) || !isOk(runtimeResult) {
+        println("cannot read build arguments")
+        return 1
+      }
+      return buildNative(
+        second,
+        resultValue(outputResult),
+        resultValue(clangResult),
+        resultValue(runtimeResult)
+      )
+    }
+    return buildNative(second, compilerOutputArgument(args, second, ".out"), "clang", compilerRuntimeRoot())
+  }
+
+  if stringEquals(first, "run") {
+    let output = compilerOutputArgument(args, second, ".out")
+    let buildCode = buildNative(second, output, "clang", compilerRuntimeRoot())
+    if buildCode != 0 {
+      return buildCode
+    }
+    let noArguments: string[] = []
+    let runResult = exec(output, noArguments)
+    if !isOk(runResult) {
+      println(errorMessage(runResult))
       return 1
     }
-    let outputResult = arg(3)
-    let clangResult = arg(4)
-    let runtimeResult = arg(5)
-    if !isOk(outputResult) || !isOk(clangResult) || !isOk(runtimeResult) {
-      println("cannot read build arguments")
-      return 1
-    }
-    return buildNative(
-      second,
-      resultValue(outputResult),
-      resultValue(clangResult),
-      resultValue(runtimeResult)
-    )
+    return resultValue(runResult)
   }
 
   let inputResult = firstResult
@@ -277,5 +338,5 @@ function main(): i32 {
     return 1
   }
 
-  return compileTiny(resultValue(inputResult), resultValue(outputResult))
+  return compileTiny(resultValue(inputResult), resultValue(outputResult), false)
 }

@@ -325,8 +325,8 @@ let summary = parseSummary(source)
 // summary is a string representation of the parsed AST
 ```
 
-These are intentionally small foundations. The Lumen-written bootstrap
-compiler remains a subset of the primary JavaScript compiler.
+These helpers are intentionally small foundations. The native Lumen compiler
+is canonical; the JavaScript implementation remains its stage-0 reference.
 
 ### Source Snippet
 
@@ -336,17 +336,6 @@ let diagnostic = sourceSnippet(source, line, column)
 ```
 
 Used by the bootstrap compiler for error reporting.
-
-### Compiler Image
-
-```lumen
-let image = compilerImage()
-// returns the embedded stage-1 LLVM checkpoint as a string
-```
-
-This is the mechanism for deterministic checkpoint bootstrapping. The
-JavaScript compiler embeds the stage-1 image; later stages reproduce it rather
-than rebuilding the compiler from Lumen source.
 
 ## Missing
 

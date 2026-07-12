@@ -58,6 +58,12 @@ function compilerAbiMissing(name: string): CompilerAbiSignature {
 }
 
 function compilerAbiSignature(name: string): CompilerAbiSignature {
+  if stringEquals(name, "readMessage") { return compilerAbi(name, "lumen_lsp_read_message", "string", "", "", "", "", 0, 0, 0, false, "ptr", "", "system")
+  }
+  if stringEquals(name, "writeMessage") { return compilerAbi(name, "lumen_lsp_write_message", "void", "string", "", "", "", 1, 1, 1, false, "void", "ptr", "system")
+  }
+  if stringEquals(name, "writeStdout") { return compilerAbi(name, "lumen_stdout_write", "void", "string", "", "", "", 1, 1, 1, false, "void", "ptr", "system")
+  }
   if stringEquals(name, "println") {
     return compilerAbi(name, "printf", "void", "unknown", "", "", "", 1, 1, 1, true, "i32", "ptr, ...", "libc")
   }
@@ -371,5 +377,57 @@ function compilerAbiDeclarations(): string {
   out = compilerAbiAppendDeclaration(out, "__stringConcat")
   out = compilerAbiAppendDeclaration(out, "__stringSlice")
   out = compilerAbiAppendDeclaration(out, "__calloc")
+  return out
+}
+
+function compilerAbiResponsePath(out: string, root: string, unit: string): string {
+  return stringBuilderAppend(out, '"' + root + "/" + unit + '.c"
+')
+}
+
+// Runtime ownership lives beside the ABI signatures. The native driver asks
+// this registry for link inputs instead of maintaining compiler-only cases.
+function compilerAbiRuntimeLinkInputs(llvm: string, runtimeRoot: string): string {
+  let out = stringBuilder()
+  let needsSystem = includes(llvm, "@lumen_")
+  let needsCollections = includes(llvm, "@lumen_json") ||
+    includes(llvm, "@lumen_list") || includes(llvm, "@lumen_map") ||
+    includes(llvm, "@lumen_array_join")
+  let needsString = includes(llvm, "@lumen_string_") ||
+    includes(llvm, "@lumen_int_to_string") || includes(llvm, "@lumen_parse_") ||
+    includes(llvm, "@lumen_source_snippet") || includes(llvm, "@lumen_tokenize_source")
+
+  if needsString {
+    needsCollections = true
+  }
+  if needsSystem {
+    out = compilerAbiResponsePath(out, runtimeRoot, "system")
+  }
+  if includes(llvm, "@lumen_read_file") || includes(llvm, "@lumen_write_file") ||
+    includes(llvm, "@lumen_atomic_replace") || includes(llvm, "@lumen_remove_file") {
+    out = compilerAbiResponsePath(out, runtimeRoot, "fs")
+  }
+  if needsCollections {
+    out = compilerAbiResponsePath(out, runtimeRoot, "collections")
+  }
+  if includes(llvm, "@lumen_arena_") {
+    out = compilerAbiResponsePath(out, runtimeRoot, "arena")
+  }
+  if needsString {
+    out = compilerAbiResponsePath(out, runtimeRoot, "string")
+  }
+  if includes(llvm, "@lumen_encrypt") || includes(llvm, "@lumen_decrypt") {
+    out = compilerAbiResponsePath(out, runtimeRoot, "crypto")
+  }
+  if includes(llvm, "@lumen_thread_") || includes(llvm, "@lumen_semaphore_") ||
+    includes(llvm, "@lumen_append_file") {
+    out = compilerAbiResponsePath(out, runtimeRoot, "thread")
+  }
+  if includes(llvm, "@lumen_task_") {
+    out = compilerAbiResponsePath(out, runtimeRoot, "task")
+  }
+  if includes(llvm, "@lumen_http_") || includes(llvm, "@lumen_socketio_") {
+    out = compilerAbiResponsePath(out, runtimeRoot, "http")
+  }
   return out
 }

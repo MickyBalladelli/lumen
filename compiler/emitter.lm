@@ -1334,6 +1334,10 @@ function emitTypedIrDeclarations(module: TypedIrModule): string {
     let name = ""
     if includes(value.kind, "call.") && !stringEquals(value.text, "println") {
       name = value.text
+      if stringEquals(value.text, "resultValue") && value.typeId == 0 {
+        out = typedIrDeclare(out, declared, "stringToInt")
+        declared = mapSet(declared, "stringToInt", "1")
+      }
     } else if stringEquals(value.kind, "struct") || stringEquals(value.kind, "array") {
       name = "__calloc"
     } else if stringEquals(value.kind, "slice") {

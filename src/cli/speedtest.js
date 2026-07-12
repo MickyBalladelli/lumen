@@ -1,14 +1,14 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { spawn } from 'node:child_process'
-import { Compiler } from '../compiler/Compiler.js'
+import { SelfHostedCompiler } from '../compiler/SelfHostedCompiler.js'
 import { printSpeedtestResults } from './SpeedtestReporter.js'
 
 const tests = ['sum', 'fib', 'branch', 'math', 'nested', 'state']
 const languages = ['lumen', 'rust', 'node', 'lmsh', 'python']
 const runs = Number(process.env.LUMEN_SPEEDTEST_RUNS ?? '3')
 const outputDir = join('build', 'speedtest')
-const compiler = new Compiler()
+const compiler = new SelfHostedCompiler()
 
 await mkdir(outputDir, { recursive: true })
 

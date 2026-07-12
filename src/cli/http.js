@@ -1,11 +1,8 @@
-import { readFile } from 'node:fs/promises'
-import { Compiler } from '../compiler/Compiler.js'
+import { SelfHostedCompiler } from '../compiler/SelfHostedCompiler.js'
+import { runNative } from './RunNative.js'
 
-const source = await readFile('examples/http-server.lm', 'utf8')
-const compiler = new Compiler()
-const llvmPath = 'build/http-server.ll'
+const compiler = new SelfHostedCompiler()
 const executablePath = 'build/http-server'
 
-await compiler.writeLLVM(source, llvmPath)
-await compiler.buildExecutable(llvmPath, executablePath)
-await compiler.run(`./${executablePath}`, [])
+await compiler.buildSource('examples/http-server.lm', executablePath)
+process.exitCode = await runNative(executablePath)

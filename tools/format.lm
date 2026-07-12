@@ -1,0 +1,149 @@
+function formatLineDelta(line: string): i32 {
+  let delta: i32 = 0
+  let index: i32 = 0
+  let quote = ""
+  let blockComment: bool = false
+
+  while index < stringLen(line) do {
+    let ch = line[index..index + 1]
+    let next = ""
+    if index + 1 < stringLen(line) {
+      next = line[index + 1..index + 2]
+    }
+
+    if blockComment {
+      if stringEquals(ch, "*") && stringEquals(next, "/") {
+        blockComment = false
+        index = index + 2
+      } else {
+        index = index + 1
+      }
+    } else if !stringEquals(quote, "") {
+      if stringEquals(ch, quote) {
+        quote = ""
+      }
+      index = index + 1
+    } else if stringEquals(ch, "/") && stringEquals(next, "/") {
+      return delta
+    } else if stringEquals(ch, "/") && stringEquals(next, "*") {
+      blockComment = true
+      index = index + 2
+    } else {
+      if stringEquals(ch, '"') || stringEquals(ch, "'") {
+        quote = ch
+      } else if stringEquals(ch, "{") || stringEquals(ch, "[") || stringEquals(ch, "(") {
+        delta = delta + 1
+      } else if stringEquals(ch, "}") || stringEquals(ch, "]") || stringEquals(ch, ")") {
+        delta = delta - 1
+      }
+      index = index + 1
+    }
+  }
+  return delta
+}
+
+function formatLeadingClosings(line: string): i32 {
+  let index: i32 = 0
+  while index < stringLen(line) do {
+    let ch = line[index..index + 1]
+    if stringEquals(ch, "}") || stringEquals(ch, "]") || stringEquals(ch, ")") {
+      index = index + 1
+    } else {
+      return index
+    }
+  }
+  return index
+}
+
+function formatSource(source: string): string {
+  let newline = "
+"
+  let lines = split(replace(source, "\r", ""), newline)
+  let out = stringBuilder()
+  let level: i32 = 0
+  let blank: bool = false
+  let index: i32 = 0
+
+  while index < listLen(lines) do {
+    let clean = trim(listGet(lines, index))
+    if stringEquals(clean, "") {
+      blank = true
+    } else {
+      if blank && stringLen(out) > 0 {
+        out = stringBuilderAppend(out, newline)
+      }
+      blank = false
+      let lineLevel = level - formatLeadingClosings(clean)
+      if lineLevel < 0 {
+        lineLevel = 0
+      }
+      let compact = startsWith(clean, "else") || startsWith(clean, "catch") || startsWith(clean, "until")
+      if compact && endsWith(out, "}" + newline) {
+        out = out[0..stringLen(out) - 1]
+        out = stringBuilderAppend(out, " ")
+      } else {
+        out = stringBuilderAppend(out, repeat("  ", lineLevel))
+      }
+      out = stringBuilderAppend(out, clean)
+      out = stringBuilderAppend(out, newline)
+      level = level + formatLineDelta(clean)
+      if level < 0 {
+        level = 0
+      }
+    }
+    index = index + 1
+  }
+  return out
+}
+
+function main(): i32 {
+  let countResult = argCount()
+  if !isOk(countResult) {
+    println(errorMessage(countResult))
+    return 1
+  }
+  let count = resultValue(countResult)
+  let check: bool = false
+  let changed: bool = false
+  let index: i32 = 1
+
+  while index < count do {
+    let valueResult = arg(index)
+    if !isOk(valueResult) {
+      return 1
+    }
+    let value = resultValue(valueResult)
+    if stringEquals(value, "--check") {
+      check = true
+    } else if !startsWith(value, "-") {
+      let sourceResult = readFile(value)
+      if !isOk(sourceResult) {
+        println(errorMessage(sourceResult))
+        return 1
+      }
+      let source = resultValue(sourceResult)
+      let formatted = formatSource(source)
+      if !stringEquals(source, formatted) {
+        changed = true
+        if check {
+          println("needs format " + value)
+        } else {
+          let writeResult = writeFile(value, formatted)
+          if !isOk(writeResult) {
+            println(errorMessage(writeResult))
+            return 1
+          }
+          println("formatted " + value)
+        }
+      } else if !check {
+        println("ok " + value)
+      }
+    }
+    index = index + 1
+  }
+
+  if check && changed {
+    return 1
+  }
+  return 0
+}

@@ -1,14 +1,12 @@
-import { createHash, randomUUID } from 'node:crypto'
-import { access, mkdir, readFile, readdir, unlink } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
+import { access, mkdir, readFile, unlink } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn } from 'node:child_process'
-import { Compiler } from './Compiler.js'
 import { atomicWriteFile } from './BuildArtifacts.js'
+import { linkLLVM } from './NativeLinker.js'
 
 const packageRoot = fileURLToPath(new URL('../../', import.meta.url))
-const compilerRoot = join(packageRoot, 'compiler')
-const compilerEntry = join(compilerRoot, 'main.lm')
 const runtimeRoot = join(packageRoot, 'src', 'runtime')
 
 export class SelfHostedCompilerError extends Error {}
@@ -17,11 +15,11 @@ export class SelfHostedCompiler {
   constructor({
     cacheRoot = join(process.cwd(), 'build', 'cache'),
     clang = process.env.LUMEN_CLANG ?? 'clang',
-    seedCompiler = new Compiler()
+    compilerPath = process.env.LUMEN_COMPILER ?? null
   } = {}) {
     this.cacheRoot = resolve(cacheRoot)
     this.clang = clang
-    this.seedCompiler = seedCompiler
+    this.compilerPath = compilerPath
     this.nativeCompilerPromise = null
   }
 
@@ -53,7 +51,7 @@ export class SelfHostedCompiler {
   }
 
   async buildExecutable(llvmPath, outputPath, options = {}) {
-    return this.seedCompiler.buildExecutable(llvmPath, outputPath, {
+    return linkLLVM(llvmPath, outputPath, {
       clang: options.clang ?? this.clang,
       optimize: options.optimize,
       sanitizers: options.sanitizers
@@ -84,33 +82,24 @@ export class SelfHostedCompiler {
   }
 
   async buildNativeCompiler() {
-    const fingerprint = await compilerFingerprint()
-    const directory = join(this.cacheRoot, 'self-host', fingerprint)
-    const llvmPath = join(directory, 'lumen-compiler.ll')
-    const executablePath = join(directory, 'lumen-compiler')
-    await mkdir(directory, { recursive: true })
+    const candidates = [
+      this.compilerPath,
+      join(packageRoot, 'native', `${process.platform}-${process.arch}`, 'lumen-compiler')
+    ].filter(Boolean)
 
-    try {
-      await access(executablePath)
-      return executablePath
-    } catch {}
+    for (const candidate of candidates) {
+      try {
+        await access(candidate)
+        return resolve(candidate)
+      } catch {}
+    }
 
-    await this.seedCompiler.writeLLVMFile(compilerEntry, llvmPath)
-    await this.seedCompiler.buildExecutable(llvmPath, executablePath, {
-      clang: this.clang
-    })
-    return executablePath
+    throw new SelfHostedCompilerError(
+      `No native Lumen compiler for ${process.platform}-${process.arch}. ` +
+      'Install a platform compiler or set LUMEN_COMPILER. ' +
+      'Use the explicit stage-0 bootstrap command only for recovery.'
+    )
   }
-}
-
-async function compilerFingerprint() {
-  const hash = createHash('sha256')
-  const files = (await readdir(compilerRoot)).filter(file => file.endsWith('.lm')).sort()
-  for (const file of files) {
-    hash.update(file)
-    hash.update(await readFile(join(compilerRoot, file)))
-  }
-  return hash.digest('hex')
 }
 
 function run(command, args) {

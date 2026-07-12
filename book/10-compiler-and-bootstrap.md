@@ -90,8 +90,8 @@ The primary compiler lowers into `IRModule`, `IRFunction`, `IRBasicBlock`,
 runs before LLVM lowering, and AST statements do not form function bodies in
 this pipeline.
 
-This primary IR is separate from the smaller Lumen bootstrap compiler's
-`IrModule` summary and compatibility bridge.
+The Lumen compiler represents the same ownership concepts with arena-backed
+typed functions, blocks, values, instructions, and terminators.
 
 ### 6. LLVM Emitter — `src/backend/`
 
@@ -264,10 +264,9 @@ test fixture for every claimed feature. See the
 
 ### Emitter Architecture
 
-The primary JavaScript compiler uses typed IR instructions, values, basic
-blocks, and terminators. The Lumen bootstrap compiler does not use that same
-IR. Its `IrModule` is a typed summary structure, while emission still reads a
-program map and uses a statement compatibility bridge.
+The Lumen compiler uses typed function, block, and value arenas. Its LLVM
+emitter consumes that typed IR directly. The JavaScript compiler remains only
+as the explicit stage-0 seed and differential reference.
 
 ### Diagnostic Format
 
@@ -285,45 +284,59 @@ type errors (mismatched variable initializer types) are both reported this way.
 
 ## Bootstrap Process
 
-The bootstrap is verified by `npm run test`. It proves deterministic checkpoint
-reproduction and executable behavior for the parity-tested subset. It does not
-prove full source self-hosting.
+The real bootstrap is verified by `npm run test:bootstrap:real`. It compiles the
+compiler sources through three stages, compares canonical stage-2 and stage-3
+LLVM, verifies LLVM with Clang, and checks native behavior without delegation.
 
 ### Stage 1
 
-The JavaScript compiler compiles `compiler/main.lm` into a native executable
-(`build/lumen-compiler`). While linking it, the JavaScript compiler embeds the
-stage-1 LLVM image used by `compilerImage()`.
+The explicit JavaScript stage-0 recovery compiler compiles `compiler/main.lm`
+into the stage-1 native executable (`build/lumen-compiler`).
 
 ### Stage 2
 
-The stage-1 compiler is asked to compile `compiler/main.lm`. That input selects
-compiler mode, and the emitter returns the embedded stage-1 LLVM checkpoint.
-The result is linked as stage-2.
+Stage 1 parses, checks, lowers, and emits `compiler/main.lm` and its imported
+modules. Clang links that generated LLVM as stage 2.
 
 ### Stage 3
 
-Stage-2 repeats the checkpoint operation to produce stage-3. Stage-2 and
-stage-3 LLVM are compared byte-for-byte. Stage-3 then runs independently
-against parity fixtures. Equality proves the embedded checkpoint is stable; it
-does not show that the bootstrap compiler parsed and regenerated its own
-source.
+Stage 2 compiles the same source graph to produce stage 3. Canonical stage-2
+and stage-3 LLVM and executable behavior must match. Delegation symbols and
+calls to an external compiler are rejected.
 
 ### Manual Bootstrap
 
 You can run the bootstrap manually:
 
 ```bash
-# Build stage 1
-npm run bootstrap
+# Build stage 1 with the explicit recovery seed
+npm run stage0:bootstrap
 
-# Use the bootstrap compiler
+# Run the full source bootstrap
+npm run test:bootstrap:real
 npm run compile -- examples/basic.lm build/basic.ll
 
 # Link and run
 clang -Wno-override-module build/basic.ll -o build/basic
 ./build/basic
 ```
+
+### Trust Chain And Release Artifacts
+
+Stage 0 is the reviewed JavaScript recovery compiler. It creates stage 1 once.
+Stage 1 creates stage 2 from `compiler/*.lm`, and stage 2 creates stage 3 from
+the same source graph. Release jobs accept stage 3 only after canonical LLVM,
+native behavior, Clang verification, and no-delegation checks pass.
+
+Linux and macOS release jobs place the verified compiler at
+`native/<platform>-<architecture>/lumen-compiler`, include it in the package,
+and publish a standalone native artifact. Each job publishes a platform-named
+`SHA256SUMS-*` file. Verify an artifact with the host SHA-256 tool and compare
+the result with the matching line before installation.
+
+The JavaScript seed is invoked explicitly with `npm run stage0:bootstrap`.
+Normal `lumen emit`, `lumen build`, and `lumen run` resolve the packaged native
+compiler or `LUMEN_COMPILER`; they do not create a compiler through stage 0.
 
 ## Formatter
 
@@ -474,10 +487,10 @@ and UBSan (UndefinedBehaviorSanitizer) to verify memory safety.
 - **Snippets** — errors include source line and caret but no notes or related
   file paths
 
-### Bootstrap Compiler
+### Lumen Compiler
 
-- **Emitter bridge** — the self-host emitter still uses the AST-to-map
-  compatibility bridge internally
+- **Distribution** — verified native stage-3 compilers still need to be the
+  compiler artifact installed for every supported host
 - **Parser coverage** — not all JS compiler features are covered by the
   self-host parser
 - **Type checking** — the compiler-source type model is covered; some broader
