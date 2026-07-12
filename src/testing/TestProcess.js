@@ -11,7 +11,8 @@ export function runExecutable(path, args = [], env = {}, options = {}) {
 
 function runProcess(command, args, env, {
   progressLabel = null,
-  progressIntervalMs = 15000
+  progressIntervalMs = 15000,
+  cwd = undefined
 } = {}) {
   return new Promise((resolveResult, reject) => {
     const startedAt = Date.now()
@@ -27,6 +28,7 @@ function runProcess(command, args, env, {
     }
 
     const child = spawn(command, args, {
+      cwd,
       env: {
         ...process.env,
         ...env

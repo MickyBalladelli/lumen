@@ -361,6 +361,37 @@ function controlFlowWhile(
   return result
 }
 
+function controlFlowFor(
+  ast: AstProgram,
+  symbols: SymbolArena,
+  nodeId: i32,
+  initialized: string
+): ControlFlowResult {
+  let init = controlFlowVariable(ast, symbols, astChildAt(ast, nodeId, 0), initialized)
+  if !init.ok {
+    return init
+  }
+  let condition = controlFlowExpression(ast, symbols, astChildAt(ast, nodeId, 1), init.initialized)
+  if !condition.ok {
+    return condition
+  }
+  let body = controlFlowNode(ast, symbols, astChildAt(ast, nodeId, 3), condition.initialized)
+  if !body.ok {
+    return body
+  }
+  let updateState = body.initialized
+  if body.continues {
+    updateState = body.continueInitialized
+  }
+  let update = controlFlowExpression(ast, symbols, astChildAt(ast, nodeId, 2), updateState)
+  if !update.ok {
+    return update
+  }
+  let result = controlFlowResult(init.initialized)
+  result.returns = body.returns
+  return result
+}
+
 function controlFlowSwitch(
   ast: AstProgram,
   symbols: SymbolArena,
@@ -447,6 +478,9 @@ function controlFlowNode(
   }
   if stringEquals(node.kind, "WhileStatement") {
     return controlFlowWhile(ast, symbols, nodeId, initialized)
+  }
+  if stringEquals(node.kind, "ForStatement") {
+    return controlFlowFor(ast, symbols, nodeId, initialized)
   }
   if stringEquals(node.kind, "SwitchStatement") {
     return controlFlowSwitch(ast, symbols, nodeId, initialized)

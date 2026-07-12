@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Diagnostic, DiagnosticCollection } from '../diagnostics/Diagnostic.js'
 import { lumenVersion } from '../version.js'
+import { SelfHostedCompilerError } from '../compiler/SelfHostedCompiler.js'
 import {
   LumenCommandError,
   lumenHelp,
@@ -20,6 +21,7 @@ try {
   }
 } catch (error) {
   if (!(error instanceof LumenCommandError) &&
+    !(error instanceof SelfHostedCompilerError) &&
     !(error instanceof Diagnostic) &&
     !(error instanceof DiagnosticCollection)) {
     throw error

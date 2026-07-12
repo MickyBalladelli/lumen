@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { spawn } from 'node:child_process'
-import { Compiler } from '../compiler/Compiler.js'
+import { SelfHostedCompiler } from '../compiler/SelfHostedCompiler.js'
 import {
   compileLLVMArtifact,
   compileNativeArtifact,
@@ -100,7 +100,7 @@ export function parseLumenArguments(argv) {
 export async function runLumenCommand(options, {
   cwd = process.cwd(),
   env = process.env,
-  compiler = new Compiler(),
+  compiler = null,
   print = value => console.log(value),
   execute = executeProgram,
   loadFile = readFile,
@@ -108,6 +108,10 @@ export async function runLumenCommand(options, {
   buildNative = compileNativeArtifact,
   publish = publishArtifact
 } = {}) {
+  compiler ??= new SelfHostedCompiler({
+    cacheRoot: join(cwd, 'build', 'cache'),
+    clang: options.clang ?? env.LUMEN_CLANG ?? 'clang'
+  })
   const project = await resolveProject(options, { cwd, loadFile })
   const clang = options.clang ?? env.LUMEN_CLANG ?? 'clang'
   const cacheRoot = join(cwd, 'build', 'cache')

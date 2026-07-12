@@ -1,0 +1,124 @@
+import { CompilerAstNode, CompilerIrBlock, CompilerIrFunction, CompilerIrValue, irBlockArenaPush, irFunctionArenaPush, irValueArenaPush } from "../../compiler/containers.lm"
+import { TypedIrModule, typedIrAppendValue, typedIrModule, typedIrValid } from "../../compiler/ir.lm"
+
+function sourceNode(): CompilerAstNode {
+  return CompilerAstNode {
+    kind: "LiteralExpression",
+    parent: -1,
+    firstChild: 0,
+    childCount: 0,
+    tokenStart: 0,
+    tokenEnd: 0,
+    typeId: 0,
+    symbolId: -1,
+    text: "0",
+    name: "",
+    value: "0",
+    operator: "",
+    typeName: "i32",
+    file: "typed-ir-verifier.lm",
+    offset: 0,
+    line: 1,
+    column: 1,
+    endOffset: 1,
+    endLine: 1,
+    endColumn: 2,
+    flags: 0
+  }
+}
+
+function block(name: string, firstValue: i32, valueCount: i32, terminator: string): CompilerIrBlock {
+  return CompilerIrBlock {
+    name: name,
+    firstValue: firstValue,
+    valueCount: valueCount,
+    terminator: terminator,
+    target0: -1,
+    target1: -1,
+    file: "typed-ir-verifier.lm",
+    offset: 0,
+    line: 1,
+    column: 1,
+    endOffset: 1,
+    endLine: 1,
+    endColumn: 2
+  }
+}
+
+function fn(blockCount: i32): CompilerIrFunction {
+  return CompilerIrFunction {
+    name: "main",
+    firstBlock: 0,
+    blockCount: blockCount,
+    returnTypeId: 0,
+    file: "typed-ir-verifier.lm",
+    offset: 0,
+    line: 1,
+    column: 1,
+    endOffset: 1,
+    endLine: 1,
+    endColumn: 2
+  }
+}
+
+function validModule(): TypedIrModule {
+  let module = typedIrModule()
+  module = typedIrAppendValue(module, sourceNode(), "literal", 0, -1, -1, "0")
+  module.blocks = irBlockArenaPush(module.blocks, block("main.entry", 0, 1, "return"))
+  module.functions = irFunctionArenaPush(module.functions, fn(1))
+  return module
+}
+
+function main(): i32 {
+  let valid = validModule()
+  assert(typedIrValid(valid), "valid typed IR must pass")
+
+  let missingTerminator = validModule()
+  let empty = typedIrModule()
+  missingTerminator.blocks = empty.blocks
+  missingTerminator.blocks = irBlockArenaPush(missingTerminator.blocks, block("main.entry", 0, 1, ""))
+  assert(!typedIrValid(missingTerminator), "reachable block needs terminator")
+
+  let badTarget = validModule()
+  empty = typedIrModule()
+  badTarget.blocks = empty.blocks
+  let branch = block("main.entry", 0, 1, "branch")
+  branch.target0 = 1
+  badTarget.blocks = irBlockArenaPush(badTarget.blocks, branch)
+  assert(!typedIrValid(badTarget), "branch target must belong to function")
+
+  let badValue = typedIrModule()
+  badValue = typedIrAppendValue(badValue, sourceNode(), "binary.+", 0, 0, -1, "")
+  badValue.blocks = irBlockArenaPush(badValue.blocks, block("main.entry", 0, 1, "return"))
+  badValue.functions = irFunctionArenaPush(badValue.functions, fn(1))
+  assert(!typedIrValid(badValue), "value operand must precede owner")
+
+  let badType = typedIrModule()
+  badType.values = irValueArenaPush(badType.values, CompilerIrValue {
+    kind: "literal",
+    typeId: -1,
+    operand0: -1,
+    operand1: -1,
+    text: "0",
+    file: "typed-ir-verifier.lm",
+    offset: 0,
+    line: 1,
+    column: 1,
+    endOffset: 1,
+    endLine: 1,
+    endColumn: 2
+  })
+  badType.blocks = irBlockArenaPush(badType.blocks, block("main.entry", 0, 1, "return"))
+  badType.functions = irFunctionArenaPush(badType.functions, fn(1))
+  assert(!typedIrValid(badType), "value type must be valid")
+
+  let duplicate = validModule()
+  duplicate.blocks = irBlockArenaPush(duplicate.blocks, block("main.entry", 1, 0, "return"))
+  empty = typedIrModule()
+  duplicate.functions = empty.functions
+  duplicate.functions = irFunctionArenaPush(duplicate.functions, fn(2))
+  assert(!typedIrValid(duplicate), "block names must be unique")
+
+  println("typed IR verifier")
+  return 0
+}

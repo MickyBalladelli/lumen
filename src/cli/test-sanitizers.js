@@ -41,6 +41,18 @@ const cases = [
     stdout: 'bootstrap modules\n'
   },
   {
+    name: 'typed IR verifier',
+    source: 'tests/runtime/typed-ir-verifier.lm',
+    code: 0,
+    stdout: 'typed IR verifier\n'
+  },
+  {
+    name: 'compiler module identity',
+    source: 'tests/runtime/compiler-module-identity.lm',
+    code: 0,
+    stdout: 'compiler module identity\n'
+  },
+  {
     name: 'array bounds',
     source: 'tests/runtime/array-out-of-bounds.lm',
     code: 1,

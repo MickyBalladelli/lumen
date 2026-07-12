@@ -1,32 +1,40 @@
-import { IrModule, IrStatement, IrFunction, TypedIrModule, irStatementFromProgram, irFunctionFromProgram, typedIrValid } from "./ir.lm"
+import { TypedIrModule, typedIrValid } from "./ir.lm"
 import { compilerAbiDeclaration, compilerAbiDeclarations, compilerAbiSignature } from "./abi.lm"
 import { CompilerIrBlock, irBlockArenaGet, irFunctionArenaGet, irValueArenaGet } from "./containers.lm"
 
-function emitIr(ir: IrModule): string {
-  if !typedIrValid(ir.typed) {
+function emitIr(ir: TypedIrModule): string {
+  if !typedIrValid(ir) {
     return "; invalid typed IR
 "
   }
-
-  if typedIrCanEmit(ir.typed) {
-    return emitTypedIr(ir.typed)
-  }
-
-  return "; typed fallback: " + typedIrUnsupportedKind(ir.typed) + "
-" + emitStatementMainIr(ir, ir.program)
+  return emitTypedIr(ir)
 }
 
-function emitIrError(ir: IrModule): string {
-  if typedIrValid(ir.typed) {
+function emitIrError(ir: TypedIrModule): string {
+  if typedIrValid(ir) && typedIrCanEmit(ir) {
     return ""
   }
-  if ir.typed.functions.count > 0 {
-    let fn = irFunctionArenaGet(ir.typed.functions, 0)
-    return "compile error: invalid typed IR at " + fn.file +
+  if ir.functions.count > 0 {
+    let fn = irFunctionArenaGet(ir.functions, 0)
+    let reason = "invalid typed IR"
+    if typedIrValid(ir) {
+      reason = "unsupported typed IR " + typedIrUnsupportedKind(ir)
+    }
+    return "compile error: " + reason + " at " + fn.file +
       ":" + intToString(fn.line) +
       ":" + intToString(fn.column)
   }
   return "compile error: invalid typed IR"
+}
+
+function llvmI32Atom(value: string): string {
+  if includes(value, "%") {
+    return value
+  }
+  if stringEquals(value, intToString(stringToInt(value))) {
+    return value
+  }
+  return "0"
 }
 
 function typedIrValueText(module: TypedIrModule, valueId: i32): string {
@@ -55,7 +63,9 @@ function typedIrValueText(module: TypedIrModule, valueId: i32): string {
   if includes(value.kind, "binary.") || includes(value.kind, "unary.") ||
     includes(value.kind, "call.") ||
     stringEquals(value.kind, "struct") || stringEquals(value.kind, "member") ||
-    stringEquals(value.kind, "slice") || stringEquals(value.kind, "match") {
+    stringEquals(value.kind, "array") || stringEquals(value.kind, "index") ||
+    stringEquals(value.kind, "slice") || stringEquals(value.kind, "match") ||
+    stringEquals(value.kind, "interpolate") {
     return "%v." + intToString(valueId)
   }
   if stringEquals(value.kind, "local") {
@@ -164,6 +174,9 @@ function typedIrValueType(module: TypedIrModule, block: CompilerIrBlock, valueId
   if stringEquals(value.kind, "struct") {
     return "ptr"
   }
+  if stringEquals(value.kind, "array") {
+    return "ptr"
+  }
   if stringEquals(value.kind, "slice") {
     return "ptr"
   }
@@ -233,6 +246,8 @@ function typedIrValueSupported(module: TypedIrModule, block: CompilerIrBlock, va
     stringEquals(value.kind, "ExpressionStatement") ||
     stringEquals(value.kind, "struct.field") || stringEquals(value.kind, "field.link") ||
     stringEquals(value.kind, "struct") || stringEquals(value.kind, "member") ||
+    stringEquals(value.kind, "array.element") || stringEquals(value.kind, "array") ||
+    stringEquals(value.kind, "index") ||
     stringEquals(value.kind, "slice.range") || stringEquals(value.kind, "slice") ||
     stringEquals(value.kind, "match.wildcard") || stringEquals(value.kind, "match.arm") ||
     stringEquals(value.kind, "match") ||
@@ -240,6 +255,9 @@ function typedIrValueSupported(module: TypedIrModule, block: CompilerIrBlock, va
     return true
   }
   if stringEquals(value.kind, "literal") {
+    return true
+  }
+  if stringEquals(value.kind, "interpolate") {
     return true
   }
   if stringEquals(value.kind, "load") {
@@ -262,7 +280,11 @@ function typedIrValueSupported(module: TypedIrModule, block: CompilerIrBlock, va
   }
   if stringEquals(value.kind, "if.begin") || stringEquals(value.kind, "if.else") ||
     stringEquals(value.kind, "if.end") || stringEquals(value.kind, "while.begin") ||
-    stringEquals(value.kind, "while.condition") || stringEquals(value.kind, "while.end") {
+    stringEquals(value.kind, "while.condition") || stringEquals(value.kind, "while.end") ||
+    stringEquals(value.kind, "for.update") ||
+    stringEquals(value.kind, "switch.begin") || stringEquals(value.kind, "switch.case") ||
+    stringEquals(value.kind, "switch.endcase") || stringEquals(value.kind, "switch.end") ||
+    stringEquals(value.kind, "try") {
     return true
   }
   if includes(value.kind, "call.") {
@@ -299,7 +321,7 @@ function typedIrUnsupportedKind(module: TypedIrModule): string {
     while valueIndex < block.firstValue + block.valueCount do {
       if !typedIrValueSupported(module, block, valueIndex) {
         let value = irValueArenaGet(module.values, valueIndex)
-        if includes(value.kind, "call.") {
+        if includes(value.kind, "call.") || stringEquals(value.kind, "load") {
           return value.kind + ":" + value.text
         }
         return value.kind
@@ -386,6 +408,52 @@ function emitTypedStructFields(out: string, module: TypedIrModule, block: Compil
   return out
 }
 
+function emitTypedArrayElements(out: string, module: TypedIrModule, linkId: i32, arrayId: i32, index: i32, elementType: string): string {
+  if linkId < 0 {
+    return out
+  }
+  let link = irValueArenaGet(module.values, linkId)
+  if link.operand1 >= 0 {
+    out = emitTypedArrayElements(out, module, link.operand1, arrayId, index - 1, elementType)
+  }
+  out = stringBuilderAppend(out, "  %array.element.")
+  out = stringBuilderAppend(out, intToString(linkId))
+  out = stringBuilderAppend(out, " = getelementptr ")
+  out = stringBuilderAppend(out, elementType)
+  out = stringBuilderAppend(out, ", ptr %v.")
+  out = stringBuilderAppend(out, intToString(arrayId))
+  out = stringBuilderAppend(out, ", i32 ")
+  out = stringBuilderAppend(out, intToString(index))
+  out = stringBuilderAppend(out, "
+  store ")
+  out = stringBuilderAppend(out, elementType)
+  out = stringBuilderAppend(out, " ")
+  out = stringBuilderAppend(out, typedIrValueText(module, link.operand0))
+  out = stringBuilderAppend(out, ", ptr %array.element.")
+  out = stringBuilderAppend(out, intToString(linkId))
+  out = stringBuilderAppend(out, "
+")
+  return out
+}
+
+function typedIrArrayLength(module: TypedIrModule, block: CompilerIrBlock, valueId: i32): i32 {
+  if valueId < 0 || valueId >= module.values.count {
+    return 0
+  }
+  let value = irValueArenaGet(module.values, valueId)
+  if stringEquals(value.kind, "array") {
+    return value.operand0
+  }
+  if stringEquals(value.kind, "load") {
+    let localId = typedIrStorageId(module, block, valueId, value.text)
+    if localId >= 0 {
+      let local = irValueArenaGet(module.values, localId)
+      return typedIrArrayLength(module, block, local.operand0)
+    }
+  }
+  return 0
+}
+
 function typedIrHasElse(module: TypedIrModule, block: CompilerIrBlock, branchId: i32): bool {
   let index = branchId + 1
   while index < block.firstValue + block.valueCount do {
@@ -418,6 +486,21 @@ function typedIrLoopEnd(module: TypedIrModule, block: CompilerIrBlock, valueId: 
     begin = begin - 1
   }
   return -1
+}
+
+function typedIrLoopHasUpdate(module: TypedIrModule, block: CompilerIrBlock, loopId: i32): bool {
+  let index = loopId + 1
+  while index < block.firstValue + block.valueCount do {
+    let value = irValueArenaGet(module.values, index)
+    if stringEquals(value.kind, "for.update") && value.operand0 == loopId {
+      return true
+    }
+    if stringEquals(value.kind, "while.end") && value.operand0 == loopId {
+      return false
+    }
+    index = index + 1
+  }
+  return false
 }
 
 function emitTypedMatch(out: string, module: TypedIrModule, block: CompilerIrBlock, valueId: i32): string {
@@ -481,13 +564,158 @@ function emitTypedMatch(out: string, module: TypedIrModule, block: CompilerIrBlo
 function emitTypedIrInstruction(out: string, module: TypedIrModule, block: CompilerIrBlock, valueId: i32): string {
   let value = irValueArenaGet(module.values, valueId)
 
+  if stringEquals(value.kind, "interpolate") {
+    let opening = indexOf(value.text, "${")
+    let closing = indexOf(value.text, "}")
+    let interpolationText = value.text
+    let prefix: string = interpolationText[0..opening]
+    let suffix: string = interpolationText[closing + 1..stringLen(interpolationText)]
+    out = stringBuilderAppend(out, "  %interpolate.number.")
+    out = stringBuilderAppend(out, intToString(valueId))
+    out = stringBuilderAppend(out, " = call ptr @lumen_int_to_string(i32 ")
+    out = stringBuilderAppend(out, typedIrValueText(module, value.operand0))
+    out = stringBuilderAppend(out, ")
+  %interpolate.prefix.")
+    out = stringBuilderAppend(out, intToString(valueId))
+    out = stringBuilderAppend(out, " = call ptr @lumen_string_concat(ptr getelementptr inbounds ([")
+    out = stringBuilderAppend(out, intToString(stringLen(prefix) + 1))
+    out = stringBuilderAppend(out, " x i8], ptr @.typed.interpolation.prefix.")
+    out = stringBuilderAppend(out, intToString(valueId))
+    out = stringBuilderAppend(out, ", i64 0, i64 0), ptr %interpolate.number.")
+    out = stringBuilderAppend(out, intToString(valueId))
+    out = stringBuilderAppend(out, ")
+")
+    if stringEquals(suffix, "") {
+      out = stringBuilderAppend(out, "  %v.")
+      out = stringBuilderAppend(out, intToString(valueId))
+      out = stringBuilderAppend(out, " = call ptr @lumen_string_concat(ptr %interpolate.prefix.")
+      out = stringBuilderAppend(out, intToString(valueId))
+      out = stringBuilderAppend(out, ", ptr getelementptr inbounds ([1 x i8], ptr @.typed.interpolation.suffix.")
+      out = stringBuilderAppend(out, intToString(valueId))
+      out = stringBuilderAppend(out, ", i64 0, i64 0))
+")
+    } else {
+      out = stringBuilderAppend(out, "  %v.")
+      out = stringBuilderAppend(out, intToString(valueId))
+      out = stringBuilderAppend(out, " = call ptr @lumen_string_concat(ptr %interpolate.prefix.")
+      out = stringBuilderAppend(out, intToString(valueId))
+      out = stringBuilderAppend(out, ", ptr getelementptr inbounds ([")
+      out = stringBuilderAppend(out, intToString(stringLen(suffix) + 1))
+      out = stringBuilderAppend(out, " x i8], ptr @.typed.interpolation.suffix.")
+      out = stringBuilderAppend(out, intToString(valueId))
+      out = stringBuilderAppend(out, ", i64 0, i64 0))
+")
+    }
+    return out
+  }
+
+  if stringEquals(value.kind, "switch.begin") {
+    return out
+  }
+
+  if stringEquals(value.kind, "switch.case") {
+    if value.operand1 >= 0 {
+      out = stringBuilderAppend(out, "  %switch.test.")
+      out = stringBuilderAppend(out, intToString(valueId))
+      out = stringBuilderAppend(out, " = icmp eq i32 ")
+      out = stringBuilderAppend(out, typedIrValueText(module, value.operand0))
+      out = stringBuilderAppend(out, ", ")
+      out = stringBuilderAppend(out, typedIrValueText(module, value.operand1))
+      out = stringBuilderAppend(out, "
+  br i1 %switch.test.")
+      out = stringBuilderAppend(out, intToString(valueId))
+      out = stringBuilderAppend(out, ", label %switch.body.")
+      out = stringBuilderAppend(out, intToString(valueId))
+      out = stringBuilderAppend(out, ", label %switch.next.")
+      out = stringBuilderAppend(out, intToString(valueId))
+      out = stringBuilderAppend(out, "
+switch.body.")
+      out = stringBuilderAppend(out, intToString(valueId))
+      out = stringBuilderAppend(out, ":
+")
+    } else {
+      out = stringBuilderAppend(out, "  br label %switch.body.")
+      out = stringBuilderAppend(out, intToString(valueId))
+      out = stringBuilderAppend(out, "
+switch.body.")
+      out = stringBuilderAppend(out, intToString(valueId))
+      out = stringBuilderAppend(out, ":
+")
+    }
+    return out
+  }
+
+  if stringEquals(value.kind, "switch.endcase") {
+    out = stringBuilderAppend(out, "  br label %switch.end.")
+    out = stringBuilderAppend(out, intToString(value.operand1))
+    out = stringBuilderAppend(out, "
+switch.next.")
+    out = stringBuilderAppend(out, intToString(value.operand0))
+    out = stringBuilderAppend(out, ":
+")
+    return out
+  }
+
+  if stringEquals(value.kind, "switch.end") {
+    out = stringBuilderAppend(out, "  br label %switch.end.")
+    out = stringBuilderAppend(out, intToString(value.operand0))
+    out = stringBuilderAppend(out, "
+switch.end.")
+    out = stringBuilderAppend(out, intToString(value.operand0))
+    out = stringBuilderAppend(out, ":
+")
+    return out
+  }
+
+  if stringEquals(value.kind, "array") {
+    let elementType = "i32"
+    let elementSize: i32 = 4
+    if value.operand1 >= 0 {
+      let link = irValueArenaGet(module.values, value.operand1)
+      elementType = typedIrValueType(module, block, link.operand0)
+      if stringEquals(elementType, "ptr") {
+        elementSize = 8
+      }
+    }
+    out = stringBuilderAppend(out, "  %v.")
+    out = stringBuilderAppend(out, intToString(valueId))
+    out = stringBuilderAppend(out, " = call ptr @calloc(i64 ")
+    out = stringBuilderAppend(out, intToString(value.operand0))
+    out = stringBuilderAppend(out, ", i64 ")
+    out = stringBuilderAppend(out, intToString(elementSize))
+    out = stringBuilderAppend(out, ")
+")
+    return emitTypedArrayElements(out, module, value.operand1, valueId, value.operand0 - 1, elementType)
+  }
+
+  if stringEquals(value.kind, "index") {
+    out = stringBuilderAppend(out, "  %index.ptr.")
+    out = stringBuilderAppend(out, intToString(valueId))
+    out = stringBuilderAppend(out, " = getelementptr i32, ptr ")
+    out = stringBuilderAppend(out, typedIrValueText(module, value.operand0))
+    out = stringBuilderAppend(out, ", i32 ")
+    out = stringBuilderAppend(out, typedIrValueText(module, value.operand1))
+    out = stringBuilderAppend(out, "
+  %v.")
+    out = stringBuilderAppend(out, intToString(valueId))
+    out = stringBuilderAppend(out, " = load i32, ptr %index.ptr.")
+    out = stringBuilderAppend(out, intToString(valueId))
+    out = stringBuilderAppend(out, "
+")
+    return out
+  }
+
   if stringEquals(value.kind, "BreakStatement") || stringEquals(value.kind, "ContinueStatement") {
     let loop = typedIrLoopEnd(module, block, valueId)
     if loop >= 0 {
       if stringEquals(value.kind, "BreakStatement") {
         out = stringBuilderAppend(out, "  br label %while.end.")
       } else {
-        out = stringBuilderAppend(out, "  br label %while.cond.")
+        if typedIrLoopHasUpdate(module, block, loop) {
+          out = stringBuilderAppend(out, "  br label %while.update.")
+        } else {
+          out = stringBuilderAppend(out, "  br label %while.cond.")
+        }
       }
       out = stringBuilderAppend(out, intToString(loop))
       out = stringBuilderAppend(out, "
@@ -496,6 +724,17 @@ after.control.")
       out = stringBuilderAppend(out, ":
 ")
     }
+    return out
+  }
+
+  if stringEquals(value.kind, "for.update") {
+    out = stringBuilderAppend(out, "  br label %while.update.")
+    out = stringBuilderAppend(out, intToString(value.operand0))
+    out = stringBuilderAppend(out, "
+while.update.")
+    out = stringBuilderAppend(out, intToString(value.operand0))
+    out = stringBuilderAppend(out, ":
+")
     return out
   }
 
@@ -837,6 +1076,21 @@ after.return.")
 ")
       return out
     }
+    if stringEquals(value.text, "exec") {
+      let arguments = irValueArenaGet(module.values, value.operand1)
+      let commandArgument = irValueArenaGet(module.values, arguments.operand1)
+      out = stringBuilderAppend(out, "  %v.")
+      out = stringBuilderAppend(out, intToString(valueId))
+      out = stringBuilderAppend(out, " = call ptr @lumen_exec(ptr ")
+      out = stringBuilderAppend(out, typedIrValueText(module, commandArgument.operand0))
+      out = stringBuilderAppend(out, ", ptr ")
+      out = stringBuilderAppend(out, typedIrValueText(module, arguments.operand0))
+      out = stringBuilderAppend(out, ", i32 ")
+      out = stringBuilderAppend(out, intToString(typedIrArrayLength(module, block, arguments.operand0)))
+      out = stringBuilderAppend(out, ")
+")
+      return out
+    }
     let builtin = typedIrBuiltinSymbol(value.text)
     if !stringEquals(builtin, "") {
       let signature = compilerAbiSignature(value.text)
@@ -1064,6 +1318,44 @@ function.return:
   return out
 }
 
+function typedIrDeclare(out: string, declared: string, name: string): string {
+  if mapHas(declared, name) {
+    return out
+  }
+  return stringBuilderAppend(out, compilerAbiDeclaration(compilerAbiSignature(name)))
+}
+
+function emitTypedIrDeclarations(module: TypedIrModule): string {
+  let out = stringBuilder()
+  let declared = map("unused", "1")
+  let valueIndex: i32 = 0
+  while valueIndex < module.values.count do {
+    let value = irValueArenaGet(module.values, valueIndex)
+    let name = ""
+    if includes(value.kind, "call.") && !stringEquals(value.text, "println") {
+      name = value.text
+    } else if stringEquals(value.kind, "struct") || stringEquals(value.kind, "array") {
+      name = "__calloc"
+    } else if stringEquals(value.kind, "slice") {
+      name = "__stringSlice"
+    } else if stringEquals(value.kind, "interpolate") {
+      out = typedIrDeclare(out, declared, "intToString")
+      declared = mapSet(declared, "intToString", "1")
+      name = "__stringConcat"
+    } else if stringEquals(value.kind, "binary.+") && value.typeId > 0 {
+      out = typedIrDeclare(out, declared, "intToString")
+      declared = mapSet(declared, "intToString", "1")
+      name = "__stringConcat"
+    }
+    if !stringEquals(name, "") && !mapHas(declared, name) {
+      out = typedIrDeclare(out, declared, name)
+      declared = mapSet(declared, name, "1")
+    }
+    valueIndex = valueIndex + 1
+  }
+  return out
+}
+
 function emitTypedIr(module: TypedIrModule): string {
   let out = stringBuilder()
   out = stringBuilderAppend(out, "; Lumen self-host LLVM IR
@@ -1083,6 +1375,29 @@ function emitTypedIr(module: TypedIrModule): string {
       out = stringBuilderAppend(out, '\00"
 ')
     }
+    if stringEquals(value.kind, "interpolate") {
+      let opening = indexOf(value.text, "${")
+      let closing = indexOf(value.text, "}")
+      let interpolationText = value.text
+      let prefix: string = interpolationText[0..opening]
+      let suffix: string = interpolationText[closing + 1..stringLen(interpolationText)]
+      out = stringBuilderAppend(out, "@.typed.interpolation.prefix.")
+      out = stringBuilderAppend(out, intToString(valueIndex))
+      out = stringBuilderAppend(out, " = private unnamed_addr constant [")
+      out = stringBuilderAppend(out, intToString(stringLen(prefix) + 1))
+      out = stringBuilderAppend(out, ' x i8] c"')
+      out = stringBuilderAppend(out, typedIrEscapeString(prefix))
+      out = stringBuilderAppend(out, '\00"
+')
+      out = stringBuilderAppend(out, "@.typed.interpolation.suffix.")
+      out = stringBuilderAppend(out, intToString(valueIndex))
+      out = stringBuilderAppend(out, " = private unnamed_addr constant [")
+      out = stringBuilderAppend(out, intToString(stringLen(suffix) + 1))
+      out = stringBuilderAppend(out, ' x i8] c"')
+      out = stringBuilderAppend(out, typedIrEscapeString(suffix))
+      out = stringBuilderAppend(out, '\00"
+')
+    }
     if includes(value.kind, "call.") && stringEquals(value.text, "println") {
       usesPrint = true
     }
@@ -1095,1750 +1410,12 @@ function emitTypedIr(module: TypedIrModule): string {
 ')
     out = stringBuilderAppend(out, compilerAbiDeclaration(compilerAbiSignature("println")))
   }
-  out = stringBuilderAppend(out, compilerAbiDeclarations())
+  out = stringBuilderAppend(out, emitTypedIrDeclarations(module))
   let functionIndex: i32 = 0
 
   while functionIndex < module.functions.count do {
     out = stringBuilderAppend(out, emitTypedIrFunction(module, functionIndex))
     functionIndex = functionIndex + 1
-  }
-
-  return out
-}
-
-function statementPrefix(index: i32): string {
-  let out = stringBuilder()
-  out = stringBuilderAppend(out, "statement")
-  out = stringBuilderAppend(out, intToString(index))
-  return out
-}
-
-function binaryValueName(slot: string): string {
-  let out = stringBuilder()
-  out = stringBuilderAppend(out, "%bin.")
-  out = stringBuilderAppend(out, slot)
-  return out
-}
-
-function callValueName(slot: string): string {
-  let out = stringBuilder()
-  out = stringBuilderAppend(out, "%call.")
-  out = stringBuilderAppend(out, slot)
-  return out
-}
-
-// The compatibility emitter only knows numeric SSA values. Never put an AST
-// name into LLVM where an i32 value is required while typed lowering takes
-// over that expression family.
-function llvmI32Atom(value: string): string {
-  if includes(value, "%") {
-    return value
-  }
-  if stringEquals(value, intToString(stringToInt(value))) {
-    return value
-  }
-  return "0"
-}
-
-function statementAt(ir: IrModule, program: string, index: i32): IrStatement {
-  return irStatementFromProgram(program, index)
-}
-
-function functionAt(ir: IrModule, program: string, index: i32): IrFunction {
-  return irFunctionFromProgram(program, index)
-}
-
-function resolvedStatementExprKind(statement: IrStatement, symbols: string): string {
-  let kind = statement.expressionKind
-  let value = statement.expressionValue
-  let resolvedKind = statement.resolvedKind
-
-  if includes(kind, "call") {
-    return "number"
-  }
-
-  if includes(kind, "binary") {
-    return "number"
-  }
-
-  if includes(kind, "identifier") {
-    let resolved = mapGet(symbols, value + "Kind")
-    if includes(resolved, "string") {
-      return resolved
-    }
-    if includes(resolved, "number") {
-      return resolved
-    }
-  }
-
-  if includes(resolvedKind, "string") {
-    return resolvedKind
-  }
-
-  if includes(resolvedKind, "number") {
-    return resolvedKind
-  }
-
-  return kind
-}
-
-function resolvedStatementExprValue(statement: IrStatement, symbols: string): string {
-  let kind = statement.expressionKind
-  let value = statement.expressionValue
-  let resolvedKind = statement.resolvedKind
-  let resolvedValue = statement.resolvedValue
-
-  if includes(kind, "call") {
-    return value
-  }
-
-  if includes(kind, "binary") {
-    return value
-  }
-
-  if includes(kind, "identifier") {
-    let symbolKind = mapGet(symbols, value + "Kind")
-    let resolved = mapGet(symbols, value + "Value")
-    if includes(symbolKind, "string") {
-      return resolved
-    }
-    if includes(symbolKind, "number") {
-      return resolved
-    }
-  }
-
-  if includes(resolvedKind, "string") {
-    return resolvedValue
-  }
-
-  if includes(resolvedKind, "number") {
-    return resolvedValue
-  }
-
-  return value
-}
-
-function addStructFieldSymbols(symbols: string, name: string, value: string): string {
-  let index: i32 = 0
-  let length = stringLen(value)
-
-  while index < length do {
-    let ch = value[index..index + 1]
-
-    if stringEquals(ch, ":") {
-      let fieldStart = index + 1
-      let cursor = fieldStart
-
-      while cursor < length do {
-        let current = value[cursor..cursor + 1]
-        if stringEquals(current, "=") {
-          let fieldName = value[fieldStart..cursor]
-          let valueStart = cursor + 1
-          let valueEnd = valueStart
-
-          while valueEnd < length do {
-            let next = value[valueEnd..valueEnd + 1]
-            if stringEquals(next, ":") {
-              let fieldKey = name + "." + fieldName
-              symbols = mapSet(symbols, fieldKey + "Kind", "number")
-              symbols = mapSet(symbols, fieldKey + "Value", value[valueStart..valueEnd])
-              index = valueEnd
-              break
-            }
-
-            valueEnd = valueEnd + 1
-          }
-
-          if valueEnd >= length {
-            let fieldKey = name + "." + fieldName
-            symbols = mapSet(symbols, fieldKey + "Kind", "number")
-            symbols = mapSet(symbols, fieldKey + "Value", value[valueStart..length])
-            index = length
-          }
-        }
-
-        if stringEquals(current, ":") {
-          break
-        }
-
-        cursor = cursor + 1
-      }
-    }
-
-    index = index + 1
-  }
-
-  return symbols
-}
-
-function buildStatementSymbols(program: string): string {
-  let symbols = map("unused", "unused")
-  let count = stringToInt(mapGet(program, "statementCount"))
-  let index: i32 = 0
-
-  while index < count do {
-    let prefix = statementPrefix(index)
-    let kind = mapGet(program, prefix + "Kind")
-
-    if includes(kind, "let") {
-      let name = mapGet(program, prefix + "Name")
-      if includes(mapGet(program, prefix + "ExprKind"), "binary") {
-        symbols = mapSet(symbols, name + "Kind", "number")
-        symbols = mapSet(symbols, name + "Value", binaryValueName(intToString(index)))
-      } else if includes(mapGet(program, prefix + "ExprKind"), "call") {
-        symbols = mapSet(symbols, name + "Kind", "number")
-        symbols = mapSet(symbols, name + "Value", callValueName(intToString(index)))
-      } else if includes(mapGet(program, prefix + "ResolvedKind"), "struct") {
-        symbols = mapSet(symbols, name + "Kind", "struct")
-        symbols = mapSet(symbols, name + "Value", mapGet(program, prefix + "ResolvedValue"))
-        symbols = addStructFieldSymbols(symbols, name, mapGet(program, prefix + "ResolvedValue"))
-      } else {
-        symbols = mapSet(symbols, name + "Kind", resolvedExprKind(program, symbols, prefix))
-        symbols = mapSet(symbols, name + "Value", resolvedExprValue(program, symbols, prefix))
-      }
-    }
-
-    if includes(kind, "const") {
-      let name = mapGet(program, prefix + "Name")
-      if includes(mapGet(program, prefix + "ExprKind"), "binary") {
-        symbols = mapSet(symbols, name + "Kind", "number")
-        symbols = mapSet(symbols, name + "Value", binaryValueName(intToString(index)))
-      } else if includes(mapGet(program, prefix + "ExprKind"), "call") {
-        symbols = mapSet(symbols, name + "Kind", "number")
-        symbols = mapSet(symbols, name + "Value", callValueName(intToString(index)))
-      } else if includes(mapGet(program, prefix + "ResolvedKind"), "struct") {
-        symbols = mapSet(symbols, name + "Kind", "struct")
-        symbols = mapSet(symbols, name + "Value", mapGet(program, prefix + "ResolvedValue"))
-        symbols = addStructFieldSymbols(symbols, name, mapGet(program, prefix + "ResolvedValue"))
-      } else {
-        symbols = mapSet(symbols, name + "Kind", resolvedExprKind(program, symbols, prefix))
-        symbols = mapSet(symbols, name + "Value", resolvedExprValue(program, symbols, prefix))
-      }
-    }
-
-    if includes(kind, "assign") {
-      let name = mapGet(program, prefix + "Name")
-      symbols = mapSet(symbols, name + "Kind", resolvedExprKind(program, symbols, prefix))
-      symbols = mapSet(symbols, name + "Value", resolvedExprValue(program, symbols, prefix))
-    }
-
-    if includes(kind, "while") {
-      let name = mapGet(program, prefix + "BodyAssignName")
-      symbols = mapSet(symbols, name + "Kind", "number")
-      symbols = mapSet(symbols, name + "Value", "%" + name + ".done")
-    }
-
-    if includes(kind, "for") {
-      let name = mapGet(program, prefix + "BodyAssignName")
-      let loopName = mapGet(program, prefix + "LoopVariable")
-      let initial = mapGet(symbols, name + "Value")
-      symbols = mapSet(symbols, name + "InitialValue", initial)
-      symbols = mapSet(symbols, name + "Kind", "number")
-      symbols = mapSet(symbols, name + "Value", "%" + name + ".done")
-      symbols = mapSet(symbols, loopName + "Kind", "number")
-      symbols = mapSet(symbols, loopName + "Value", "%" + loopName + ".done")
-    }
-
-    index = index + 1
-  }
-
-  return symbols
-}
-
-function resolvedExprKind(program: string, symbols: string, prefix: string): string {
-  let kind = mapGet(program, prefix + "ExprKind")
-  let value = mapGet(program, prefix + "ExprValue")
-  let resolvedKind = mapGet(program, prefix + "ResolvedKind")
-
-  if includes(kind, "call") {
-    return "number"
-  }
-
-  if includes(kind, "binary") {
-    return "number"
-  }
-
-  if includes(kind, "identifier") {
-    let resolved = mapGet(symbols, value + "Kind")
-    if includes(resolved, "string") {
-      return resolved
-    }
-    if includes(resolved, "number") {
-      return resolved
-    }
-  }
-
-  if includes(resolvedKind, "string") {
-    return resolvedKind
-  }
-
-  if includes(resolvedKind, "number") {
-    return resolvedKind
-  }
-
-  return kind
-}
-
-function resolvedExprValue(program: string, symbols: string, prefix: string): string {
-  let kind = mapGet(program, prefix + "ExprKind")
-  let value = mapGet(program, prefix + "ExprValue")
-  let resolvedKind = mapGet(program, prefix + "ResolvedKind")
-  let resolvedValue = mapGet(program, prefix + "ResolvedValue")
-
-  if includes(kind, "call") {
-    return value
-  }
-
-  if includes(kind, "binary") {
-    return value
-  }
-
-  if includes(kind, "identifier") {
-    let symbolKind = mapGet(symbols, value + "Kind")
-    let resolved = mapGet(symbols, value + "Value")
-    if includes(symbolKind, "string") {
-      return resolved
-    }
-    if includes(symbolKind, "number") {
-      return resolved
-    }
-  }
-
-  if includes(resolvedKind, "string") {
-    return resolvedValue
-  }
-
-  if includes(resolvedKind, "number") {
-    return resolvedValue
-  }
-
-  return value
-}
-
-function hasForStatement(program: string): bool {
-  let count = stringToInt(mapGet(program, "statementCount"))
-  let index: i32 = 0
-
-  while index < count do {
-    let prefix = statementPrefix(index)
-    if includes(mapGet(program, prefix + "Kind"), "for") {
-      return true
-    }
-
-    index = index + 1
-  }
-
-  return false
-}
-
-function hasWhileStatement(program: string): bool {
-  let count = stringToInt(mapGet(program, "statementCount"))
-  let index: i32 = 0
-
-  while index < count do {
-    let prefix = statementPrefix(index)
-    if includes(mapGet(program, prefix + "Kind"), "while") {
-      return true
-    }
-
-    index = index + 1
-  }
-
-  return false
-}
-
-function resolvedNumberAtom(symbols: string, value: string): string {
-  let resolved = mapGet(symbols, value + "Value")
-  if includes(resolved, "%") {
-    return resolved
-  }
-
-  if includes(mapGet(symbols, value + "Kind"), "number") {
-    return resolved
-  }
-
-  return value
-}
-
-function hasFunction(program: string): bool {
-  let count = stringToInt(mapGet(program, "functionCount"))
-  return count > 0
-}
-
-function hasFunctionIr(ir: IrModule): bool {
-  if ir.functionCount > 0 {
-    if stringEquals(ir.function0Name, "") {
-      return false
-    }
-
-    return true
-  }
-
-  return false
-}
-
-function hasForStatementIr(ir: IrModule, program: string): bool {
-  let index: i32 = 0
-
-  while index < ir.statementCount do {
-    let statement = statementAt(ir, program, index)
-    if includes(statement.kind, "for") {
-      return true
-    }
-
-    index = index + 1
-  }
-
-  return false
-}
-
-function hasWhileStatementIr(ir: IrModule, program: string): bool {
-  let index: i32 = 0
-
-  while index < ir.statementCount do {
-    let statement = statementAt(ir, program, index)
-    if includes(statement.kind, "while") {
-      return true
-    }
-
-    index = index + 1
-  }
-
-  return false
-}
-
-function buildStatementSymbolsIr(ir: IrModule, program: string): string {
-  let symbols = map("unused", "unused")
-  let index: i32 = 0
-
-  while index < ir.statementCount do {
-    let statement = statementAt(ir, program, index)
-
-    if includes(statement.kind, "let") {
-      let name = statement.name
-      if includes(statement.expressionKind, "binary") {
-        symbols = mapSet(symbols, name + "Kind", "number")
-        symbols = mapSet(symbols, name + "Value", binaryValueName(intToString(index)))
-      } else if includes(statement.expressionKind, "call") {
-        symbols = mapSet(symbols, name + "Kind", "number")
-        symbols = mapSet(symbols, name + "Value", callValueName(intToString(index)))
-      } else if includes(statement.resolvedKind, "struct") {
-        symbols = mapSet(symbols, name + "Kind", "struct")
-        symbols = mapSet(symbols, name + "Value", statement.resolvedValue)
-        symbols = addStructFieldSymbols(symbols, name, statement.resolvedValue)
-      } else {
-        symbols = mapSet(symbols, name + "Kind", resolvedStatementExprKind(statement, symbols))
-        symbols = mapSet(symbols, name + "Value", resolvedStatementExprValue(statement, symbols))
-      }
-    }
-
-    if includes(statement.kind, "const") {
-      let name = statement.name
-      if includes(statement.expressionKind, "binary") {
-        symbols = mapSet(symbols, name + "Kind", "number")
-        symbols = mapSet(symbols, name + "Value", binaryValueName(intToString(index)))
-      } else if includes(statement.expressionKind, "call") {
-        symbols = mapSet(symbols, name + "Kind", "number")
-        symbols = mapSet(symbols, name + "Value", callValueName(intToString(index)))
-      } else if includes(statement.resolvedKind, "struct") {
-        symbols = mapSet(symbols, name + "Kind", "struct")
-        symbols = mapSet(symbols, name + "Value", statement.resolvedValue)
-        symbols = addStructFieldSymbols(symbols, name, statement.resolvedValue)
-      } else {
-        symbols = mapSet(symbols, name + "Kind", resolvedStatementExprKind(statement, symbols))
-        symbols = mapSet(symbols, name + "Value", resolvedStatementExprValue(statement, symbols))
-      }
-    }
-
-    if includes(statement.kind, "assign") {
-      let name = statement.name
-      symbols = mapSet(symbols, name + "Kind", resolvedStatementExprKind(statement, symbols))
-      symbols = mapSet(symbols, name + "Value", resolvedStatementExprValue(statement, symbols))
-    }
-
-    if includes(statement.kind, "while") {
-      let name = statement.bodyAssignName
-      symbols = mapSet(symbols, name + "Kind", "number")
-      symbols = mapSet(symbols, name + "Value", "%" + name + ".done")
-    }
-
-    if includes(statement.kind, "for") {
-      let name = statement.bodyAssignName
-      let initial = mapGet(symbols, name + "Value")
-      symbols = mapSet(symbols, name + "InitialValue", initial)
-      symbols = mapSet(symbols, name + "Kind", "number")
-      symbols = mapSet(symbols, name + "Value", "%" + name + ".done")
-      symbols = mapSet(symbols, statement.loopVariable + "Kind", "number")
-      symbols = mapSet(symbols, statement.loopVariable + "Value", "%" + statement.loopVariable + ".done")
-    }
-
-    index = index + 1
-  }
-
-  return symbols
-}
-
-function emitStatementMainIr(ir: IrModule, program: string): string {
-  let symbols = buildStatementSymbolsIr(ir, program)
-  let returnValue = ir.returnValue
-  let hasFor = hasForStatementIr(ir, program)
-  let hasWhile = hasWhileStatementIr(ir, program)
-  let out = stringBuilder()
-
-  out = stringBuilderAppend(out, "; Lumen self-host LLVM IR
-")
-  out = stringBuilderAppend(out, '@.fmt.str = private unnamed_addr constant [4 x i8] c"%s\0A\00"
-')
-  out = stringBuilderAppend(out, '@.fmt.int = private unnamed_addr constant [4 x i8] c"%d\0A\00"
-')
-  if hasFunctionIr(ir) {
-    out = emitFunctionDefinitionsIr(out, ir, program)
-  }
-
-  let globalIndex: i32 = 0
-  while globalIndex < ir.statementCount do {
-    let statement = statementAt(ir, program, globalIndex)
-
-    if includes(statement.kind, "println") {
-      let kind = resolvedStatementExprKind(statement, symbols)
-      let value = resolvedStatementExprValue(statement, symbols)
-      if includes(kind, "string") {
-        out = emitStringGlobal(out, intToString(globalIndex), value)
-      }
-    }
-
-    if includes(statement.kind, "if") {
-      if includes(statement.bodyExpressionKind, "string") {
-        out = emitStringGlobal(out, intToString(globalIndex), statement.bodyExpressionValue)
-      }
-    }
-
-    if includes(statement.kind, "return") {
-      returnValue = resolvedStatementExprValue(statement, symbols)
-    }
-
-    globalIndex = globalIndex + 1
-  }
-
-  out = stringBuilderAppend(out, "declare i32 @printf(ptr, ...)
-")
-  out = stringBuilderAppend(out, "declare ptr @lumen_arg_count()
-")
-  out = stringBuilderAppend(out, "declare ptr @lumen_arg(i32)
-")
-  out = stringBuilderAppend(out, "declare ptr @lumen_result_value(ptr)
-")
-  out = stringBuilderAppend(out, "define i32 @argCount() {
-entry:
-  %raw = call ptr @lumen_arg_count()
-  %value = ptrtoint ptr %raw to i32
-  ret i32 %value
-}
-")
-  out = stringBuilderAppend(out, "define i32 @arg(i32 %index) {
-entry:
-  %raw = call ptr @lumen_arg(i32 %index)
-  %value = ptrtoint ptr %raw to i32
-  ret i32 %value
-}
-")
-  out = stringBuilderAppend(out, "define i32 @resultValue(i32 %result) {
-entry:
-  %raw = inttoptr i32 %result to ptr
-  %value = call ptr @lumen_result_value(ptr %raw)
-  %number = ptrtoint ptr %value to i32
-  ret i32 %number
-}
-")
-  out = stringBuilderAppend(out, "define i32 @main() {
-")
-  out = stringBuilderAppend(out, "entry:
-")
-  out = emitLocalStorageIr(out, ir, program, symbols)
-  if hasFor {
-    out = emitForStatementsIr(out, ir, program, symbols)
-  }
-  out = emitBinaryStatementsIr(out, ir, program, symbols)
-  out = emitCallStatementsIr(out, ir, program, symbols)
-  if hasWhile {
-    out = emitWhileStatementsIr(out, ir, program, symbols)
-  }
-
-  let emitIndex: i32 = 0
-  while emitIndex < ir.statementCount do {
-    let statement = statementAt(ir, program, emitIndex)
-
-    if includes(statement.kind, "println") {
-      out = emitPrint(out, intToString(emitIndex), resolvedStatementExprKind(statement, symbols), resolvedStatementExprValue(statement, symbols))
-    }
-
-    if includes(statement.kind, "if") {
-      out = emitIfStatementIr(out, intToString(emitIndex), symbols, statement)
-    }
-
-    emitIndex = emitIndex + 1
-  }
-
-  out = stringBuilderAppend(out, "  ret i32 ")
-  out = stringBuilderAppend(out, llvmI32Atom(returnValue))
-  out = stringBuilderAppend(out, "
-}
-")
-
-  return out
-}
-
-function emitStatementMain(program: string): string {
-  let symbols = buildStatementSymbols(program)
-  let returnValue = mapGet(program, "mainReturnValue")
-  let statementCount = stringToInt(mapGet(program, "statementCount"))
-  let hasFor = hasForStatement(program)
-  let hasWhile = hasWhileStatement(program)
-  let out = stringBuilder()
-
-  out = stringBuilderAppend(out, "; Lumen self-host LLVM IR
-")
-  out = stringBuilderAppend(out, '@.fmt.str = private unnamed_addr constant [4 x i8] c"%s\0A\00"
-')
-  out = stringBuilderAppend(out, '@.fmt.int = private unnamed_addr constant [4 x i8] c"%d\0A\00"
-')
-  if hasFunction(program) {
-    out = emitFunctionDefinitions(out, program)
-  }
-
-  let globalIndex: i32 = 0
-  while globalIndex < statementCount do {
-    let prefix = statementPrefix(globalIndex)
-    let statementKind = mapGet(program, prefix + "Kind")
-
-    if includes(statementKind, "println") {
-      let kind = resolvedExprKind(program, symbols, prefix)
-      let value = resolvedExprValue(program, symbols, prefix)
-      if includes(kind, "string") {
-        out = emitStringGlobal(out, intToString(globalIndex), value)
-      }
-    }
-
-    if includes(statementKind, "if") {
-      let bodyKind = mapGet(program, prefix + "BodyExprKind")
-      let bodyValue = mapGet(program, prefix + "BodyExprValue")
-      if includes(bodyKind, "string") {
-        out = emitStringGlobal(out, intToString(globalIndex), bodyValue)
-      }
-    }
-
-    if includes(statementKind, "return") {
-      returnValue = resolvedExprValue(program, symbols, prefix)
-    }
-
-    globalIndex = globalIndex + 1
-  }
-
-  out = stringBuilderAppend(out, "declare i32 @printf(ptr, ...)
-")
-  out = stringBuilderAppend(out, "define i32 @main() {
-")
-  out = stringBuilderAppend(out, "entry:
-")
-  out = emitLocalStorage(out, program, symbols)
-  if hasFor {
-    out = emitForStatements(out, program, symbols)
-  }
-  out = emitBinaryStatements(out, program, symbols)
-  out = emitCallStatements(out, program, symbols)
-  if hasWhile {
-    out = emitWhileStatements(out, program, symbols)
-  }
-
-  let emitIndex: i32 = 0
-  while emitIndex < statementCount do {
-    let prefix = statementPrefix(emitIndex)
-    let statementKind = mapGet(program, prefix + "Kind")
-
-    if includes(statementKind, "println") {
-      out = emitPrint(out, intToString(emitIndex), resolvedExprKind(program, symbols, prefix), resolvedExprValue(program, symbols, prefix))
-    }
-
-    if includes(statementKind, "if") {
-      out = emitIfStatement(out, intToString(emitIndex), program, symbols, prefix)
-    }
-
-    emitIndex = emitIndex + 1
-  }
-
-  out = stringBuilderAppend(out, "  ret i32 ")
-  out = stringBuilderAppend(out, llvmI32Atom(returnValue))
-  out = stringBuilderAppend(out, "
-}
-")
-
-  return out
-}
-
-function emitLocalStorage(out: string, program: string, symbols: string): string {
-  let count = stringToInt(mapGet(program, "statementCount"))
-  let index: i32 = 0
-
-  while index < count do {
-    let prefix = statementPrefix(index)
-    let kind = mapGet(program, prefix + "Kind")
-    let name = mapGet(program, prefix + "Name")
-
-    if includes(kind, "let") {
-      if includes(mapGet(program, prefix + "ExprKind"), "binary") {
-        let skippedBinary = 1
-      } else if includes(mapGet(program, prefix + "ExprKind"), "call") {
-        let skippedCall = 1
-      } else if includes(resolvedExprKind(program, symbols, prefix), "number") {
-        out = emitLocalStore(out, name, resolvedExprValue(program, symbols, prefix))
-      }
-    }
-
-    if includes(kind, "const") {
-      if includes(mapGet(program, prefix + "ExprKind"), "binary") {
-        let skippedBinary = 1
-      } else if includes(mapGet(program, prefix + "ExprKind"), "call") {
-        let skippedCall = 1
-      } else if includes(resolvedExprKind(program, symbols, prefix), "number") {
-        out = emitLocalStore(out, name, resolvedExprValue(program, symbols, prefix))
-      }
-    }
-
-    index = index + 1
-  }
-
-  return out
-}
-
-function emitLocalStorageIr(out: string, ir: IrModule, program: string, symbols: string): string {
-  let index: i32 = 0
-
-  while index < ir.statementCount do {
-    let statement = statementAt(ir, program, index)
-
-    if includes(statement.kind, "let") {
-      if includes(statement.expressionKind, "binary") {
-        let skippedBinary = 1
-      } else if includes(statement.expressionKind, "call") {
-        let skippedCall = 1
-      } else if includes(resolvedStatementExprKind(statement, symbols), "number") {
-        out = emitLocalStore(out, statement.name, resolvedStatementExprValue(statement, symbols))
-      }
-    }
-
-    if includes(statement.kind, "const") {
-      if includes(statement.expressionKind, "binary") {
-        let skippedBinary = 1
-      } else if includes(statement.expressionKind, "call") {
-        let skippedCall = 1
-      } else if includes(resolvedStatementExprKind(statement, symbols), "number") {
-        out = emitLocalStore(out, statement.name, resolvedStatementExprValue(statement, symbols))
-      }
-    }
-
-    index = index + 1
-  }
-
-  return out
-}
-
-function emitLocalStore(out: string, name: string, value: string): string {
-  if includes(value, "%") {
-    return out
-  }
-
-  out = stringBuilderAppend(out, "  %")
-  out = stringBuilderAppend(out, name)
-  out = stringBuilderAppend(out, ".addr = alloca i32
-")
-  out = stringBuilderAppend(out, "  store i32 ")
-  out = stringBuilderAppend(out, value)
-  out = stringBuilderAppend(out, ", ptr %")
-  out = stringBuilderAppend(out, name)
-  out = stringBuilderAppend(out, ".addr
-")
-
-  return out
-}
-
-function functionPrefix(index: i32): string {
-  let out = stringBuilder()
-  out = stringBuilderAppend(out, "function")
-  out = stringBuilderAppend(out, intToString(index))
-  return out
-}
-
-function emitFunctionDefinitions(out: string, program: string): string {
-  let count = stringToInt(mapGet(program, "functionCount"))
-  let index: i32 = 0
-
-  while index < count do {
-    let prefix = functionPrefix(index)
-    let name = mapGet(program, prefix + "Name")
-    let param0 = mapGet(program, prefix + "Param0")
-    let param1 = mapGet(program, prefix + "Param1")
-    let paramCount = mapGet(program, prefix + "ParamCount")
-    let returnKind = mapGet(program, prefix + "ReturnKind")
-    let operator = mapGet(program, prefix + "ReturnValue")
-    let left = mapGet(program, prefix + "ReturnLeftValue")
-    let right = mapGet(program, prefix + "ReturnRightValue")
-
-    out = stringBuilderAppend(out, "define i32 @")
-    out = stringBuilderAppend(out, name)
-    out = stringBuilderAppend(out, "(")
-    if !stringEquals(paramCount, "0") {
-      out = stringBuilderAppend(out, "i32 %")
-      out = stringBuilderAppend(out, param0)
-    }
-    if stringEquals(paramCount, "2") {
-      out = stringBuilderAppend(out, ", i32 %")
-      out = stringBuilderAppend(out, param1)
-    }
-    out = stringBuilderAppend(out, ") {
-entry:
-")
-    if emitFunctionNumberAtom(left, param0, param1) && emitFunctionNumberAtom(right, param0, param1) {
-      if stringEquals(operator, "*") {
-        out = stringBuilderAppend(out, "  %fn.ret = mul i32 ")
-      } else {
-        out = stringBuilderAppend(out, "  %fn.ret = add i32 ")
-      }
-      out = emitFunctionAtom(out, left, param0, param1)
-      out = stringBuilderAppend(out, ", ")
-      out = emitFunctionAtom(out, right, param0, param1)
-      out = stringBuilderAppend(out, "
-")
-      out = stringBuilderAppend(out, "  ret i32 %fn.ret
-")
-    } else {
-      out = stringBuilderAppend(out, "  ret i32 0
-")
-    }
-    out = stringBuilderAppend(out, "}
-")
-
-    index = index + 1
-  }
-
-  return out
-}
-
-function emitFunctionDefinitionsIr(out: string, ir: IrModule, program: string): string {
-  let index: i32 = 0
-
-  while index < ir.functionCount do {
-    let fn = functionAt(ir, program, index)
-    let name = fn.name
-    let param0 = fn.param0
-    let param1 = fn.param1
-    let paramCount = fn.paramCount
-    let returnKind = fn.returnKind
-    let operator = fn.returnValue
-    let left = fn.returnLeftValue
-    let right = fn.returnRightValue
-
-    out = stringBuilderAppend(out, "define i32 @")
-    out = stringBuilderAppend(out, name)
-    out = stringBuilderAppend(out, "(")
-    if !stringEquals(paramCount, "0") {
-      out = stringBuilderAppend(out, "i32 %")
-      out = stringBuilderAppend(out, param0)
-    }
-    if stringEquals(paramCount, "2") {
-      out = stringBuilderAppend(out, ", i32 %")
-      out = stringBuilderAppend(out, param1)
-    }
-    out = stringBuilderAppend(out, ") {
-entry:
-")
-    if emitFunctionNumberAtom(left, param0, param1) && emitFunctionNumberAtom(right, param0, param1) {
-      if stringEquals(operator, "*") {
-        out = stringBuilderAppend(out, "  %fn.ret = mul i32 ")
-      } else {
-        out = stringBuilderAppend(out, "  %fn.ret = add i32 ")
-      }
-      out = emitFunctionAtom(out, left, param0, param1)
-      out = stringBuilderAppend(out, ", ")
-      out = emitFunctionAtom(out, right, param0, param1)
-      out = stringBuilderAppend(out, "
-")
-      out = stringBuilderAppend(out, "  ret i32 %fn.ret
-")
-    } else {
-      out = stringBuilderAppend(out, "  ret i32 0
-")
-    }
-    out = stringBuilderAppend(out, "}
-")
-
-    index = index + 1
-  }
-
-  return out
-}
-
-function emitFunctionAtom(out: string, value: string, param0: string, param1: string): string {
-  if stringEquals(value, param0) {
-    out = stringBuilderAppend(out, "%")
-    out = stringBuilderAppend(out, value)
-    return out
-  }
-
-  if stringEquals(value, param1) {
-    out = stringBuilderAppend(out, "%")
-    out = stringBuilderAppend(out, value)
-    return out
-  }
-
-  out = stringBuilderAppend(out, value)
-  return out
-}
-
-function emitFunctionNumberAtom(value: string, param0: string, param1: string): bool {
-  if !stringEquals(param0, "") && stringEquals(value, param0) {
-    return true
-  }
-
-  if !stringEquals(param1, "") && stringEquals(value, param1) {
-    return true
-  }
-
-  return stringEquals(value, intToString(stringToInt(value)))
-}
-
-function emitCallStatements(out: string, program: string, symbols: string): string {
-  let count = stringToInt(mapGet(program, "statementCount"))
-  let index: i32 = 0
-
-  while index < count do {
-    let prefix = statementPrefix(index)
-    let kind = mapGet(program, prefix + "Kind")
-
-    if includes(kind, "let") {
-      if includes(mapGet(program, prefix + "ExprKind"), "call") {
-        out = emitCall(out, intToString(index), program, symbols, prefix)
-      }
-    }
-
-    if includes(kind, "const") {
-      if includes(mapGet(program, prefix + "ExprKind"), "call") {
-        out = emitCall(out, intToString(index), program, symbols, prefix)
-      }
-    }
-
-    index = index + 1
-  }
-
-  return out
-}
-
-function emitCallStatementsIr(out: string, ir: IrModule, program: string, symbols: string): string {
-  let index: i32 = 0
-
-  while index < ir.statementCount do {
-    let statement = statementAt(ir, program, index)
-
-    if includes(statement.kind, "let") {
-      if includes(statement.expressionKind, "call") {
-        out = emitCallIr(out, intToString(index), symbols, statement)
-      }
-    }
-
-    if includes(statement.kind, "const") {
-      if includes(statement.expressionKind, "call") {
-        out = emitCallIr(out, intToString(index), symbols, statement)
-      }
-    }
-
-    index = index + 1
-  }
-
-  return out
-}
-
-function emitCallIr(out: string, slot: string, symbols: string, statement: IrStatement): string {
-  let name = statement.expressionValue
-  let arg0 = resolvedNumberAtom(symbols, statement.expressionCallArg0)
-  let arg1 = resolvedNumberAtom(symbols, statement.expressionCallArg1)
-  let argCount = statement.expressionCallArgCount
-
-  out = stringBuilderAppend(out, "  ")
-  out = stringBuilderAppend(out, callValueName(slot))
-  out = stringBuilderAppend(out, " = call i32 @")
-  out = stringBuilderAppend(out, name)
-  out = stringBuilderAppend(out, "(")
-  if !stringEquals(argCount, "0") {
-    out = stringBuilderAppend(out, "i32 ")
-    out = stringBuilderAppend(out, arg0)
-  }
-  if stringEquals(argCount, "2") {
-    out = stringBuilderAppend(out, ", i32 ")
-    out = stringBuilderAppend(out, arg1)
-  }
-  out = stringBuilderAppend(out, ")
-")
-
-  return out
-}
-
-function emitCall(out: string, slot: string, program: string, symbols: string, prefix: string): string {
-  let name = mapGet(program, prefix + "ExprValue")
-  let arg0 = resolvedNumberAtom(symbols, mapGet(program, prefix + "ExprCallArg0"))
-  let arg1 = resolvedNumberAtom(symbols, mapGet(program, prefix + "ExprCallArg1"))
-  let argCount = mapGet(program, prefix + "ExprCallArgCount")
-
-  out = stringBuilderAppend(out, "  ")
-  out = stringBuilderAppend(out, callValueName(slot))
-  out = stringBuilderAppend(out, " = call i32 @")
-  out = stringBuilderAppend(out, name)
-  out = stringBuilderAppend(out, "(")
-  if !stringEquals(argCount, "0") {
-    out = stringBuilderAppend(out, "i32 ")
-    out = stringBuilderAppend(out, arg0)
-  }
-  if stringEquals(argCount, "2") {
-    out = stringBuilderAppend(out, ", i32 ")
-    out = stringBuilderAppend(out, arg1)
-  }
-  out = stringBuilderAppend(out, ")
-")
-
-  return out
-}
-
-function emitBinaryStatements(out: string, program: string, symbols: string): string {
-  let count = stringToInt(mapGet(program, "statementCount"))
-  let index: i32 = 0
-
-  while index < count do {
-    let prefix = statementPrefix(index)
-    let kind = mapGet(program, prefix + "Kind")
-
-    if includes(kind, "let") {
-      if includes(mapGet(program, prefix + "ExprKind"), "binary") {
-        out = emitBinaryAdd(out, intToString(index), program, symbols, prefix)
-      }
-    }
-
-    if includes(kind, "const") {
-      if includes(mapGet(program, prefix + "ExprKind"), "binary") {
-        out = emitBinaryAdd(out, intToString(index), program, symbols, prefix)
-      }
-    }
-
-    index = index + 1
-  }
-
-  return out
-}
-
-function emitBinaryStatementsIr(out: string, ir: IrModule, program: string, symbols: string): string {
-  let index: i32 = 0
-
-  while index < ir.statementCount do {
-    let statement = statementAt(ir, program, index)
-
-    if includes(statement.kind, "let") {
-      if includes(statement.expressionKind, "binary") {
-        out = emitBinaryAddIr(out, intToString(index), symbols, statement)
-      }
-    }
-
-    if includes(statement.kind, "const") {
-      if includes(statement.expressionKind, "binary") {
-        out = emitBinaryAddIr(out, intToString(index), symbols, statement)
-      }
-    }
-
-    index = index + 1
-  }
-
-  return out
-}
-
-function emitBinaryAddIr(out: string, slot: string, symbols: string, statement: IrStatement): string {
-  let left = resolvedNumberAtom(symbols, statement.expressionLeftValue)
-  let right = resolvedNumberAtom(symbols, statement.expressionRightValue)
-
-  out = stringBuilderAppend(out, "  ")
-  out = stringBuilderAppend(out, binaryValueName(slot))
-  out = stringBuilderAppend(out, " = add i32 ")
-  out = stringBuilderAppend(out, left)
-  out = stringBuilderAppend(out, ", ")
-  out = stringBuilderAppend(out, right)
-  out = stringBuilderAppend(out, "
-")
-
-  return out
-}
-
-function emitBinaryAdd(out: string, slot: string, program: string, symbols: string, prefix: string): string {
-  let left = resolvedNumberAtom(symbols, mapGet(program, prefix + "ExprLeftValue"))
-  let right = resolvedNumberAtom(symbols, mapGet(program, prefix + "ExprRightValue"))
-
-  out = stringBuilderAppend(out, "  ")
-  out = stringBuilderAppend(out, binaryValueName(slot))
-  out = stringBuilderAppend(out, " = add i32 ")
-  out = stringBuilderAppend(out, left)
-  out = stringBuilderAppend(out, ", ")
-  out = stringBuilderAppend(out, right)
-  out = stringBuilderAppend(out, "
-")
-
-  return out
-}
-
-function llvmIntegerPredicate(operator: string): string {
-  if stringEquals(operator, "==") {
-    return "eq"
-  }
-  if stringEquals(operator, "!=") {
-    return "ne"
-  }
-  if stringEquals(operator, "<=") {
-    return "sle"
-  }
-  if stringEquals(operator, ">") {
-    return "sgt"
-  }
-  if stringEquals(operator, ">=") {
-    return "sge"
-  }
-  return "slt"
-}
-
-function emitForStatements(out: string, program: string, symbols: string): string {
-  let count = stringToInt(mapGet(program, "statementCount"))
-  let index: i32 = 0
-
-  while index < count do {
-    let statement = irStatementFromProgram(program, index)
-    if includes(statement.kind, "for") {
-      out = emitForStatement(out, intToString(index), symbols, statement)
-    }
-    index = index + 1
-  }
-
-  return out
-}
-
-function emitForStatementsIr(out: string, ir: IrModule, program: string, symbols: string): string {
-  let index: i32 = 0
-
-  while index < ir.statementCount do {
-    let statement = statementAt(ir, program, index)
-    if includes(statement.kind, "for") {
-      out = emitForStatement(out, intToString(index), symbols, statement)
-    }
-    index = index + 1
-  }
-
-  return out
-}
-
-function emitLoopControl(out: string, slot: string, label: string, operator: string, value: string, loopName: string, destination: string, next: string): string {
-  if stringEquals(operator, "") {
-    return out
-  }
-
-  out = stringBuilderAppend(out, "  %for.")
-  out = stringBuilderAppend(out, label)
-  out = stringBuilderAppend(out, ".")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, " = icmp ")
-  out = stringBuilderAppend(out, llvmIntegerPredicate(operator))
-  out = stringBuilderAppend(out, " i32 %")
-  out = stringBuilderAppend(out, loopName)
-  out = stringBuilderAppend(out, ".body.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ", ")
-  out = stringBuilderAppend(out, value)
-  out = stringBuilderAppend(out, "
-")
-  out = stringBuilderAppend(out, "  br i1 %for.")
-  out = stringBuilderAppend(out, label)
-  out = stringBuilderAppend(out, ".")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ", label %")
-  out = stringBuilderAppend(out, destination)
-  out = stringBuilderAppend(out, ", label %")
-  out = stringBuilderAppend(out, next)
-  out = stringBuilderAppend(out, "
-")
-  out = stringBuilderAppend(out, next)
-  out = stringBuilderAppend(out, ":
-")
-  return out
-}
-
-function forOperand(statement: IrStatement, symbols: string, value: string, slot: string): string {
-  if stringEquals(value, statement.bodyAssignName) {
-    return "%" + value + ".body." + slot
-  }
-  if stringEquals(value, statement.loopVariable) {
-    return "%" + value + ".body." + slot
-  }
-  return resolvedNumberAtom(symbols, value)
-}
-
-function emitForStatement(out: string, slot: string, symbols: string, statement: IrStatement): string {
-  let loopName = statement.loopVariable
-  let assignName = statement.bodyAssignName
-  let condition = llvmIntegerPredicate(statement.loopCompareOperator)
-  let bodyLabel = "for.body." + slot
-  let operationLabel = "for.operation." + slot
-  let updateLabel = "for.update." + slot
-  let endLabel = "for.end." + slot
-
-  out = stringBuilderAppend(out, "  %")
-  out = stringBuilderAppend(out, loopName)
-  out = stringBuilderAppend(out, ".addr = alloca i32
-")
-  out = stringBuilderAppend(out, "  store i32 ")
-  out = stringBuilderAppend(out, statement.loopInitialValue)
-  out = stringBuilderAppend(out, ", ptr %")
-  out = stringBuilderAppend(out, loopName)
-  out = stringBuilderAppend(out, ".addr
-")
-  out = stringBuilderAppend(out, "  br label %for.cond.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, "
-for.cond.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ":
-  %")
-  out = stringBuilderAppend(out, loopName)
-  out = stringBuilderAppend(out, ".cond.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, " = load i32, ptr %")
-  out = stringBuilderAppend(out, loopName)
-  out = stringBuilderAppend(out, ".addr
-  %for.keep.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, " = icmp ")
-  out = stringBuilderAppend(out, condition)
-  out = stringBuilderAppend(out, " i32 %")
-  out = stringBuilderAppend(out, loopName)
-  out = stringBuilderAppend(out, ".cond.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ", ")
-  out = stringBuilderAppend(out, statement.loopBoundValue)
-  out = stringBuilderAppend(out, "
-  br i1 %for.keep.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ", label %")
-  out = stringBuilderAppend(out, bodyLabel)
-  out = stringBuilderAppend(out, ", label %")
-  out = stringBuilderAppend(out, endLabel)
-  out = stringBuilderAppend(out, "
-")
-  out = stringBuilderAppend(out, bodyLabel)
-  out = stringBuilderAppend(out, ":
-  %")
-  out = stringBuilderAppend(out, assignName)
-  out = stringBuilderAppend(out, ".body.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, " = load i32, ptr %")
-  out = stringBuilderAppend(out, assignName)
-  out = stringBuilderAppend(out, ".addr
-  %")
-  out = stringBuilderAppend(out, loopName)
-  out = stringBuilderAppend(out, ".body.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, " = load i32, ptr %")
-  out = stringBuilderAppend(out, loopName)
-  out = stringBuilderAppend(out, ".addr
-")
-
-  out = emitLoopControl(out, slot, "continue", statement.continueOperator, statement.continueValue, loopName, updateLabel, "for.after.continue." + slot)
-  out = emitLoopControl(out, slot, "break", statement.breakOperator, statement.breakValue, loopName, endLabel, operationLabel)
-  if stringEquals(statement.breakOperator, "") {
-    if stringEquals(statement.continueOperator, "") {
-      out = stringBuilderAppend(out, "  br label %")
-      out = stringBuilderAppend(out, operationLabel)
-      out = stringBuilderAppend(out, "
-")
-    } else {
-      out = stringBuilderAppend(out, "  br label %")
-      out = stringBuilderAppend(out, operationLabel)
-      out = stringBuilderAppend(out, "
-")
-    }
-    out = stringBuilderAppend(out, operationLabel)
-    out = stringBuilderAppend(out, ":
-")
-  }
-
-  out = stringBuilderAppend(out, "  %")
-  out = stringBuilderAppend(out, assignName)
-  out = stringBuilderAppend(out, ".next.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, " = add i32 ")
-  out = stringBuilderAppend(out, forOperand(statement, symbols, statement.bodyAddLeft, slot))
-  out = stringBuilderAppend(out, ", ")
-  out = stringBuilderAppend(out, forOperand(statement, symbols, statement.bodyAddRight, slot))
-  out = stringBuilderAppend(out, "
-  store i32 %")
-  out = stringBuilderAppend(out, assignName)
-  out = stringBuilderAppend(out, ".next.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ", ptr %")
-  out = stringBuilderAppend(out, assignName)
-  out = stringBuilderAppend(out, ".addr
-  br label %")
-  out = stringBuilderAppend(out, updateLabel)
-  out = stringBuilderAppend(out, "
-")
-  out = stringBuilderAppend(out, updateLabel)
-  out = stringBuilderAppend(out, ":
-  %")
-  out = stringBuilderAppend(out, loopName)
-  out = stringBuilderAppend(out, ".update.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, " = load i32, ptr %")
-  out = stringBuilderAppend(out, loopName)
-  out = stringBuilderAppend(out, ".addr
-  %")
-  out = stringBuilderAppend(out, loopName)
-  out = stringBuilderAppend(out, ".next.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, " = add i32 %")
-  out = stringBuilderAppend(out, loopName)
-  out = stringBuilderAppend(out, ".update.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ", ")
-  out = stringBuilderAppend(out, statement.loopUpdateValue)
-  out = stringBuilderAppend(out, "
-  store i32 %")
-  out = stringBuilderAppend(out, loopName)
-  out = stringBuilderAppend(out, ".next.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ", ptr %")
-  out = stringBuilderAppend(out, loopName)
-  out = stringBuilderAppend(out, ".addr
-  br label %for.cond.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, "
-")
-  out = stringBuilderAppend(out, endLabel)
-  out = stringBuilderAppend(out, ":
-  %")
-  out = stringBuilderAppend(out, assignName)
-  out = stringBuilderAppend(out, ".done = load i32, ptr %")
-  out = stringBuilderAppend(out, assignName)
-  out = stringBuilderAppend(out, ".addr
-  %")
-  out = stringBuilderAppend(out, loopName)
-  out = stringBuilderAppend(out, ".done = load i32, ptr %")
-  out = stringBuilderAppend(out, loopName)
-  out = stringBuilderAppend(out, ".addr
-")
-  return out
-}
-
-function emitWhileStatements(out: string, program: string, symbols: string): string {
-  let count = stringToInt(mapGet(program, "statementCount"))
-  let index: i32 = 0
-
-  while index < count do {
-    let prefix = statementPrefix(index)
-    if includes(mapGet(program, prefix + "Kind"), "while") {
-      out = emitWhileStatement(out, intToString(index), program, symbols, prefix)
-    }
-
-    index = index + 1
-  }
-
-  return out
-}
-
-function emitWhileStatementsIr(out: string, ir: IrModule, program: string, symbols: string): string {
-  let index: i32 = 0
-
-  while index < ir.statementCount do {
-    let statement = statementAt(ir, program, index)
-    if includes(statement.kind, "while") {
-      out = emitWhileStatementIr(out, intToString(index), symbols, statement)
-    }
-
-    index = index + 1
-  }
-
-  return out
-}
-
-function emitWhileStatementIr(out: string, slot: string, symbols: string, statement: IrStatement): string {
-  let leftName = statement.expressionLeftValue
-  let rightValue = statement.expressionRightValue
-  let assignName = statement.bodyAssignName
-  let addLeft = statement.bodyAddLeft
-  let addRight = statement.bodyAddRight
-  let incrementName = statement.bodyIncrementName
-
-  out = stringBuilderAppend(out, "  br label %while.cond.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, "
-")
-  out = stringBuilderAppend(out, "while.cond.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ":
-")
-  out = stringBuilderAppend(out, "  %")
-  out = stringBuilderAppend(out, leftName)
-  out = stringBuilderAppend(out, ".cond.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, " = load i32, ptr %")
-  out = stringBuilderAppend(out, leftName)
-  out = stringBuilderAppend(out, ".addr
-")
-  out = stringBuilderAppend(out, "  %while.keep.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, " = icmp slt i32 %")
-  out = stringBuilderAppend(out, leftName)
-  out = stringBuilderAppend(out, ".cond.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ", ")
-  out = stringBuilderAppend(out, rightValue)
-  out = stringBuilderAppend(out, "
-")
-  out = stringBuilderAppend(out, "  br i1 %while.keep.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ", label %while.body.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ", label %while.end.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, "
-")
-  out = stringBuilderAppend(out, "while.body.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ":
-")
-  out = stringBuilderAppend(out, "  %")
-  out = stringBuilderAppend(out, addLeft)
-  out = stringBuilderAppend(out, ".body.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, " = load i32, ptr %")
-  out = stringBuilderAppend(out, addLeft)
-  out = stringBuilderAppend(out, ".addr
-")
-  out = stringBuilderAppend(out, "  %")
-  out = stringBuilderAppend(out, addRight)
-  out = stringBuilderAppend(out, ".body.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, " = load i32, ptr %")
-  out = stringBuilderAppend(out, addRight)
-  out = stringBuilderAppend(out, ".addr
-")
-  out = stringBuilderAppend(out, "  %")
-  out = stringBuilderAppend(out, assignName)
-  out = stringBuilderAppend(out, ".next.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, " = add i32 %")
-  out = stringBuilderAppend(out, addLeft)
-  out = stringBuilderAppend(out, ".body.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ", %")
-  out = stringBuilderAppend(out, addRight)
-  out = stringBuilderAppend(out, ".body.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, "
-")
-  out = stringBuilderAppend(out, "  store i32 %")
-  out = stringBuilderAppend(out, assignName)
-  out = stringBuilderAppend(out, ".next.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ", ptr %")
-  out = stringBuilderAppend(out, assignName)
-  out = stringBuilderAppend(out, ".addr
-")
-  out = stringBuilderAppend(out, "  %")
-  out = stringBuilderAppend(out, incrementName)
-  out = stringBuilderAppend(out, ".update.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, " = load i32, ptr %")
-  out = stringBuilderAppend(out, incrementName)
-  out = stringBuilderAppend(out, ".addr
-")
-  out = stringBuilderAppend(out, "  %")
-  out = stringBuilderAppend(out, incrementName)
-  out = stringBuilderAppend(out, ".next.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, " = add i32 %")
-  out = stringBuilderAppend(out, incrementName)
-  out = stringBuilderAppend(out, ".update.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ", 1
-")
-  out = stringBuilderAppend(out, "  store i32 %")
-  out = stringBuilderAppend(out, incrementName)
-  out = stringBuilderAppend(out, ".next.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ", ptr %")
-  out = stringBuilderAppend(out, incrementName)
-  out = stringBuilderAppend(out, ".addr
-")
-  out = stringBuilderAppend(out, "  br label %while.cond.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, "
-")
-  out = stringBuilderAppend(out, "while.end.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ":
-")
-  out = stringBuilderAppend(out, "  %")
-  out = stringBuilderAppend(out, assignName)
-  out = stringBuilderAppend(out, ".done = load i32, ptr %")
-  out = stringBuilderAppend(out, assignName)
-  out = stringBuilderAppend(out, ".addr
-")
-
-  return out
-}
-
-function emitWhileStatement(out: string, slot: string, program: string, symbols: string, prefix: string): string {
-  let leftName = mapGet(program, prefix + "ExprLeftValue")
-  let rightValue = mapGet(program, prefix + "ExprRightValue")
-  let assignName = mapGet(program, prefix + "BodyAssignName")
-  let addLeft = mapGet(program, prefix + "BodyAddLeft")
-  let addRight = mapGet(program, prefix + "BodyAddRight")
-  let incrementName = mapGet(program, prefix + "BodyIncrementName")
-
-  out = stringBuilderAppend(out, "  br label %while.cond.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, "
-")
-  out = stringBuilderAppend(out, "while.cond.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ":
-")
-  out = stringBuilderAppend(out, "  %")
-  out = stringBuilderAppend(out, leftName)
-  out = stringBuilderAppend(out, ".cond.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, " = load i32, ptr %")
-  out = stringBuilderAppend(out, leftName)
-  out = stringBuilderAppend(out, ".addr
-")
-  out = stringBuilderAppend(out, "  %while.keep.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, " = icmp slt i32 %")
-  out = stringBuilderAppend(out, leftName)
-  out = stringBuilderAppend(out, ".cond.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ", ")
-  out = stringBuilderAppend(out, rightValue)
-  out = stringBuilderAppend(out, "
-")
-  out = stringBuilderAppend(out, "  br i1 %while.keep.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ", label %while.body.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ", label %while.end.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, "
-")
-  out = stringBuilderAppend(out, "while.body.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ":
-")
-  out = stringBuilderAppend(out, "  %")
-  out = stringBuilderAppend(out, addLeft)
-  out = stringBuilderAppend(out, ".body.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, " = load i32, ptr %")
-  out = stringBuilderAppend(out, addLeft)
-  out = stringBuilderAppend(out, ".addr
-")
-  out = stringBuilderAppend(out, "  %")
-  out = stringBuilderAppend(out, addRight)
-  out = stringBuilderAppend(out, ".body.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, " = load i32, ptr %")
-  out = stringBuilderAppend(out, addRight)
-  out = stringBuilderAppend(out, ".addr
-")
-  out = stringBuilderAppend(out, "  %")
-  out = stringBuilderAppend(out, assignName)
-  out = stringBuilderAppend(out, ".next.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, " = add i32 %")
-  out = stringBuilderAppend(out, addLeft)
-  out = stringBuilderAppend(out, ".body.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ", %")
-  out = stringBuilderAppend(out, addRight)
-  out = stringBuilderAppend(out, ".body.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, "
-")
-  out = stringBuilderAppend(out, "  store i32 %")
-  out = stringBuilderAppend(out, assignName)
-  out = stringBuilderAppend(out, ".next.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ", ptr %")
-  out = stringBuilderAppend(out, assignName)
-  out = stringBuilderAppend(out, ".addr
-")
-  out = stringBuilderAppend(out, "  %")
-  out = stringBuilderAppend(out, incrementName)
-  out = stringBuilderAppend(out, ".update.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, " = load i32, ptr %")
-  out = stringBuilderAppend(out, incrementName)
-  out = stringBuilderAppend(out, ".addr
-")
-  out = stringBuilderAppend(out, "  %")
-  out = stringBuilderAppend(out, incrementName)
-  out = stringBuilderAppend(out, ".next.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, " = add i32 %")
-  out = stringBuilderAppend(out, incrementName)
-  out = stringBuilderAppend(out, ".update.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ", 1
-")
-  out = stringBuilderAppend(out, "  store i32 %")
-  out = stringBuilderAppend(out, incrementName)
-  out = stringBuilderAppend(out, ".next.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ", ptr %")
-  out = stringBuilderAppend(out, incrementName)
-  out = stringBuilderAppend(out, ".addr
-")
-  out = stringBuilderAppend(out, "  br label %while.cond.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, "
-")
-  out = stringBuilderAppend(out, "while.end.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ":
-")
-  out = stringBuilderAppend(out, "  %")
-  out = stringBuilderAppend(out, assignName)
-  out = stringBuilderAppend(out, ".done = load i32, ptr %")
-  out = stringBuilderAppend(out, assignName)
-  out = stringBuilderAppend(out, ".addr
-")
-
-  return out
-}
-
-function emitIfStatement(out: string, slot: string, program: string, symbols: string, prefix: string): string {
-  let leftName = mapGet(program, prefix + "ExprLeftValue")
-  let rightValue = mapGet(program, prefix + "ExprRightValue")
-  let leftValue = mapGet(symbols, leftName + "Value")
-
-  if stringEquals(leftValue, "") || stringEquals(rightValue, "") {
-    return out
-  }
-
-  out = stringBuilderAppend(out, "  %if.cond.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, " = icmp eq i32 ")
-  out = stringBuilderAppend(out, leftValue)
-  out = stringBuilderAppend(out, ", ")
-  out = stringBuilderAppend(out, rightValue)
-  out = stringBuilderAppend(out, "
-")
-  out = stringBuilderAppend(out, "  br i1 %if.cond.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ", label %if.then.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ", label %if.end.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, "
-")
-  out = stringBuilderAppend(out, "if.then.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ":
-")
-  out = emitPrint(out, slot, mapGet(program, prefix + "BodyExprKind"), mapGet(program, prefix + "BodyExprValue"))
-  out = stringBuilderAppend(out, "  br label %if.end.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, "
-")
-  out = stringBuilderAppend(out, "if.end.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ":
-")
-
-  return out
-}
-
-function emitIfStatementIr(out: string, slot: string, symbols: string, statement: IrStatement): string {
-  let leftName = statement.expressionLeftValue
-  let rightValue = statement.expressionRightValue
-  let leftValue = mapGet(symbols, leftName + "Value")
-
-  if stringEquals(leftValue, "") || stringEquals(rightValue, "") {
-    return out
-  }
-
-  out = stringBuilderAppend(out, "  %if.cond.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, " = icmp eq i32 ")
-  out = stringBuilderAppend(out, leftValue)
-  out = stringBuilderAppend(out, ", ")
-  out = stringBuilderAppend(out, rightValue)
-  out = stringBuilderAppend(out, "
-")
-  out = stringBuilderAppend(out, "  br i1 %if.cond.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ", label %if.then.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ", label %if.end.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, "
-")
-  out = stringBuilderAppend(out, "if.then.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ":
-")
-  out = emitPrint(out, slot, statement.bodyExpressionKind, statement.bodyExpressionValue)
-  out = stringBuilderAppend(out, "  br label %if.end.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, "
-")
-  out = stringBuilderAppend(out, "if.end.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, ":
-")
-
-  return out
-}
-
-function emitStringGlobal(out: string, slot: string, value: string): string {
-  let rawSize = stringLen(value)
-  let size = rawSize + 1
-  out = stringBuilderAppend(out, "@.str.")
-  out = stringBuilderAppend(out, slot)
-  out = stringBuilderAppend(out, " = private unnamed_addr constant [")
-  out = stringBuilderAppend(out, intToString(size))
-  out = stringBuilderAppend(out, ' x i8] c"')
-  out = stringBuilderAppend(out, value)
-  out = stringBuilderAppend(out, '\00"
-')
-  return out
-}
-
-function emitPrint(out: string, slot: string, kind: string, value: string): string {
-  if includes(kind, "string") {
-    let rawSize = stringLen(value)
-    let size = rawSize + 1
-    out = stringBuilderAppend(out, "  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.str, i64 0, i64 0), ptr getelementptr inbounds ([")
-    out = stringBuilderAppend(out, intToString(size))
-    out = stringBuilderAppend(out, " x i8], ptr @.str.")
-    out = stringBuilderAppend(out, slot)
-    out = stringBuilderAppend(out, ", i64 0, i64 0))
-")
-    return out
-  }
-
-  if includes(kind, "number") {
-    out = stringBuilderAppend(out, "  call i32 (ptr, ...) @printf(ptr getelementptr inbounds ([4 x i8], ptr @.fmt.int, i64 0, i64 0), i32 ")
-    out = stringBuilderAppend(out, value)
-    out = stringBuilderAppend(out, ")
-")
   }
 
   return out

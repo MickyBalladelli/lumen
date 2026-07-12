@@ -46,3 +46,17 @@ void *lumen_read_file(const char *path) {
   fclose(file);
   return lumen_ok(source);
 }
+
+void *lumen_atomic_replace(const char *source, const char *destination) {
+  if (rename(source, destination) != 0) {
+    return lumen_runtime_error("file", errno, "cannot publish file atomically");
+  }
+  return lumen_ok_i32(0);
+}
+
+void *lumen_remove_file(const char *path) {
+  if (unlink(path) != 0 && errno != ENOENT) {
+    return lumen_runtime_error("file", errno, "cannot remove file");
+  }
+  return lumen_ok_i32(0);
+}

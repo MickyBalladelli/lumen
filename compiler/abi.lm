@@ -64,6 +64,125 @@ function compilerAbiSignature(name: string): CompilerAbiSignature {
   if stringEquals(name, "includes") {
     return compilerAbi(name, "lumen_string_contains", "bool", "string", "string", "", "", 2, 2, 2, false, "i1", "ptr, ptr", "string")
   }
+  if stringEquals(name, "indexOf") {
+    return compilerAbi(name, "lumen_string_index_of", "i32", "string", "string", "", "", 2, 2, 2, false, "i32", "ptr, ptr", "string")
+  }
+  if stringEquals(name, "lastIndexOf") { return compilerAbi(name, "lumen_string_last_index_of", "i32", "string", "string", "", "", 2, 2, 2, false, "i32", "ptr, ptr", "string")
+  }
+  if stringEquals(name, "contains") { return compilerAbi(name, "lumen_string_contains", "bool", "string", "string", "", "", 2, 2, 2, false, "i1", "ptr, ptr", "string")
+  }
+  if stringEquals(name, "trim") { return compilerAbi(name, "lumen_string_trim", "string", "string", "", "", "", 1, 1, 1, false, "ptr", "ptr", "string")
+  }
+  if stringEquals(name, "lower") { return compilerAbi(name, "lumen_string_lower", "string", "string", "", "", "", 1, 1, 1, false, "ptr", "ptr", "string")
+  }
+  if stringEquals(name, "upper") { return compilerAbi(name, "lumen_string_upper", "string", "string", "", "", "", 1, 1, 1, false, "ptr", "ptr", "string")
+  }
+  if stringEquals(name, "startsWith") { return compilerAbi(name, "lumen_string_starts_with", "bool", "string", "string", "", "", 2, 2, 2, false, "i1", "ptr, ptr", "string")
+  }
+  if stringEquals(name, "endsWith") { return compilerAbi(name, "lumen_string_ends_with", "bool", "string", "string", "", "", 2, 2, 2, false, "i1", "ptr, ptr", "string")
+  }
+  if stringEquals(name, "replace") { return compilerAbi(name, "lumen_string_replace", "string", "string", "string", "string", "", 3, 3, 3, false, "ptr", "ptr, ptr, ptr", "string")
+  }
+  if stringEquals(name, "split") { return compilerAbi(name, "lumen_string_split", "string", "string", "string", "", "", 2, 2, 2, false, "ptr", "ptr, ptr", "string")
+  }
+  if stringEquals(name, "repeat") { return compilerAbi(name, "lumen_string_repeat", "string", "string", "i32", "", "", 2, 2, 2, false, "ptr", "ptr, i32", "string")
+  }
+  if stringEquals(name, "padStart") { return compilerAbi(name, "lumen_string_pad_start", "string", "string", "i32", "string", "", 3, 3, 3, false, "ptr", "ptr, i32, ptr", "string")
+  }
+  if stringEquals(name, "padEnd") { return compilerAbi(name, "lumen_string_pad_end", "string", "string", "i32", "string", "", 3, 3, 3, false, "ptr", "ptr, i32, ptr", "string")
+  }
+  if stringEquals(name, "parseI32") { return compilerAbi(name, "lumen_string_to_int", "i32", "string", "", "", "", 1, 1, 1, false, "i32", "ptr", "string")
+  }
+  if stringEquals(name, "sourceSnippet") { return compilerAbi(name, "lumen_source_snippet", "string", "string", "i32", "i32", "", 3, 3, 3, false, "ptr", "ptr, i32, i32", "string")
+  }
+  if stringEquals(name, "tokenizeSource") { return compilerAbi(name, "lumen_tokenize_source", "string", "string", "", "", "", 1, 1, 1, false, "ptr", "ptr", "string")
+  }
+  if stringEquals(name, "parseSummary") { return compilerAbi(name, "lumen_parse_summary", "string", "string", "", "", "", 1, 1, 1, false, "ptr", "ptr", "string")
+  }
+  if stringEquals(name, "date") { return compilerAbi(name, "lumen_date", "string", "", "", "", "", 0, 0, 0, false, "ptr", "", "system")
+  }
+  if stringEquals(name, "env") { return compilerAbi(name, "lumen_env", "Result<string>", "string", "", "", "", 1, 1, 1, false, "ptr", "ptr", "system")
+  }
+  if stringEquals(name, "encrypt") { return compilerAbi(name, "lumen_encrypt", "Result<string>", "string", "string", "string", "", 3, 3, 3, false, "ptr", "ptr, ptr, ptr", "crypto")
+  }
+  if stringEquals(name, "decrypt") { return compilerAbi(name, "lumen_decrypt", "Result<string>", "string", "string", "string", "", 3, 3, 3, false, "ptr", "ptr, ptr, ptr", "crypto")
+  }
+  if stringEquals(name, "ok") { return compilerAbi(name, "lumen_ok", "Result<unknown>", "unknown", "", "", "", 1, 1, 1, false, "ptr", "ptr", "system")
+  }
+  if stringEquals(name, "err") { return compilerAbi(name, "lumen_err", "Result<unknown>", "string", "", "", "", 1, 1, 1, false, "ptr", "ptr", "system")
+  }
+  if stringEquals(name, "some") { return compilerAbi(name, "lumen_some", "unknown", "unknown", "", "", "", 1, 1, 1, false, "ptr", "ptr", "system")
+  }
+  if stringEquals(name, "none") { return compilerAbi(name, "lumen_none", "unknown", "", "", "", "", 0, 0, 0, false, "ptr", "", "system")
+  }
+  if stringEquals(name, "hasValue") { return compilerAbi(name, "lumen_has_value", "bool", "unknown", "", "", "", 1, 1, 1, false, "i1", "ptr", "system")
+  }
+  if stringEquals(name, "valueOr") { return compilerAbi(name, "lumen_value_or", "unknown", "unknown", "unknown", "", "", 2, 2, 2, false, "ptr", "ptr, ptr", "system")
+  }
+  if stringEquals(name, "assert") { return compilerAbi(name, "lumen_assert", "void", "bool", "string", "", "", 2, 2, 2, false, "void", "i1, ptr", "system")
+  }
+  if stringEquals(name, "newError") { return compilerAbi(name, "lumen_error_new", "error", "i32", "string", "", "", 2, 2, 2, false, "ptr", "i32, ptr", "system")
+  }
+  if stringEquals(name, "errorCode") { return compilerAbi(name, "lumen_error_code", "i32", "error", "", "", "", 1, 1, 1, false, "i32", "ptr", "system")
+  }
+  if stringEquals(name, "errorText") { return compilerAbi(name, "lumen_error_text", "string", "error", "", "", "", 1, 1, 1, false, "ptr", "ptr", "system")
+  }
+  if stringEquals(name, "jsonSet") { return compilerAbi(name, "lumen_json_set", "Result<json>", "json", "string", "string", "", 3, 3, 3, false, "ptr", "ptr, ptr, ptr", "collections")
+  }
+  if stringEquals(name, "jsonSetPath") { return compilerAbi(name, "lumen_json_set_path", "Result<json>", "json", "string", "string", "", 3, 3, 3, false, "ptr", "ptr, ptr, ptr", "collections")
+  }
+  if stringEquals(name, "jsonQuote") || stringEquals(name, "jsonStringify") { return compilerAbi(name, "lumen_json_stringify", "Result<string>", "json", "", "", "", 1, 1, 1, false, "ptr", "ptr", "collections")
+  }
+  if stringEquals(name, "mapDelete") { return compilerAbi(name, "lumen_map_delete", "string", "string", "string", "", "", 2, 2, 2, false, "ptr", "ptr, ptr", "collections")
+  }
+  if stringEquals(name, "mapKeys") { return compilerAbi(name, "lumen_map_keys", "string", "string", "", "", "", 1, 1, 1, false, "ptr", "ptr", "collections")
+  }
+  if stringEquals(name, "puts") { return compilerAbi(name, "puts", "i32", "string", "", "", "", 1, 1, 1, false, "i32", "ptr", "libc")
+  }
+  if stringEquals(name, "serveFiles") { return compilerAbi(name, "lumen_http_serve_files", "Result<i32>", "i32", "string", "", "", 2, 2, 2, false, "ptr", "i32, ptr", "http")
+  }
+  if stringEquals(name, "serveApi") { return compilerAbi(name, "lumen_http_serve_api", "Result<i32>", "i32", "string", "string", "string", 5, 5, 5, false, "ptr", "i32, ptr, ptr, ptr, ptr", "http")
+  }
+  if stringEquals(name, "httpRequest") { return compilerAbi(name, "lumen_http_request", "Result<string>", "string", "string", "string", "", 3, 3, 3, false, "ptr", "ptr, ptr, ptr", "http")
+  }
+  if stringEquals(name, "httpResponse") { return compilerAbi(name, "lumen_http_response", "Result<string>", "i32", "string", "string", "", 3, 3, 3, false, "ptr", "i32, ptr, ptr", "http")
+  }
+  if stringEquals(name, "serveSocketIoChat") { return compilerAbi(name, "lumen_socketio_serve_chat", "Result<i32>", "i32", "string", "", "", 2, 2, 2, false, "ptr", "i32, ptr", "http")
+  }
+  if stringEquals(name, "socketIoEvent") { return compilerAbi(name, "lumen_socketio_event", "Result<string>", "string", "string", "", "", 2, 2, 2, false, "ptr", "ptr, ptr", "http")
+  }
+  if stringEquals(name, "socketIoEmit") { return compilerAbi(name, "lumen_socketio_emit", "Result<string>", "string", "string", "string", "", 3, 3, 3, false, "ptr", "ptr, ptr, ptr", "http")
+  }
+  if stringEquals(name, "createSemaphore") { return compilerAbi(name, "lumen_semaphore_create", "Result<semaphore>", "i32", "", "", "", 1, 1, 1, false, "ptr", "i32", "thread")
+  }
+  if stringEquals(name, "semaphoreWait") { return compilerAbi(name, "lumen_semaphore_wait", "Result<i32>", "semaphore", "", "", "", 1, 1, 1, false, "ptr", "ptr", "thread")
+  }
+  if stringEquals(name, "semaphoreSignal") { return compilerAbi(name, "lumen_semaphore_signal", "Result<i32>", "semaphore", "", "", "", 1, 1, 1, false, "ptr", "ptr", "thread")
+  }
+  if stringEquals(name, "joinThread") { return compilerAbi(name, "lumen_thread_join", "Result<i32>", "thread", "", "", "", 1, 1, 1, false, "ptr", "ptr", "thread")
+  }
+  if stringEquals(name, "appendFile") { return compilerAbi(name, "lumen_append_file", "Result<i32>", "string", "string", "", "", 2, 2, 2, false, "ptr", "ptr, ptr", "thread")
+  }
+  if stringEquals(name, "taskCancel") { return compilerAbi(name, "lumen_task_cancel", "bool", "Task<unknown>", "", "", "", 1, 1, 1, false, "i1", "ptr", "task")
+  }
+  if stringEquals(name, "taskCancelled") { return compilerAbi(name, "lumen_task_cancelled", "bool", "", "", "", "", 0, 0, 0, false, "i1", "", "task")
+  }
+  if stringEquals(name, "serveHttp") { return compilerAbi(name, "lumen_http_serve_http", "Result<i32>", "i32", "string", "string[]", "string[]", 6, 6, 6, false, "ptr", "i32, ptr, ptr, i32, ptr, i32, ptr, i32, ptr, i32", "http")
+  }
+  if stringEquals(name, "startThread") { return compilerAbi(name, "lumen_thread_start", "Result<thread>", "function", "string", "string", "semaphore", 4, 4, 4, false, "ptr", "ptr, ptr, ptr, ptr", "thread")
+  }
+  if stringEquals(name, "channel") { return compilerAbi(name, "lumen_channel", "string", "", "", "", "", 0, 0, 0, false, "ptr", "", "system")
+  }
+  if stringEquals(name, "send") { return compilerAbi(name, "lumen_send", "void", "string", "string", "", "", 2, 2, 2, false, "void", "ptr, ptr", "system")
+  }
+  if stringEquals(name, "receive") { return compilerAbi(name, "lumen_receive", "string", "string", "", "", "", 1, 1, 1, false, "ptr", "ptr", "system")
+  }
+  if stringEquals(name, "jsonValid") { return compilerAbi(name, "lumen_json_valid", "Result<bool>", "unknown", "", "", "", 1, 1, 1, false, "ptr", "ptr", "collections")
+  }
+  if stringEquals(name, "parseF32") { return compilerAbi(name, "lumen_parse_f32", "f32", "string", "", "", "", 1, 1, 1, false, "float", "ptr", "string")
+  }
+  if stringEquals(name, "arrayJoin") { return compilerAbi(name, "lumen_array_join", "string", "string[]", "string", "", "", 2, 2, 2, false, "ptr", "i32, ptr, ptr", "collections")
+  }
   if stringEquals(name, "intToString") {
     return compilerAbi(name, "lumen_int_to_string", "string", "i32", "", "", "", 1, 1, 1, false, "ptr", "i32", "string")
   }
@@ -90,6 +209,9 @@ function compilerAbiSignature(name: string): CompilerAbiSignature {
   }
   if stringEquals(name, "errorMessage") {
     return compilerAbi(name, "lumen_error_message", "string", "Result<unknown>", "", "", "", 1, 1, 1, false, "ptr", "ptr", "system")
+  }
+  if stringEquals(name, "exec") {
+    return compilerAbi(name, "lumen_exec", "Result<i32>", "string", "string[]", "", "", 2, 2, 2, false, "ptr", "ptr, ptr, i32", "system")
   }
   if stringEquals(name, "isOk") {
     return compilerAbi(name, "lumen_is_ok", "bool", "Result<unknown>", "", "", "", 1, 1, 1, false, "i1", "ptr", "system")
@@ -157,6 +279,15 @@ function compilerAbiSignature(name: string): CompilerAbiSignature {
   if stringEquals(name, "writeFile") {
     return compilerAbi(name, "lumen_write_file", "Result<i32>", "string", "string", "", "", 2, 2, 2, false, "ptr", "ptr, ptr", "fs")
   }
+  if stringEquals(name, "atomicReplace") {
+    return compilerAbi(name, "lumen_atomic_replace", "Result<i32>", "string", "string", "", "", 2, 2, 2, false, "ptr", "ptr, ptr", "fs")
+  }
+  if stringEquals(name, "removeFile") {
+    return compilerAbi(name, "lumen_remove_file", "Result<i32>", "string", "", "", "", 1, 1, 1, false, "ptr", "ptr", "fs")
+  }
+  if stringEquals(name, "uuid") {
+    return compilerAbi(name, "lumen_uuid", "string", "", "", "", "", 0, 0, 0, false, "ptr", "", "system")
+  }
   if stringEquals(name, "__stringConcat") {
     return compilerAbi(name, "lumen_string_concat", "string", "string", "string", "", "", 2, 2, 2, false, "ptr", "ptr, ptr", "string")
   }
@@ -181,6 +312,9 @@ function compilerAbiParameter(signature: CompilerAbiSignature, index: i32): stri
   }
   if index == 3 { return signature.parameter3
   }
+  if index >= 4 && stringEquals(signature.name, "serveHttp") {
+    return "string[]"
+  }
   return ""
 }
 
@@ -200,6 +334,7 @@ function compilerAbiAppendDeclaration(out: string, name: string): string {
 function compilerAbiDeclarations(): string {
   let out = stringBuilder()
   out = compilerAbiAppendDeclaration(out, "includes")
+  out = compilerAbiAppendDeclaration(out, "indexOf")
   out = compilerAbiAppendDeclaration(out, "intToString")
   out = compilerAbiAppendDeclaration(out, "stringEquals")
   out = compilerAbiAppendDeclaration(out, "stringLen")
@@ -209,6 +344,7 @@ function compilerAbiDeclarations(): string {
   out = compilerAbiAppendDeclaration(out, "arg")
   out = compilerAbiAppendDeclaration(out, "argCount")
   out = compilerAbiAppendDeclaration(out, "errorMessage")
+  out = compilerAbiAppendDeclaration(out, "exec")
   out = compilerAbiAppendDeclaration(out, "isOk")
   out = compilerAbiAppendDeclaration(out, "resultValue")
   out = compilerAbiAppendDeclaration(out, "json")
@@ -231,6 +367,7 @@ function compilerAbiDeclarations(): string {
   out = compilerAbiAppendDeclaration(out, "arenaGetI32")
   out = compilerAbiAppendDeclaration(out, "readFile")
   out = compilerAbiAppendDeclaration(out, "writeFile")
+  out = compilerAbiAppendDeclaration(out, "atomicReplace")
   out = compilerAbiAppendDeclaration(out, "__stringConcat")
   out = compilerAbiAppendDeclaration(out, "__stringSlice")
   out = compilerAbiAppendDeclaration(out, "__calloc")

@@ -35,7 +35,9 @@ export const RuntimeUnits = Object.freeze([
     'lumen_value_or'
   ], []),
   unit('fs', [
+    'lumen_atomic_replace',
     'lumen_read_file',
+    'lumen_remove_file',
     'lumen_write_file'
   ]),
   unit('collections', [

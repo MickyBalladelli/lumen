@@ -1,0 +1,11 @@
+import { tokenArena } from "../../compiler/containers.lm"
+import { buildIr } from "../../compiler/ir.lm"
+import { parseProgram } from "../../compiler/parser.lm"
+
+function main(): i32 {
+  let ast = parseProgram(tokenArena())
+  let ir = buildIr(ast)
+  assert(ir.functions.count == 0, "parser and IR must share one AstProgram identity")
+  println("compiler module identity")
+  return 0
+}

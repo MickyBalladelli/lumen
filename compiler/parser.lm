@@ -1283,6 +1283,35 @@ function astParseExpressionNode(program: AstProgram, tokens: TokenArena, start: 
     }
   }
 
+  if stringEquals(tokenValue(tokenArenaGet(tokens, start)), "[") {
+    let close = astFindMatching(tokens, start, end + 1, "[", "]")
+    if close == end {
+      let spec = astNodeSpec("ArrayExpression", start, end)
+      spec.text = astTokenText(tokens, start, end)
+      program = astAdd(program, tokens, parent, spec)
+      let arrayId = program.lastNode
+      let cursor = start + 1
+      while cursor < close do {
+        let comma = astFindTopLevel(tokens, cursor, close - 1, ",")
+        let elementEnd = close - 1
+        if comma >= 0 {
+          elementEnd = comma - 1
+        }
+        program = astParseExpressionNode(program, tokens, cursor, elementEnd, arrayId)
+        if comma < 0 {
+          break
+        }
+        cursor = comma + 1
+      }
+      return program
+    }
+  }
+
+  if stringEquals(tokenKind(tokenArenaGet(tokens, start)), "keyword") &&
+    stringEquals(tokenValue(tokenArenaGet(tokens, start)), "await") {
+    return astParseExpressionNode(program, tokens, start + 1, end, parent)
+  }
+
   let binary = astFindBinary(tokens, start, end)
   if binary >= 0 {
     let operator = tokenValue(tokenArenaGet(tokens, binary))
@@ -1694,6 +1723,27 @@ function astParseWhile(program: AstProgram, tokens: TokenArena, index: i32, end:
   return program
 }
 
+function astParseFor(program: AstProgram, tokens: TokenArena, index: i32, end: i32, parent: i32): AstProgram {
+  let parenOpen = index + 1
+  let parenClose = astFindMatching(tokens, parenOpen, end, "(", ")")
+  let bodyOpen = parenClose + 1
+  let bodyClose = findBlockEnd(tokens, bodyOpen)
+  let firstSemi = astFindTopLevel(tokens, parenOpen + 1, parenClose - 1, ";")
+  let secondSemi = astFindTopLevel(tokens, firstSemi + 1, parenClose - 1, ";")
+  let spec = astNodeSpec("ForStatement", index, bodyClose)
+  program = astAdd(program, tokens, parent, spec)
+  let forId = program.lastNode
+  program = astParseVariable(program, tokens, parenOpen + 1, firstSemi, forId)
+  program = astParseExpression(program, tokens, firstSemi + 1, secondSemi - 1, forId)
+  program = astParseExpression(program, tokens, secondSemi + 1, parenClose - 1, forId)
+  let block = astNodeSpec("BlockStatement", bodyOpen, bodyClose)
+  program = astAdd(program, tokens, forId, block)
+  let blockId = program.lastNode
+  program = astParseScope(program, tokens, bodyOpen + 1, bodyClose, blockId)
+  program.nextToken = bodyClose + 1
+  return program
+}
+
 function astParseSwitch(program: AstProgram, tokens: TokenArena, index: i32, end: i32, parent: i32): AstProgram {
   let open = findNext(tokens, index, "{")
   let close = findBlockEnd(tokens, open)
@@ -1767,6 +1817,16 @@ function astParseReturn(program: AstProgram, tokens: TokenArena, index: i32, end
   program = astAdd(program, tokens, parent, spec)
   let returnId = program.lastNode
   program = astParseExpression(program, tokens, index + 1, statementEnd, returnId)
+  program.nextToken = statementEnd + 1
+  return program
+}
+
+function astParseThrow(program: AstProgram, tokens: TokenArena, index: i32, end: i32, parent: i32): AstProgram {
+  let statementEnd = astFindStatementEnd(tokens, index, end)
+  let spec = astNodeSpec("ThrowStatement", index, statementEnd)
+  program = astAdd(program, tokens, parent, spec)
+  let throwId = program.lastNode
+  program = astParseExpression(program, tokens, index + 1, statementEnd, throwId)
   program.nextToken = statementEnd + 1
   return program
 }
@@ -2190,12 +2250,16 @@ function astParseScope(program: AstProgram, tokens: TokenArena, start: i32, end:
       program = astParseVariable(program, tokens, index, end, parent)
     } else if stringEquals(current, "if") {
       program = astParseIf(program, tokens, index, end, parent)
+    } else if stringEquals(current, "for") {
+      program = astParseFor(program, tokens, index, end, parent)
     } else if stringEquals(current, "while") {
       program = astParseWhile(program, tokens, index, end, parent)
     } else if stringEquals(current, "switch") {
       program = astParseSwitch(program, tokens, index, end, parent)
     } else if stringEquals(current, "try") {
       program = astParseTryCatch(program, tokens, index, end, parent)
+    } else if stringEquals(current, "throw") {
+      program = astParseThrow(program, tokens, index, end, parent)
     } else if stringEquals(current, "return") {
       program = astParseReturn(program, tokens, index, end, parent)
     } else if stringEquals(current, "break") {

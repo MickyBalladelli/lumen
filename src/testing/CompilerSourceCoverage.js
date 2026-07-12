@@ -63,11 +63,12 @@ const SUPPORT = {
   builtins: support(
     [
       'arenaAppend', 'arenaGetI32', 'arenaGetString', 'arenaLen', 'arenaNew',
-      'arenaSetI32', 'arenaSetString', 'arg', 'argCount', 'errorMessage',
-      'includes', 'intToString', 'isOk', 'json', 'jsonGet', 'jsonGetRaw',
+      'arenaSetI32', 'arenaSetString', 'arg', 'argCount', 'atomicReplace', 'errorMessage',
+      'exec',
+      'includes', 'indexOf', 'intToString', 'isOk', 'json', 'jsonGet', 'jsonGetRaw',
       'list', 'listGet', 'listLen', 'listPush', 'map', 'mapGet', 'mapHas',
-      'mapSet', 'println', 'readFile', 'resultValue', 'stringBuilder',
-      'stringBuilderAppend', 'stringEquals', 'stringLen', 'stringToInt', 'writeFile'
+      'mapSet', 'println', 'readFile', 'removeFile', 'resultValue', 'stringBuilder',
+      'stringBuilderAppend', 'stringEquals', 'stringLen', 'stringToInt', 'uuid', 'writeFile'
     ],
     []
   ),

@@ -80,6 +80,137 @@ function compileTiny(input: string, output: string): i32 {
   return resultValue(writeResult)
 }
 
+function responsePath(out: string, root: string, unit: string): string {
+  return stringBuilderAppend(out, '"' + root + "/" + unit + '.c"
+')
+}
+
+function runtimeLinkInputs(llvm: string, runtimeRoot: string): string {
+  let out = stringBuilder()
+  let needsSystem = includes(llvm, "@lumen_")
+  let needsCollections = includes(llvm, "@lumen_json") ||
+    includes(llvm, "@lumen_list") || includes(llvm, "@lumen_map") ||
+    includes(llvm, "@lumen_array_join")
+  let needsString = includes(llvm, "@lumen_string_") ||
+    includes(llvm, "@lumen_int_to_string") || includes(llvm, "@lumen_parse_") ||
+    includes(llvm, "@lumen_source_snippet") || includes(llvm, "@lumen_tokenize_source")
+  if needsString {
+    needsCollections = true
+  }
+  if needsSystem {
+    out = responsePath(out, runtimeRoot, "system")
+  }
+  if includes(llvm, "@lumen_read_file") || includes(llvm, "@lumen_write_file") ||
+    includes(llvm, "@lumen_atomic_replace") || includes(llvm, "@lumen_remove_file") {
+    out = responsePath(out, runtimeRoot, "fs")
+  }
+  if needsCollections {
+    out = responsePath(out, runtimeRoot, "collections")
+  }
+  if includes(llvm, "@lumen_arena_") {
+    out = responsePath(out, runtimeRoot, "arena")
+  }
+  if needsString {
+    out = responsePath(out, runtimeRoot, "string")
+  }
+  if includes(llvm, "@lumen_encrypt") || includes(llvm, "@lumen_decrypt") {
+    out = responsePath(out, runtimeRoot, "crypto")
+  }
+  if includes(llvm, "@lumen_thread_") || includes(llvm, "@lumen_semaphore_") ||
+    includes(llvm, "@lumen_append_file") {
+    out = responsePath(out, runtimeRoot, "thread")
+  }
+  if includes(llvm, "@lumen_task_") {
+    out = responsePath(out, runtimeRoot, "task")
+  }
+  if includes(llvm, "@lumen_http_") || includes(llvm, "@lumen_socketio_") {
+    out = responsePath(out, runtimeRoot, "http")
+  }
+  return out
+}
+
+function cleanupCompilerFile(path: string): i32 {
+  let cleanup = removeFile(path)
+  if !isOk(cleanup) {
+    return 1
+  }
+  return 0
+}
+
+function emitAtomic(input: string, output: string): i32 {
+  let temporary = output + "." + uuid() + ".tmp"
+  let code = compileTiny(input, temporary)
+  if code != 0 {
+    cleanupCompilerFile(temporary)
+    return code
+  }
+  let publish = atomicReplace(temporary, output)
+  if !isOk(publish) {
+    println(errorMessage(publish))
+    cleanupCompilerFile(temporary)
+    return 1
+  }
+  return 0
+}
+
+function buildNative(input: string, output: string, clang: string, runtimeRoot: string): i32 {
+  let nonce = uuid()
+  let llvmPath = output + "." + nonce + ".tmp.ll"
+  let responseFile = output + "." + nonce + ".rsp.tmp"
+  let executable = output + "." + nonce + ".exe.tmp"
+  let compileCode = compileTiny(input, llvmPath)
+  if compileCode != 0 {
+    cleanupCompilerFile(llvmPath)
+    return compileCode
+  }
+
+  let llvmResult = readFile(llvmPath)
+  if !isOk(llvmResult) {
+    println(errorMessage(llvmResult))
+    cleanupCompilerFile(llvmPath)
+    return 1
+  }
+  let responseResult = writeFile(responseFile, runtimeLinkInputs(resultValue(llvmResult), runtimeRoot))
+  if !isOk(responseResult) {
+    println(errorMessage(responseResult))
+    cleanupCompilerFile(llvmPath)
+    cleanupCompilerFile(responseFile)
+    return 1
+  }
+
+  let arguments: string[] = [
+    "-Wno-override-module",
+    "-g",
+    llvmPath,
+    "@" + responseFile,
+    "-pthread",
+    "-o",
+    executable
+  ]
+  let link = exec(clang, arguments)
+  if !isOk(link) || resultValue(link) != 0 {
+    if !isOk(link) {
+      println(errorMessage(link))
+    } else {
+      println("clang exited with " + intToString(resultValue(link)))
+    }
+    cleanupCompilerFile(llvmPath)
+    cleanupCompilerFile(responseFile)
+    cleanupCompilerFile(executable)
+    return 1
+  }
+
+  let publish = atomicReplace(executable, output)
+  cleanupCompilerFile(llvmPath)
+  cleanupCompilerFile(responseFile)
+  if !isOk(publish) {
+    println(errorMessage(publish))
+    cleanupCompilerFile(executable)
+    return 1
+  }
+  return 0
+}
+
 function main(): i32 {
   let argsResult = argCount()
   if !isOk(argsResult) {
@@ -89,12 +220,54 @@ function main(): i32 {
   let args = resultValue(argsResult)
 
   if args < 3 {
-    println("usage: lumen-compiler input.lm output.ll")
+    println("usage: lumen-compiler [emit|build] input.lm output [clang runtime-root]")
     return 1
   }
 
-  let inputResult = arg(1)
-  let outputResult = arg(2)
+  let firstResult = arg(1)
+  let secondResult = arg(2)
+  if !isOk(firstResult) || !isOk(secondResult) {
+    println("cannot read compiler arguments")
+    return 1
+  }
+  let first = resultValue(firstResult)
+  let second = resultValue(secondResult)
+
+  if stringEquals(first, "emit") {
+    if args < 4 {
+      println("usage: lumen-compiler emit input.lm output.ll")
+      return 1
+    }
+    let outputResult = arg(3)
+    if !isOk(outputResult) {
+      println(errorMessage(outputResult))
+      return 1
+    }
+    return emitAtomic(second, resultValue(outputResult))
+  }
+
+  if stringEquals(first, "build") {
+    if args < 6 {
+      println("usage: lumen-compiler build input.lm output clang runtime-root")
+      return 1
+    }
+    let outputResult = arg(3)
+    let clangResult = arg(4)
+    let runtimeResult = arg(5)
+    if !isOk(outputResult) || !isOk(clangResult) || !isOk(runtimeResult) {
+      println("cannot read build arguments")
+      return 1
+    }
+    return buildNative(
+      second,
+      resultValue(outputResult),
+      resultValue(clangResult),
+      resultValue(runtimeResult)
+    )
+  }
+
+  let inputResult = firstResult
+  let outputResult = secondResult
   if !isOk(inputResult) {
     println(errorMessage(inputResult))
     return 1

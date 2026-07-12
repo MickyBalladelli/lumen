@@ -1,54 +1,6 @@
 import { AstProgram, astChildAt, astNodeAt } from "./ast.lm"
 import { compilerAbiSignature } from "./abi.lm"
 import { CompilerAstNode, CompilerIrBlock, CompilerIrFunction, CompilerIrValue, IrBlockArena, IrFunctionArena, IrValueArena, irBlockArena, irBlockArenaGet, irBlockArenaPush, irFunctionArena, irFunctionArenaGet, irFunctionArenaPush, irValueArena, irValueArenaGet, irValueArenaPush, tokenArenaGet } from "./containers.lm"
-import { astToProgram } from "./parser.lm"
-
-struct IrStatement {
-  kind: string
-  name: string
-  expressionKind: string
-  expressionValue: string
-  expressionLeftValue: string
-  expressionRightValue: string
-  expressionCallArg0: string
-  expressionCallArg1: string
-  expressionCallArgCount: string
-  resolvedKind: string
-  resolvedValue: string
-  bodyKind: string
-  bodyExpressionKind: string
-  bodyExpressionValue: string
-  bodyAssignName: string
-  bodyAddLeft: string
-  bodyAddRight: string
-  bodyIncrementName: string
-  loopVariable: string
-  loopInitialValue: string
-  loopCompareLeft: string
-  loopCompareOperator: string
-  loopBoundValue: string
-  loopUpdateValue: string
-  continueLeft: string
-  continueOperator: string
-  continueValue: string
-  breakLeft: string
-  breakOperator: string
-  breakValue: string
-}
-
-struct IrFunction {
-  name: string
-  param0: string
-  param1: string
-  paramCount: string
-  returnKind: string
-  returnValue: string
-  returnLeftValue: string
-  returnRightValue: string
-}
-
-// This is the target IR shape for the self-host compiler. The old summary
-// remains only while the LLVM backend moves to typed IR.
 struct TypedIrModule {
   values: IrValueArena
   blocks: IrBlockArena
@@ -59,32 +11,6 @@ struct TypedIrModule {
   fieldSlots: string
   fieldTypes: string
   fieldCount: i32
-}
-
-struct IrModule {
-  kind: string
-  mode: string
-  program: string
-  typed: TypedIrModule
-  functionCount: i32
-  statementCount: i32
-  instructionCount: i32
-  printCount: i32
-  returnKind: string
-  returnValue: string
-  function0Name: string
-  statement0Kind: string
-  statement0ExpressionKind: string
-  statement0ExpressionValue: string
-  statement1Kind: string
-  statement1ExpressionKind: string
-  statement1ExpressionValue: string
-  statement2Kind: string
-  statement2ExpressionKind: string
-  statement2ExpressionValue: string
-  statement3Kind: string
-  statement3ExpressionKind: string
-  statement3ExpressionValue: string
 }
 
 function typedIrModule(): TypedIrModule {
@@ -119,9 +45,13 @@ function typedIrValue(node: CompilerAstNode, nodeKind: string, typeId: i32, oper
 }
 
 function typedIrAppendValue(module: TypedIrModule, node: CompilerAstNode, kind: string, typeId: i32, operand0: i32, operand1: i32, text: string): TypedIrModule {
-  module.values = irValueArenaPush(module.values, typedIrValue(node, kind, typeId, operand0, operand1, text))
+  let normalizedType = typeId
+  if normalizedType < 0 {
+    normalizedType = 0
+  }
+  module.values = irValueArenaPush(module.values, typedIrValue(node, kind, normalizedType, operand0, operand1, text))
   if stringEquals(kind, "param") || stringEquals(kind, "local") {
-    module.localTypes = mapSet(module.localTypes, text, intToString(typeId))
+    module.localTypes = mapSet(module.localTypes, text, intToString(normalizedType))
   }
   return module
 }
@@ -305,6 +235,70 @@ function typedIrLowerNode(module: TypedIrModule, ast: AstProgram, nodeId: i32): 
     return typedIrAppendValue(module, node, "while.end", node.typeId, loop, -1, "")
   }
 
+  if stringEquals(node.kind, "ForStatement") {
+    module = typedIrLowerNode(module, ast, astChildAt(ast, nodeId, 0))
+    module = typedIrAppendValue(module, node, "while.begin", node.typeId, -1, -1, "")
+    let loop = module.values.count - 1
+    module = typedIrLowerNode(module, ast, astChildAt(ast, nodeId, 1))
+    let condition = module.values.count - 1
+    module = typedIrAppendValue(module, node, "while.condition", node.typeId, condition, loop, "")
+    module = typedIrLowerNode(module, ast, astChildAt(ast, nodeId, 3))
+    module = typedIrAppendValue(module, node, "for.update", node.typeId, loop, -1, "")
+    module = typedIrLowerNode(module, ast, astChildAt(ast, nodeId, 2))
+    return typedIrAppendValue(module, node, "while.end", node.typeId, loop, -1, "")
+  }
+
+  if stringEquals(node.kind, "SwitchStatement") {
+    module = typedIrLowerNode(module, ast, astChildAt(ast, nodeId, 0))
+    let subject = module.values.count - 1
+    module = typedIrAppendValue(module, node, "switch.begin", node.typeId, subject, -1, "")
+    let switchId = module.values.count - 1
+    childIndex = 1
+    while childIndex < node.childCount do {
+      let caseId = astChildAt(ast, nodeId, childIndex)
+      let switchCase = astNodeAt(ast, caseId)
+      let pattern: i32 = -1
+      let bodyIndex: i32 = 0
+      if switchCase.flags == 0 {
+        module = typedIrLowerNode(module, ast, astChildAt(ast, caseId, 0))
+        pattern = module.values.count - 1
+        bodyIndex = 1
+      }
+      module = typedIrAppendValue(module, switchCase, "switch.case", 0, subject, pattern, intToString(switchId))
+      let marker = module.values.count - 1
+      module = typedIrLowerNode(module, ast, astChildAt(ast, caseId, bodyIndex))
+      module = typedIrAppendValue(module, switchCase, "switch.endcase", 0, marker, switchId, "")
+      childIndex = childIndex + 1
+    }
+    return typedIrAppendValue(module, node, "switch.end", node.typeId, switchId, -1, "")
+  }
+
+  if stringEquals(node.kind, "TryCatchStatement") {
+    let tryBlockId = astChildAt(ast, nodeId, 0)
+    let tryBlock = astNodeAt(ast, tryBlockId)
+    let throwId: i32 = -1
+    childIndex = 0
+    while childIndex < tryBlock.childCount do {
+      let statementId = astChildAt(ast, tryBlockId, childIndex)
+      let statement = astNodeAt(ast, statementId)
+      if stringEquals(statement.kind, "ThrowStatement") {
+        throwId = statementId
+        break
+      }
+      childIndex = childIndex + 1
+    }
+    if throwId >= 0 {
+      module = typedIrLowerNode(module, ast, astChildAt(ast, throwId, 0))
+      let thrown = module.values.count - 1
+      let parameter = astNodeAt(ast, astChildAt(ast, nodeId, 1))
+      module = typedIrAppendValue(module, parameter, "local", 1, thrown, -1, parameter.name)
+      module = typedIrLowerNode(module, ast, astChildAt(ast, nodeId, 2))
+    } else {
+      module = typedIrLowerNode(module, ast, tryBlockId)
+    }
+    return typedIrAppendValue(module, node, "try", node.typeId, -1, -1, "")
+  }
+
   if stringEquals(node.kind, "StructExpression") {
     let fields: i32 = -1
     while childIndex < node.childCount do {
@@ -315,6 +309,19 @@ function typedIrLowerNode(module: TypedIrModule, ast: AstProgram, nodeId: i32): 
       childIndex = childIndex + 1
     }
     return typedIrAppendValue(module, node, "struct", 1, -1, fields, node.name)
+  }
+
+  if stringEquals(node.kind, "ArrayExpression") {
+    let elements: i32 = -1
+    while childIndex < node.childCount do {
+      module = typedIrLowerNode(module, ast, astChildAt(ast, nodeId, childIndex))
+      let element = module.values.count - 1
+      let elementValue = irValueArenaGet(module.values, element)
+      module = typedIrAppendValue(module, node, "array.element", elementValue.typeId, element, elements, "")
+      elements = module.values.count - 1
+      childIndex = childIndex + 1
+    }
+    return typedIrAppendValue(module, node, "array", 1, node.childCount, elements, "")
   }
 
   if stringEquals(node.kind, "SliceExpression") {
@@ -353,6 +360,21 @@ function typedIrLowerNode(module: TypedIrModule, ast: AstProgram, nodeId: i32): 
   }
 
   if stringEquals(node.kind, "CallExpression") {
+    if stringEquals(node.name, "await") {
+      let callText = node.text
+      let open = indexOf(callText, "(")
+      let target: string = callText[5..open]
+      module = typedIrAppendValue(module, node, "load", 1, -1, -1, target)
+      return typedIrAppendValue(
+        module,
+        node,
+        "call.0",
+        typedIrCallTypeId(module, target, -1),
+        module.values.count - 1,
+        -1,
+        target
+      )
+    }
     let callee: i32 = -1
     let arguments: i32 = -1
     while childIndex < node.childCount do {
@@ -405,6 +427,15 @@ function typedIrLowerNode(module: TypedIrModule, ast: AstProgram, nodeId: i32): 
     let token = tokenArenaGet(ast.tokens, node.tokenStart)
     if stringEquals(token.kind, "string") {
       typeId = 1
+      let interpolation = indexOf(node.value, "${")
+      let interpolationEnd = indexOf(node.value, "}")
+      if interpolation >= 0 && interpolationEnd > interpolation {
+        let literalValue = node.value
+        let name: string = literalValue[interpolation + 2..interpolationEnd]
+        module = typedIrAppendValue(module, node, "load", typedIrStorageTypeId(module, name), -1, -1, name)
+        operand0 = module.values.count - 1
+        kind = "interpolate"
+      }
     } else {
       typeId = 0
     }
@@ -425,6 +456,7 @@ function typedIrLowerNode(module: TypedIrModule, ast: AstProgram, nodeId: i32): 
   } else if stringEquals(kind, "VariableDeclarator") {
     kind = "local"
     text = node.name
+    operand1 = -1
     if module.values.count > firstChild {
       operand0 = module.values.count - 1
       let initializer = irValueArenaGet(module.values, operand0)
@@ -461,15 +493,20 @@ function typedIrLowerNode(module: TypedIrModule, ast: AstProgram, nodeId: i32): 
     module = typedIrRegisterField(module, node.name, typeId)
     operand1 = typedIrFieldSlot(module, node.name)
   } else if stringEquals(kind, "MemberExpression") {
-    kind = "member"
-    text = node.name
-    if node.typeId >= 0 {
-      typeId = node.typeId
+    if node.flags == 1 {
+      kind = "index"
+      typeId = 0
     } else {
-      typeId = typedIrFieldTypeId(module, node.name)
+      kind = "member"
+      text = node.name
+      if node.typeId >= 0 {
+        typeId = node.typeId
+      } else {
+        typeId = typedIrFieldTypeId(module, node.name)
+      }
+      module = typedIrRegisterField(module, node.name, typeId)
+      operand1 = typedIrFieldSlot(module, node.name)
     }
-    module = typedIrRegisterField(module, node.name, typeId)
-    operand1 = typedIrFieldSlot(module, node.name)
   } else if stringEquals(kind, "ReturnStatement") {
     kind = "return"
     if module.values.count > firstChild {
@@ -563,12 +600,19 @@ function typedIrValid(module: TypedIrModule): bool {
   let functionIndex: i32 = 0
   let previousBlockEnd: i32 = 0
   let previousValueEnd: i32 = 0
+  let functionNames = map("unused", "0")
+  let blockNames = map("unused", "0")
 
   while functionIndex < module.functions.count do {
     let fn = irFunctionArenaGet(module.functions, functionIndex)
-    if stringEquals(fn.name, "") || fn.blockCount < 1 {
+    if stringEquals(fn.name, "") || fn.blockCount < 1 ||
+      fn.returnTypeId < 0 {
       return false
     }
+    if mapHas(functionNames, fn.name) {
+      return false
+    }
+    functionNames = mapSet(functionNames, fn.name, "1")
     if fn.firstBlock != previousBlockEnd {
       return false
     }
@@ -582,6 +626,10 @@ function typedIrValid(module: TypedIrModule): bool {
       if stringEquals(block.name, "") || stringEquals(block.terminator, "") {
         return false
       }
+      if mapHas(blockNames, block.name) {
+        return false
+      }
+      blockNames = mapSet(blockNames, block.name, "1")
       if block.firstValue < 0 || block.valueCount < 0 {
         return false
       }
@@ -598,12 +646,15 @@ function typedIrValid(module: TypedIrModule): bool {
         return false
       }
       if stringEquals(block.terminator, "branch") &&
-        (block.target0 < 0 || block.target0 >= module.blocks.count) {
+        (block.target0 < fn.firstBlock ||
+          block.target0 >= fn.firstBlock + fn.blockCount) {
         return false
       }
       if stringEquals(block.terminator, "condbranch") &&
-        (block.target0 < 0 || block.target0 >= module.blocks.count ||
-          block.target1 < 0 || block.target1 >= module.blocks.count) {
+        (block.target0 < fn.firstBlock ||
+          block.target0 >= fn.firstBlock + fn.blockCount ||
+          block.target1 < fn.firstBlock ||
+          block.target1 >= fn.firstBlock + fn.blockCount) {
         return false
       }
 
@@ -613,14 +664,27 @@ function typedIrValid(module: TypedIrModule): bool {
         if stringEquals(value.kind, "") {
           return false
         }
+        if value.typeId < 0 ||
+          value.operand0 < -1 || value.operand1 < -1 {
+          return false
+        }
+        let operand0IsValue = !stringEquals(value.kind, "array")
         let operand1IsValue = !stringEquals(value.kind, "member") &&
           !stringEquals(value.kind, "struct.field")
-        if value.operand0 >= module.values.count ||
+        if (operand0IsValue && value.operand0 >= module.values.count) ||
           (operand1IsValue && value.operand1 >= module.values.count) {
           return false
         }
-        if value.operand0 >= valueIndex ||
+        if (operand0IsValue && value.operand0 >= valueIndex) ||
           (operand1IsValue && value.operand1 >= valueIndex) {
+          return false
+        }
+        if operand0IsValue && value.operand0 >= 0 &&
+          value.operand0 < block.firstValue {
+          return false
+        }
+        if operand1IsValue && value.operand1 >= 0 &&
+          value.operand1 < block.firstValue {
           return false
         }
         valueIndex = valueIndex + 1
@@ -636,243 +700,6 @@ function typedIrValid(module: TypedIrModule): bool {
   return previousBlockEnd == module.blocks.count && previousValueEnd == module.values.count
 }
 
-function irStatement(kind: string): IrStatement {
-  let statement = IrStatement {
-    kind: "",
-    name: "",
-    expressionKind: "",
-    expressionValue: "",
-    expressionLeftValue: "",
-    expressionRightValue: "",
-    expressionCallArg0: "",
-    expressionCallArg1: "",
-    expressionCallArgCount: "0",
-    resolvedKind: "",
-    resolvedValue: "",
-    bodyKind: "",
-    bodyExpressionKind: "",
-    bodyExpressionValue: "",
-    bodyAssignName: "",
-    bodyAddLeft: "",
-    bodyAddRight: "",
-    bodyIncrementName: "",
-    loopVariable: "",
-    loopInitialValue: "",
-    loopCompareLeft: "",
-    loopCompareOperator: "",
-    loopBoundValue: "",
-    loopUpdateValue: "",
-    continueLeft: "",
-    continueOperator: "",
-    continueValue: "",
-    breakLeft: "",
-    breakOperator: "",
-    breakValue: ""
-  }
-
-  statement.kind = kind
-  return statement
-}
-
-function irFunction(): IrFunction {
-  let fn = IrFunction {
-    name: "",
-    param0: "",
-    param1: "",
-    paramCount: "0",
-    returnKind: "",
-    returnValue: "",
-    returnLeftValue: "",
-    returnRightValue: ""
-  }
-
-  return fn
-}
-
-function irModule(): IrModule {
-  let module = IrModule {
-    kind: "IRModule",
-    mode: "",
-    program: "",
-    typed: typedIrModule(),
-    functionCount: 0,
-    statementCount: 0,
-    instructionCount: 0,
-    printCount: 0,
-    returnKind: "number",
-    returnValue: "0",
-    function0Name: "",
-    statement0Kind: "",
-    statement0ExpressionKind: "",
-    statement0ExpressionValue: "",
-    statement1Kind: "",
-    statement1ExpressionKind: "",
-    statement1ExpressionValue: "",
-    statement2Kind: "",
-    statement2ExpressionKind: "",
-    statement2ExpressionValue: "",
-    statement3Kind: "",
-    statement3ExpressionKind: "",
-    statement3ExpressionValue: ""
-  }
-
-  return module
-}
-
-function irStatementPrefix(index: i32): string {
-  let indexText = intToString(index)
-  return "statement" + indexText
-}
-
-function irFunctionPrefix(index: i32): string {
-  let indexText = intToString(index)
-  return "function" + indexText
-}
-
-function irFunctionFromProgram(program: string, index: i32): IrFunction {
-  let prefix = irFunctionPrefix(index)
-  let fn = irFunction()
-  fn.name = mapGet(program, prefix + "Name")
-  fn.param0 = mapGet(program, prefix + "Param0")
-  fn.param1 = mapGet(program, prefix + "Param1")
-  fn.paramCount = mapGet(program, prefix + "ParamCount")
-  fn.returnKind = mapGet(program, prefix + "ReturnKind")
-  fn.returnValue = mapGet(program, prefix + "ReturnValue")
-  fn.returnLeftValue = mapGet(program, prefix + "ReturnLeftValue")
-  fn.returnRightValue = mapGet(program, prefix + "ReturnRightValue")
-  return fn
-}
-
-function irStatementFromProgram(program: string, index: i32): IrStatement {
-  let prefix = irStatementPrefix(index)
-  let statement = irStatement(mapGet(program, prefix + "Kind"))
-  statement.name = mapGet(program, prefix + "Name")
-  statement.expressionKind = mapGet(program, prefix + "ExprKind")
-  statement.expressionValue = mapGet(program, prefix + "ExprValue")
-  statement.expressionLeftValue = mapGet(program, prefix + "ExprLeftValue")
-  statement.expressionRightValue = mapGet(program, prefix + "ExprRightValue")
-  statement.expressionCallArg0 = mapGet(program, prefix + "ExprCallArg0")
-  statement.expressionCallArg1 = mapGet(program, prefix + "ExprCallArg1")
-  statement.expressionCallArgCount = mapGet(program, prefix + "ExprCallArgCount")
-  statement.resolvedKind = mapGet(program, prefix + "ResolvedKind")
-  statement.resolvedValue = mapGet(program, prefix + "ResolvedValue")
-  statement.bodyKind = mapGet(program, prefix + "BodyKind")
-  statement.bodyExpressionKind = mapGet(program, prefix + "BodyExprKind")
-  statement.bodyExpressionValue = mapGet(program, prefix + "BodyExprValue")
-  statement.bodyAssignName = mapGet(program, prefix + "BodyAssignName")
-  statement.bodyAddLeft = mapGet(program, prefix + "BodyAddLeft")
-  statement.bodyAddRight = mapGet(program, prefix + "BodyAddRight")
-  statement.bodyIncrementName = mapGet(program, prefix + "BodyIncrementName")
-  statement.loopVariable = mapGet(program, prefix + "LoopVariable")
-  statement.loopInitialValue = mapGet(program, prefix + "LoopInitialValue")
-  statement.loopCompareLeft = mapGet(program, prefix + "LoopCompareLeft")
-  statement.loopCompareOperator = mapGet(program, prefix + "LoopCompareOperator")
-  statement.loopBoundValue = mapGet(program, prefix + "LoopBoundValue")
-  statement.loopUpdateValue = mapGet(program, prefix + "LoopUpdateValue")
-  statement.continueLeft = mapGet(program, prefix + "ContinueLeft")
-  statement.continueOperator = mapGet(program, prefix + "ContinueOperator")
-  statement.continueValue = mapGet(program, prefix + "ContinueValue")
-  statement.breakLeft = mapGet(program, prefix + "BreakLeft")
-  statement.breakOperator = mapGet(program, prefix + "BreakOperator")
-  statement.breakValue = mapGet(program, prefix + "BreakValue")
-  return statement
-}
-
-function irStoreFunction(module: IrModule, index: i32, fn: IrFunction): IrModule {
-  if index == 0 {
-    module.function0Name = fn.name
-  }
-
-  return module
-}
-
-function irStoreStatement(module: IrModule, index: i32, statement: IrStatement): IrModule {
-  if index == 0 {
-    module.statement0Kind = statement.kind
-    module.statement0ExpressionKind = statement.expressionKind
-    module.statement0ExpressionValue = statement.expressionValue
-  } else if index == 1 {
-    module.statement1Kind = statement.kind
-    module.statement1ExpressionKind = statement.expressionKind
-    module.statement1ExpressionValue = statement.expressionValue
-  } else if index == 2 {
-    module.statement2Kind = statement.kind
-    module.statement2ExpressionKind = statement.expressionKind
-    module.statement2ExpressionValue = statement.expressionValue
-  } else if index == 3 {
-    module.statement3Kind = statement.kind
-    module.statement3ExpressionKind = statement.expressionKind
-    module.statement3ExpressionValue = statement.expressionValue
-  }
-
-  return module
-}
-
-function irCountInstruction(module: IrModule, statement: IrStatement): IrModule {
-  if includes(statement.kind, "println") {
-    module.printCount = module.printCount + 1
-    module.instructionCount = module.instructionCount + 1
-  } else if includes(statement.kind, "return") {
-    module.instructionCount = module.instructionCount + 1
-  } else if includes(statement.kind, "let") {
-    module.instructionCount = module.instructionCount + 1
-  } else if includes(statement.kind, "const") {
-    module.instructionCount = module.instructionCount + 1
-  } else if includes(statement.kind, "assign") {
-    module.instructionCount = module.instructionCount + 1
-  } else if includes(statement.kind, "if") {
-    module.instructionCount = module.instructionCount + 1
-  } else if includes(statement.kind, "for") {
-    module.instructionCount = module.instructionCount + 1
-  } else if includes(statement.kind, "while") {
-    module.instructionCount = module.instructionCount + 1
-  }
-
-  return module
-}
-
-function buildIr(ast: AstProgram): IrModule {
-  let program = astToProgram(ast)
-  let module = irModule()
-  let statementCount = stringToInt(mapGet(program, "statementCount"))
-  let functionCount = stringToInt(mapGet(program, "functionCount"))
-  let index: i32 = 0
-
-  module.mode = mapGet(program, "mode")
-  module.program = program
-  module.typed = buildTypedIr(ast)
-  module.functionCount = functionCount
-  module.statementCount = statementCount
-  module.returnKind = mapGet(program, "mainReturnKind")
-  module.returnValue = mapGet(program, "mainReturnValue")
-
-  while index < functionCount do {
-    module = irStoreFunction(module, index, irFunctionFromProgram(program, index))
-    index = index + 1
-  }
-
-  index = 0
-  while index < statementCount do {
-    let statement = irStatementFromProgram(program, index)
-    module = irStoreStatement(module, index, statement)
-    module = irCountInstruction(module, statement)
-    index = index + 1
-  }
-
-  return module
-}
-
-function irToProgram(ir: IrModule, program: string): string {
-  program = mapSet(program, "irKind", ir.kind)
-  program = mapSet(program, "irInstructionCount", intToString(ir.instructionCount))
-  program = mapSet(program, "irPrintCount", intToString(ir.printCount))
-  program = mapSet(program, "irReturnKind", ir.returnKind)
-  program = mapSet(program, "irReturnValue", ir.returnValue)
-  program = mapSet(program, "irStatementCount", intToString(ir.statementCount))
-  program = mapSet(program, "irFunctionCount", intToString(ir.functionCount))
-  program = mapSet(program, "irStatement0Kind", ir.statement0Kind)
-  program = mapSet(program, "irStatement0ExprKind", ir.statement0ExpressionKind)
-  program = mapSet(program, "irFunction0Name", ir.function0Name)
-
-  return program
+function buildIr(ast: AstProgram): TypedIrModule {
+  return buildTypedIr(ast)
 }

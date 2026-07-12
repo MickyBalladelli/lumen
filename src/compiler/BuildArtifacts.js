@@ -109,7 +109,11 @@ export async function compileNativeArtifact({
 
   if (!cacheHit) {
     await atomicWriteFile(llvmPath, compilation.llvm)
-    await compiler.buildExecutable(llvmPath, executablePath, buildOptions)
+    if (typeof compiler.buildSource === 'function') {
+      await compiler.buildSource(identity.canonicalInput, executablePath, buildOptions)
+    } else {
+      await compiler.buildExecutable(llvmPath, executablePath, buildOptions)
+    }
   }
 
   return {

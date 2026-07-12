@@ -1,0 +1,25 @@
+import { irBlockArenaGet, irValueArenaGet } from "../compiler/containers.lm"
+import { buildIr } from "../compiler/ir.lm"
+import { loadModuleGraph } from "../compiler/modules.lm"
+
+function main(): i32 {
+  let graph = loadModuleGraph("examples/control-flow.lm")
+  let ir = buildIr(graph.program)
+  let blockIndex: i32 = 0
+  while blockIndex < ir.blocks.count do {
+    let block = irBlockArenaGet(ir.blocks, blockIndex)
+    let valueIndex = block.firstValue
+    while valueIndex < block.firstValue + block.valueCount do {
+      let value = irValueArenaGet(ir.values, valueIndex)
+      if value.operand0 >= 0 && value.operand0 < block.firstValue {
+        println("operand0 " + intToString(valueIndex) + " " + value.kind + " " + intToString(value.operand0) + " first " + intToString(block.firstValue))
+      }
+      if value.operand1 >= 0 && value.operand1 < block.firstValue {
+        println("operand1 " + intToString(valueIndex) + " " + value.kind + " " + intToString(value.operand1) + " first " + intToString(block.firstValue))
+      }
+      valueIndex = valueIndex + 1
+    }
+    blockIndex = blockIndex + 1
+  }
+  return 0
+}

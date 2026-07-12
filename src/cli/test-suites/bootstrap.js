@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
-import { mkdir, readFile, readdir, unlink, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { cp, mkdir, mkdtemp, readFile, readdir, unlink, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { Compiler } from '../../compiler/Compiler.js'
 import { findBootstrapDelegation } from '../../testing/BootstrapDelegationGuard.js'
 import { canonicalizeBootstrapLLVM } from '../../testing/BootstrapEquivalence.js'
@@ -191,6 +192,35 @@ await suite.test('linked stage-2 and stage-3 compilers behave equally', async ()
 })
 
 if (requireRealBootstrap) {
+  await suite.test('stage-2 builds in a clean source-only directory', async () => {
+    const cleanRoot = await mkdtemp(join(tmpdir(), 'lumen-clean-bootstrap-'))
+    await cp('compiler', join(cleanRoot, 'compiler'), { recursive: true })
+    await cp(join('src', 'runtime'), join(cleanRoot, 'src', 'runtime'), { recursive: true })
+    await cp('package.json', join(cleanRoot, 'package.json'))
+    await cp('lumen.json', join(cleanRoot, 'lumen.json'))
+    await cp('photon.json', join(cleanRoot, 'photon.json'))
+
+    const cleanStageTwo = join(cleanRoot, 'stage2')
+    const build = await runExecutable(resolve(stageOneCompiler), [
+      'build',
+      join('compiler', 'main.lm'),
+      'stage2',
+      process.env.LUMEN_CLANG ?? 'clang',
+      join('src', 'runtime')
+    ], {}, { cwd: cleanRoot, progressLabel: 'clean bootstrap stage-2' })
+    assert.equal(build.code, 0, build.stdout || build.stderr)
+
+    const cleanStageThreeLLVM = join(cleanRoot, 'stage3.ll')
+    const emit = await runExecutable(cleanStageTwo, [
+      'emit',
+      join('compiler', 'main.lm'),
+      'stage3.ll'
+    ], {}, { cwd: cleanRoot, progressLabel: 'clean bootstrap stage-3' })
+    assert.equal(emit.code, 0, emit.stdout || emit.stderr)
+    await verifyLLVM(cleanStageThreeLLVM, 'clean stage-3 LLVM')
+    assert.equal(hasCompilerDelegation(await readFile(cleanStageThreeLLVM, 'utf8')), false)
+  })
+
   for (const program of programs) {
     await suite.test(`stage-3 ${program[0]}`, () => {
       return testProgram(stageThreeCompiler, 3, program)
