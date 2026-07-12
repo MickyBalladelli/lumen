@@ -68,6 +68,7 @@ const diagnostics = [
   ['while-condition-type-mismatch', join('tests', 'negative', 'while-condition-type-mismatch.lm'), 'compile error: while condition must be bool, got string at line 2 near while\n'],
   ['for-of-non-array', join('tests', 'negative', 'for-of-non-array.lm'), 'compile error: for-of needs an array at line 3 near of\n'],
   ['switch-case-mismatch', join('tests', 'negative', 'switch-case-mismatch.lm'), 'compile error: cannot compare switch i32 with case string at line 4 near case\n'],
+  ['module-type-mismatch', join('tests', 'bootstrap', 'module-diagnostic-main.lm'), 'compile error: cannot assign i32 to string at tests/bootstrap/module-diagnostic-library.lm:2:3 near let\n'],
   ['unterminated-string', join('tests', 'bootstrap', 'unterminated-string.lm'), 'compile error: Unterminated string literal at tests/bootstrap/unterminated-string.lm:2:11\n'],
   ['unterminated-comment', join('tests', 'bootstrap', 'unterminated-comment.lm'), 'compile error: Unterminated block comment at tests/bootstrap/unterminated-comment.lm:2:3\n'],
   ['unexpected-character', join('tests', 'bootstrap', 'unexpected-character.lm'), 'compile error: Unexpected character "@" at tests/bootstrap/unexpected-character.lm:2:3\n']

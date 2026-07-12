@@ -16,6 +16,19 @@ function emitIr(ir: IrModule): string {
 " + emitStatementMainIr(ir, ir.program)
 }
 
+function emitIrError(ir: IrModule): string {
+  if typedIrValid(ir.typed) {
+    return ""
+  }
+  if ir.typed.functions.count > 0 {
+    let fn = irFunctionArenaGet(ir.typed.functions, 0)
+    return "compile error: invalid typed IR at " + fn.file +
+      ":" + intToString(fn.line) +
+      ":" + intToString(fn.column)
+  }
+  return "compile error: invalid typed IR"
+}
+
 function typedIrValueText(module: TypedIrModule, valueId: i32): string {
   if valueId < 0 || valueId >= module.values.count {
     return "0"

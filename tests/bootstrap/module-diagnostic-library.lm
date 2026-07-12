@@ -1,0 +1,4 @@
+function broken(): void {
+  let value: string = 7
+  println(value)
+}

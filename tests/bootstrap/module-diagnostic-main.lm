@@ -1,0 +1,6 @@
+import { broken } from "./module-diagnostic-library.lm"
+
+function main(): i32 {
+  broken()
+  return 0
+}

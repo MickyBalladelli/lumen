@@ -1,4 +1,4 @@
-import { AstArena, CompilerAstNode, CompilerDiagnostic, CompilerIrBlock, CompilerIrValue, CompilerSymbol, CompilerToken, CompilerType, DiagnosticArena, IrBlockArena, IrValueArena, SymbolArena, TokenArena, TypeArena, astArena, astArenaGet, astArenaPush, diagnosticArena, diagnosticArenaGet, diagnosticArenaPush, irBlockArena, irBlockArenaGet, irBlockArenaPush, irValueArena, irValueArenaGet, irValueArenaPush, symbolArena, symbolArenaGet, symbolArenaPush, tokenArena, tokenArenaGet, tokenArenaPush, typeArena, typeArenaGet, typeArenaPush } from "../../compiler/containers.lm"
+import { AstArena, CompilerAstNode, CompilerDiagnostic, CompilerIrBlock, CompilerIrFunction, CompilerIrValue, CompilerSymbol, CompilerToken, CompilerType, DiagnosticArena, IrBlockArena, IrFunctionArena, IrValueArena, SymbolArena, TokenArena, TypeArena, astArena, astArenaGet, astArenaPush, diagnosticArena, diagnosticArenaGet, diagnosticArenaPush, irBlockArena, irBlockArenaGet, irBlockArenaPush, irFunctionArena, irFunctionArenaGet, irFunctionArenaPush, irValueArena, irValueArenaGet, irValueArenaPush, symbolArena, symbolArenaGet, symbolArenaPush, tokenArena, tokenArenaGet, tokenArenaPush, typeArena, typeArenaGet, typeArenaPush } from "../../compiler/containers.lm"
 
 function main(): i32 {
   let payload = "left:=\nright"
@@ -24,7 +24,10 @@ function main(): i32 {
       file: "compiler/main.lm",
       offset: index,
       line: index + 1,
-      column: 3
+      column: 3,
+      endOffset: index + stringLen(payload),
+      endLine: index + 2,
+      endColumn: 6
     }
     tokens = tokenArenaPush(tokens, token)
     index = index + 1
@@ -34,6 +37,7 @@ function main(): i32 {
   assert(tokens.count == 12, "token arena must grow")
   assert(stringEquals(lastToken.lexeme, payload), "token lexeme must be lossless")
   assert(lastToken.offset == 11, "token integer field must survive")
+  assert(lastToken.endLine == 13, "token range must survive")
 
   let nodes: AstArena = astArena()
   nodes = astArenaPush(nodes, CompilerAstNode {
@@ -79,10 +83,18 @@ function main(): i32 {
     name: payload,
     typeId: 2,
     scopeId: 4,
-    declarationId: 7
+    declarationId: 7,
+    file: key,
+    offset: 4,
+    line: 2,
+    column: 3,
+    endOffset: 12,
+    endLine: 2,
+    endColumn: 11
   })
   let symbol = symbolArenaGet(symbols, 0)
   assert(stringEquals(symbol.name, payload), "symbol name must be lossless")
+  assert(stringEquals(symbol.file, key) && symbol.endColumn == 11, "symbol range must be lossless")
 
   let values: IrValueArena = irValueArena()
   values = irValueArenaPush(values, CompilerIrValue {
@@ -90,10 +102,18 @@ function main(): i32 {
     typeId: 2,
     operand0: 3,
     operand1: 5,
-    text: payload
+    text: payload,
+    file: key,
+    offset: 4,
+    line: 2,
+    column: 3,
+    endOffset: 12,
+    endLine: 2,
+    endColumn: 11
   })
   let value = irValueArenaGet(values, 0)
   assert(stringEquals(value.text, payload), "IR value must be lossless")
+  assert(stringEquals(value.file, key) && value.endOffset == 12, "IR value range must be lossless")
 
   let blocks: IrBlockArena = irBlockArena()
   blocks = irBlockArenaPush(blocks, CompilerIrBlock {
@@ -102,10 +122,35 @@ function main(): i32 {
     valueCount: 1,
     terminator: "return",
     target0: -1,
-    target1: -1
+    target1: -1,
+    file: key,
+    offset: 4,
+    line: 2,
+    column: 3,
+    endOffset: 12,
+    endLine: 2,
+    endColumn: 11
   })
   let block = irBlockArenaGet(blocks, 0)
   assert(stringEquals(block.name, payload), "IR block must be lossless")
+  assert(stringEquals(block.file, key) && block.endLine == 2, "IR block range must be lossless")
+
+  let functions: IrFunctionArena = irFunctionArena()
+  functions = irFunctionArenaPush(functions, CompilerIrFunction {
+    name: payload,
+    firstBlock: 0,
+    blockCount: 1,
+    returnTypeId: 2,
+    file: key,
+    offset: 4,
+    line: 2,
+    column: 3,
+    endOffset: 12,
+    endLine: 2,
+    endColumn: 11
+  })
+  let fn = irFunctionArenaGet(functions, 0)
+  assert(stringEquals(fn.file, key) && fn.column == 3, "IR function range must be lossless")
 
   let diagnostics: DiagnosticArena = diagnosticArena()
   diagnostics = diagnosticArenaPush(diagnostics, CompilerDiagnostic {

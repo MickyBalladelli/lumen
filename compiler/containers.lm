@@ -6,6 +6,9 @@ struct CompilerToken {
   offset: i32
   line: i32
   column: i32
+  endOffset: i32
+  endLine: i32
+  endColumn: i32
 }
 
 struct CompilerAstNode {
@@ -45,6 +48,13 @@ struct CompilerSymbol {
   typeId: i32
   scopeId: i32
   declarationId: i32
+  file: string
+  offset: i32
+  line: i32
+  column: i32
+  endOffset: i32
+  endLine: i32
+  endColumn: i32
 }
 
 struct CompilerIrValue {
@@ -53,6 +63,13 @@ struct CompilerIrValue {
   operand0: i32
   operand1: i32
   text: string
+  file: string
+  offset: i32
+  line: i32
+  column: i32
+  endOffset: i32
+  endLine: i32
+  endColumn: i32
 }
 
 struct CompilerIrBlock {
@@ -62,6 +79,13 @@ struct CompilerIrBlock {
   terminator: string
   target0: i32
   target1: i32
+  file: string
+  offset: i32
+  line: i32
+  column: i32
+  endOffset: i32
+  endLine: i32
+  endColumn: i32
 }
 
 struct CompilerIrFunction {
@@ -69,6 +93,13 @@ struct CompilerIrFunction {
   firstBlock: i32
   blockCount: i32
   returnTypeId: i32
+  file: string
+  offset: i32
+  line: i32
+  column: i32
+  endOffset: i32
+  endLine: i32
+  endColumn: i32
 }
 
 struct CompilerDiagnostic {
@@ -152,6 +183,9 @@ function tokenArenaPush(arena: TokenArena, token: CompilerToken): TokenArena {
   arenaSetI32(arena.storage, index, 4, token.offset)
   arenaSetI32(arena.storage, index, 5, token.line)
   arenaSetI32(arena.storage, index, 6, token.column)
+  arenaSetI32(arena.storage, index, 7, token.endOffset)
+  arenaSetI32(arena.storage, index, 8, token.endLine)
+  arenaSetI32(arena.storage, index, 9, token.endColumn)
   arena.count = arenaLen(arena.storage)
   return arena
 }
@@ -164,7 +198,10 @@ function tokenArenaGet(arena: TokenArena, index: i32): CompilerToken {
     file: arenaGetString(arena.storage, index, 3),
     offset: arenaGetI32(arena.storage, index, 4),
     line: arenaGetI32(arena.storage, index, 5),
-    column: arenaGetI32(arena.storage, index, 6)
+    column: arenaGetI32(arena.storage, index, 6),
+    endOffset: arenaGetI32(arena.storage, index, 7),
+    endLine: arenaGetI32(arena.storage, index, 8),
+    endColumn: arenaGetI32(arena.storage, index, 9)
   }
 }
 
@@ -293,6 +330,13 @@ function symbolArenaPush(arena: SymbolArena, symbol: CompilerSymbol): SymbolAren
   arenaSetI32(arena.storage, index, 2, symbol.typeId)
   arenaSetI32(arena.storage, index, 3, symbol.scopeId)
   arenaSetI32(arena.storage, index, 4, symbol.declarationId)
+  arenaSetString(arena.storage, index, 5, symbol.file)
+  arenaSetI32(arena.storage, index, 6, symbol.offset)
+  arenaSetI32(arena.storage, index, 7, symbol.line)
+  arenaSetI32(arena.storage, index, 8, symbol.column)
+  arenaSetI32(arena.storage, index, 9, symbol.endOffset)
+  arenaSetI32(arena.storage, index, 10, symbol.endLine)
+  arenaSetI32(arena.storage, index, 11, symbol.endColumn)
   arena.count = arenaLen(arena.storage)
   return arena
 }
@@ -303,7 +347,14 @@ function symbolArenaGet(arena: SymbolArena, index: i32): CompilerSymbol {
     name: arenaGetString(arena.storage, index, 1),
     typeId: arenaGetI32(arena.storage, index, 2),
     scopeId: arenaGetI32(arena.storage, index, 3),
-    declarationId: arenaGetI32(arena.storage, index, 4)
+    declarationId: arenaGetI32(arena.storage, index, 4),
+    file: arenaGetString(arena.storage, index, 5),
+    offset: arenaGetI32(arena.storage, index, 6),
+    line: arenaGetI32(arena.storage, index, 7),
+    column: arenaGetI32(arena.storage, index, 8),
+    endOffset: arenaGetI32(arena.storage, index, 9),
+    endLine: arenaGetI32(arena.storage, index, 10),
+    endColumn: arenaGetI32(arena.storage, index, 11)
   }
 }
 
@@ -321,6 +372,13 @@ function irValueArenaPush(arena: IrValueArena, value: CompilerIrValue): IrValueA
   arenaSetI32(arena.storage, index, 2, value.operand0)
   arenaSetI32(arena.storage, index, 3, value.operand1)
   arenaSetString(arena.storage, index, 4, value.text)
+  arenaSetString(arena.storage, index, 5, value.file)
+  arenaSetI32(arena.storage, index, 6, value.offset)
+  arenaSetI32(arena.storage, index, 7, value.line)
+  arenaSetI32(arena.storage, index, 8, value.column)
+  arenaSetI32(arena.storage, index, 9, value.endOffset)
+  arenaSetI32(arena.storage, index, 10, value.endLine)
+  arenaSetI32(arena.storage, index, 11, value.endColumn)
   arena.count = arenaLen(arena.storage)
   return arena
 }
@@ -331,7 +389,14 @@ function irValueArenaGet(arena: IrValueArena, index: i32): CompilerIrValue {
     typeId: arenaGetI32(arena.storage, index, 1),
     operand0: arenaGetI32(arena.storage, index, 2),
     operand1: arenaGetI32(arena.storage, index, 3),
-    text: arenaGetString(arena.storage, index, 4)
+    text: arenaGetString(arena.storage, index, 4),
+    file: arenaGetString(arena.storage, index, 5),
+    offset: arenaGetI32(arena.storage, index, 6),
+    line: arenaGetI32(arena.storage, index, 7),
+    column: arenaGetI32(arena.storage, index, 8),
+    endOffset: arenaGetI32(arena.storage, index, 9),
+    endLine: arenaGetI32(arena.storage, index, 10),
+    endColumn: arenaGetI32(arena.storage, index, 11)
   }
 }
 
@@ -350,6 +415,13 @@ function irBlockArenaPush(arena: IrBlockArena, block: CompilerIrBlock): IrBlockA
   arenaSetString(arena.storage, index, 3, block.terminator)
   arenaSetI32(arena.storage, index, 4, block.target0)
   arenaSetI32(arena.storage, index, 5, block.target1)
+  arenaSetString(arena.storage, index, 6, block.file)
+  arenaSetI32(arena.storage, index, 7, block.offset)
+  arenaSetI32(arena.storage, index, 8, block.line)
+  arenaSetI32(arena.storage, index, 9, block.column)
+  arenaSetI32(arena.storage, index, 10, block.endOffset)
+  arenaSetI32(arena.storage, index, 11, block.endLine)
+  arenaSetI32(arena.storage, index, 12, block.endColumn)
   arena.count = arenaLen(arena.storage)
   return arena
 }
@@ -361,7 +433,14 @@ function irBlockArenaGet(arena: IrBlockArena, index: i32): CompilerIrBlock {
     valueCount: arenaGetI32(arena.storage, index, 2),
     terminator: arenaGetString(arena.storage, index, 3),
     target0: arenaGetI32(arena.storage, index, 4),
-    target1: arenaGetI32(arena.storage, index, 5)
+    target1: arenaGetI32(arena.storage, index, 5),
+    file: arenaGetString(arena.storage, index, 6),
+    offset: arenaGetI32(arena.storage, index, 7),
+    line: arenaGetI32(arena.storage, index, 8),
+    column: arenaGetI32(arena.storage, index, 9),
+    endOffset: arenaGetI32(arena.storage, index, 10),
+    endLine: arenaGetI32(arena.storage, index, 11),
+    endColumn: arenaGetI32(arena.storage, index, 12)
   }
 }
 
@@ -378,6 +457,13 @@ function irFunctionArenaPush(arena: IrFunctionArena, fn: CompilerIrFunction): Ir
   arenaSetI32(arena.storage, index, 1, fn.firstBlock)
   arenaSetI32(arena.storage, index, 2, fn.blockCount)
   arenaSetI32(arena.storage, index, 3, fn.returnTypeId)
+  arenaSetString(arena.storage, index, 4, fn.file)
+  arenaSetI32(arena.storage, index, 5, fn.offset)
+  arenaSetI32(arena.storage, index, 6, fn.line)
+  arenaSetI32(arena.storage, index, 7, fn.column)
+  arenaSetI32(arena.storage, index, 8, fn.endOffset)
+  arenaSetI32(arena.storage, index, 9, fn.endLine)
+  arenaSetI32(arena.storage, index, 10, fn.endColumn)
   arena.count = arenaLen(arena.storage)
   return arena
 }
@@ -387,7 +473,14 @@ function irFunctionArenaGet(arena: IrFunctionArena, index: i32): CompilerIrFunct
     name: arenaGetString(arena.storage, index, 0),
     firstBlock: arenaGetI32(arena.storage, index, 1),
     blockCount: arenaGetI32(arena.storage, index, 2),
-    returnTypeId: arenaGetI32(arena.storage, index, 3)
+    returnTypeId: arenaGetI32(arena.storage, index, 3),
+    file: arenaGetString(arena.storage, index, 4),
+    offset: arenaGetI32(arena.storage, index, 5),
+    line: arenaGetI32(arena.storage, index, 6),
+    column: arenaGetI32(arena.storage, index, 7),
+    endOffset: arenaGetI32(arena.storage, index, 8),
+    endLine: arenaGetI32(arena.storage, index, 9),
+    endColumn: arenaGetI32(arena.storage, index, 10)
   }
 }
 

@@ -57,7 +57,10 @@ function moduleEmptyTokens(): TokenArena {
     file: "",
     offset: 0,
     line: 1,
-    column: 1
+    column: 1,
+    endOffset: 0,
+    endLine: 1,
+    endColumn: 1
   }
   return tokenArenaPush(tokens, eof)
 }
@@ -681,6 +684,34 @@ function moduleGraphLoad(
   return graph
 }
 
+function moduleSourceEndLine(source: string): i32 {
+  let line: i32 = 1
+  let index: i32 = 0
+  while index < stringLen(source) do {
+    if stringEquals(source[index..index + 1], "
+") {
+      line = line + 1
+    }
+    index = index + 1
+  }
+  return line
+}
+
+function moduleSourceEndColumn(source: string): i32 {
+  let column: i32 = 1
+  let index: i32 = 0
+  while index < stringLen(source) do {
+    if stringEquals(source[index..index + 1], "
+") {
+      column = 1
+    } else {
+      column = column + 1
+    }
+    index = index + 1
+  }
+  return column
+}
+
 function moduleGraphFinish(graph: ModuleGraph): ModuleGraph {
   if !graph.ok {
     return graph
@@ -692,8 +723,11 @@ function moduleGraphFinish(graph: ModuleGraph): ModuleGraph {
     literal: "",
     file: entry.path,
     offset: stringLen(entry.source),
-    line: 1,
-    column: 1
+    line: moduleSourceEndLine(entry.source),
+    column: moduleSourceEndColumn(entry.source),
+    endOffset: stringLen(entry.source),
+    endLine: moduleSourceEndLine(entry.source),
+    endColumn: moduleSourceEndColumn(entry.source)
   }
   graph.linkedTokens = tokenArenaPush(graph.linkedTokens, eof)
   graph.program = parseProgram(graph.linkedTokens)

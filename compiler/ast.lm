@@ -105,9 +105,9 @@ function astBuildNode(tokens: TokenArena, parent: i32, spec: AstNodeSpec): Compi
     offset: start.offset,
     line: start.line,
     column: start.column,
-    endOffset: finish.offset + stringLen(finish.lexeme),
-    endLine: astTokenEndLine(finish),
-    endColumn: astTokenEndColumn(finish),
+    endOffset: finish.endOffset,
+    endLine: finish.endLine,
+    endColumn: finish.endColumn,
     flags: spec.flags
   }
 }

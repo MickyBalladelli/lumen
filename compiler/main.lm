@@ -4,70 +4,18 @@ import { loadModuleGraph } from "./modules.lm"
 import { analyzeSemantics } from "./semantics.lm"
 import { checkTypes } from "./typechecker.lm"
 import { buildIr } from "./ir.lm"
-import { emitIr } from "./emitter.lm"
+import { emitIr, emitIrError } from "./emitter.lm"
 
-function diagnosticTokenText(tokens: TokenArena, index: i32): string {
-  let token = tokenArenaGet(tokens, index)
-  return token.lexeme
-}
-
-function diagnosticFindToken(source: string, needle: string, start: i32): i32 {
-  let length = stringLen(source)
-  let needleLength = stringLen(needle)
-
-  while start + needleLength <= length do {
-    if stringEquals(source[start..start + needleLength], needle) {
-      return start
-    }
-
-    start = start + 1
+function diagnosticMessage(entryPath: string, tokens: TokenArena, message: string, tokenIndex: i32): string {
+  let token = tokenArenaGet(tokens, tokenIndex)
+  if stringEquals(token.file, entryPath) {
+    return message + " at line " + intToString(token.line) + " near " + token.lexeme
   }
-
-  return length
-}
-
-function diagnosticLineBefore(source: string, end: i32): i32 {
-  let line: i32 = 1
-  let index: i32 = 0
-
-  while index < end do {
-    let ch = source[index..index + 1]
-    if includes('
-', ch) {
-      line = line + 1
-    }
-
-    index = index + 1
-  }
-
-  return line
-}
-
-function diagnosticTokenLine(source: string, tokens: TokenArena, target: i32): i32 {
-  let index: i32 = 0
-  let cursor: i32 = 0
-
-  while index <= target do {
-    let text = diagnosticTokenText(tokens, index)
-    cursor = diagnosticFindToken(source, text, cursor)
-
-    if index == target {
-      return diagnosticLineBefore(source, cursor)
-    }
-
-    let textLength = stringLen(text)
-    cursor = cursor + textLength
-    index = index + 1
-  }
-
-  return 1
-}
-
-function diagnosticMessage(source: string, tokens: TokenArena, message: string, tokenIndex: i32): string {
-  let line = diagnosticTokenLine(source, tokens, tokenIndex)
-  let lineText = intToString(line)
-  let near = diagnosticTokenText(tokens, tokenIndex)
-  return message + " at line " + lineText + " near " + near
+  return message +
+    " at " + token.file +
+    ":" + intToString(token.line) +
+    ":" + intToString(token.column) +
+    " near " + token.lexeme
 }
 
 function compileTiny(input: string, output: string): i32 {
@@ -90,7 +38,6 @@ function compileTiny(input: string, output: string): i32 {
     }
     return 1
   }
-  let source = graph.entrySource
   let ast = graph.program
   let tokens = ast.tokens
   let semanticResult = analyzeSemantics(ast)
@@ -98,7 +45,7 @@ function compileTiny(input: string, output: string): i32 {
   if semanticResult.ok {
     let checked = 1
   } else {
-    println(diagnosticMessage(source, tokens, semanticResult.message, semanticResult.tokenIndex))
+    println(diagnosticMessage(graph.entryPath, tokens, semanticResult.message, semanticResult.tokenIndex))
     return 1
   }
 
@@ -106,11 +53,16 @@ function compileTiny(input: string, output: string): i32 {
   if typeResult.ok {
     let checkedTypes = 1
   } else {
-    println(diagnosticMessage(source, tokens, typeResult.message, typeResult.tokenIndex))
+    println(diagnosticMessage(graph.entryPath, tokens, typeResult.message, typeResult.tokenIndex))
     return 1
   }
 
   let ir = buildIr(ast)
+  let backendError = emitIrError(ir)
+  if !stringEquals(backendError, "") {
+    println(backendError)
+    return 1
+  }
   let llvm = emitIr(ir)
 
   let writeResult = writeFile(output, llvm)

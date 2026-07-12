@@ -119,8 +119,8 @@ function semanticBind(
   declarationId: i32
 ): SemanticResolver {
   let key = semanticScopeKey(scopeId, name)
+  let node = astNodeAt(resolver.ast, declarationId)
   if mapHas(resolver.bindings, key) {
-    let node = astNodeAt(resolver.ast, declarationId)
     return semanticFailResolver(
       resolver,
       semanticDuplicateName(kind, name),
@@ -134,7 +134,14 @@ function semanticBind(
     name: name,
     typeId: -1,
     scopeId: scopeId,
-    declarationId: declarationId
+    declarationId: declarationId,
+    file: node.file,
+    offset: node.offset,
+    line: node.line,
+    column: node.column,
+    endOffset: node.endOffset,
+    endLine: node.endLine,
+    endColumn: node.endColumn
   })
   resolver.bindings = mapSet(resolver.bindings, key, intToString(symbolId))
   return semanticSetNodeSymbol(resolver, declarationId, symbolId)

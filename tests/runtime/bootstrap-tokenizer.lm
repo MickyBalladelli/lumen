@@ -18,7 +18,10 @@ function findToken(tokens: TokenArena, lexeme: string): CompilerToken {
     file: "",
     offset: 0,
     line: 0,
-    column: 0
+    column: 0,
+    endOffset: 0,
+    endLine: 0,
+    endColumn: 0
   }
 }
 
