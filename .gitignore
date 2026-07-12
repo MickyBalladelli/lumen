@@ -5,3 +5,5 @@ vscode-lumen/compiler/
 vscode-lumen/*.vsix
 dist/
 Trash/
+*.dSYM/
+native/

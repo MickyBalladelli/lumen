@@ -3,9 +3,8 @@
 Lumen is a pre-1.0 systems language with JavaScript-like syntax, static checks,
 LLVM output, and native executables.
 
-The primary compiler is written in JavaScript. A Lumen-written bootstrap
-compiler covers a tested subset, but full source self-hosting is not
-implemented.
+The primary compiler is written in Lumen and rebuilds itself through verified
+bootstrap stages. JavaScript is used only as the explicit stage-0 recovery seed.
 
 ## Start Here
 
@@ -57,6 +56,8 @@ The installation also provides:
 - The Lumen-written native compiler handles normal builds. JavaScript remains
   the explicit stage-0 recovery seed.
 - `lumen build`, `lumen emit`, and `lumen run` provide normal compiler flows.
+- The installed `lumen` launcher is POSIX shell plus the native Lumen compiler;
+  it does not start Node.js.
 - Photon installs bundled, local, and Git packages.
 - The formatter, language server, and VS Code extension provide editor tooling.
 - The native runtime includes files, processes, threads, tasks, crypto, HTTP,

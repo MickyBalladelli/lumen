@@ -97,6 +97,14 @@ try {
     await access(join(installedPackage, 'book', 'support-matrix.md'))
   })
 
+  await suite.test('installed launchers do not invoke Node', async () => {
+    for (const name of ['lumen', 'lmsh', 'photon', 'lumen-format', 'lumen-lsp']) {
+      const launcher = await readFile(join(installedPackage, 'bin', name), 'utf8')
+      assert.match(launcher, /^#!\/bin\/sh/, name)
+      assert.doesNotMatch(launcher, /\bnode\b|\.js\b/, name)
+    }
+  })
+
   await suite.test('lumen version, help, emit, build, and run', async () => {
     await writeFile(join(projectDirectory, 'main.lm'), [
       'function main(): i32 {',

@@ -4,8 +4,8 @@ This page is the official local install path for the Lumen CLI tools and VS Code
 
 ## Requirements
 
-- Node.js 20 or newer
-- npm
+- Node.js 20 or newer and npm, only when installing through npm or working on
+  the JavaScript stage-0 recovery tools
 - `clang` on `PATH`
 - VS Code, only if you want editor support
 
@@ -34,6 +34,10 @@ This installs:
 - `photon`
 - `lumen-format`
 - `lumen-lsp`
+
+After installation, `lumen emit`, `lumen build`, and `lumen run` execute the
+packaged native compiler directly and do not require Node.js. The other
+installed commands are native too.
 
 Check the commands:
 
@@ -87,6 +91,21 @@ npm install -g ./lumen-0.1.0.tgz
 ```
 
 If the version changes, use the tarball name from that release.
+
+## Install Without Node Or npm
+
+Download the platform archive named
+`lumen-native-<platform>-<architecture>-X.Y.Z.tgz` and its matching checksum.
+Then extract it and put its `bin` directory on `PATH`:
+
+```bash
+tar -xzf lumen-native-darwin-arm64-0.1.0.tgz
+export PATH="$PWD/package/bin:$PATH"
+lumen --version
+```
+
+The archive contains the native compiler, formatter, Photon, LSP, runtime
+sources, and bundled packages. These commands do not start Node.js.
 
 Maintainers can create the tarball, VSIX, and checksum file locally:
 

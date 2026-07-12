@@ -27,10 +27,12 @@ const extensionLock = await readJson(
 )
 const version = manifest.version
 const nativeCompilerName = `lumen-compiler-${process.platform}-${process.arch}-${version}`
+const nativeBundleName = `lumen-native-${process.platform}-${process.arch}-${version}.tgz`
 const artifactNames = [
   `lumen-${version}.tgz`,
   `lumen-language-${version}.vsix`,
-  nativeCompilerName
+  nativeCompilerName,
+  nativeBundleName
 ]
 const outputDirectory = join(root, 'dist')
 const temporaryRoot = await mkdtemp(join(tmpdir(), 'lumen-release-'))
@@ -87,6 +89,10 @@ async function buildArtifacts(buildRoot) {
 
   await mkdir(artifacts, { recursive: true })
   await packageTarball(artifacts, npmCache)
+  await copyFile(
+    join(artifacts, `lumen-${version}.tgz`),
+    join(artifacts, nativeBundleName)
+  )
   await stageExtension(extensionRoot)
   await packageExtension(extensionRoot, artifacts)
   await copyFile(

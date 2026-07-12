@@ -120,6 +120,58 @@ function cleanupCompilerFile(path: string): i32 {
   return 0
 }
 
+function compilerDirname(path: string): string {
+  let end = lastIndexOf(path, "/")
+  if end < 0 {
+    return "."
+  }
+  if end == 0 {
+    return "/"
+  }
+  return path[0..end]
+}
+
+function compilerRuntimeRoot(): string {
+  let executableResult = arg(0)
+  if !isOk(executableResult) {
+    return "src/runtime"
+  }
+  let platformDirectory = compilerDirname(resultValue(executableResult))
+  let nativeDirectory = compilerDirname(platformDirectory)
+  let packageDirectory = compilerDirname(nativeDirectory)
+  return packageDirectory + "/src/runtime"
+}
+
+function compilerOutputArgument(args: i32, input: string, extension: string): string {
+  if args >= 5 {
+    let optionResult = arg(3)
+    let outputResult = arg(4)
+    if isOk(optionResult) && isOk(outputResult) && stringEquals(resultValue(optionResult), "-o") {
+      return resultValue(outputResult)
+    }
+  }
+  if args >= 4 {
+    let outputResult = arg(3)
+    if isOk(outputResult) {
+      return resultValue(outputResult)
+    }
+  }
+  return input + extension
+}
+
+function compilerPrintHelp(): i32 {
+  println("usage: lumen <command> [file.lm] [options]")
+  println("commands:")
+  println("  build [file.lm]       build a native executable")
+  println("  emit [file.lm]        emit LLVM IR")
+  println("  run [file.lm]         build and run a program")
+  println("options:")
+  println("  -o <path>             set output path")
+  println("  -h, --help            show help")
+  println("  -V, --version         show version")
+  return 0
+}
+
 function emitAtomic(input: string, output: string): i32 {
   let temporary = output + "." + uuid() + ".tmp"
   let code = compileTiny(input, temporary, false)
@@ -202,31 +254,39 @@ function main(): i32 {
   }
   let args = resultValue(argsResult)
 
-  if args < 3 {
-    println("usage: lumen-compiler [emit|build] input.lm output [clang runtime-root]")
+  if args < 2 {
+    compilerPrintHelp()
     return 1
   }
 
   let firstResult = arg(1)
-  let secondResult = arg(2)
-  if !isOk(firstResult) || !isOk(secondResult) {
+  if !isOk(firstResult) {
     println("cannot read compiler arguments")
     return 1
   }
   let first = resultValue(firstResult)
+
+  if stringEquals(first, "--version") || stringEquals(first, "-V") {
+    println("0.1.0")
+    return 0
+  }
+  if stringEquals(first, "--help") || stringEquals(first, "-h") || stringEquals(first, "help") {
+    return compilerPrintHelp()
+  }
+  if args < 3 {
+    compilerPrintHelp()
+    return 1
+  }
+
+  let secondResult = arg(2)
+  if !isOk(secondResult) {
+    println("cannot read compiler input")
+    return 1
+  }
   let second = resultValue(secondResult)
 
   if stringEquals(first, "emit") {
-    if args < 4 {
-      println("usage: lumen-compiler emit input.lm output.ll")
-      return 1
-    }
-    let outputResult = arg(3)
-    if !isOk(outputResult) {
-      println(errorMessage(outputResult))
-      return 1
-    }
-    return emitAtomic(second, resultValue(outputResult))
+    return emitAtomic(second, compilerOutputArgument(args, second, ".ll"))
   }
 
   if stringEquals(first, "diagnose") {
@@ -234,23 +294,37 @@ function main(): i32 {
   }
 
   if stringEquals(first, "build") {
-    if args < 6 {
-      println("usage: lumen-compiler build input.lm output clang runtime-root")
+    if args >= 6 {
+      let outputResult = arg(3)
+      let clangResult = arg(4)
+      let runtimeResult = arg(5)
+      if !isOk(outputResult) || !isOk(clangResult) || !isOk(runtimeResult) {
+        println("cannot read build arguments")
+        return 1
+      }
+      return buildNative(
+        second,
+        resultValue(outputResult),
+        resultValue(clangResult),
+        resultValue(runtimeResult)
+      )
+    }
+    return buildNative(second, compilerOutputArgument(args, second, ".out"), "clang", compilerRuntimeRoot())
+  }
+
+  if stringEquals(first, "run") {
+    let output = compilerOutputArgument(args, second, ".out")
+    let buildCode = buildNative(second, output, "clang", compilerRuntimeRoot())
+    if buildCode != 0 {
+      return buildCode
+    }
+    let noArguments: string[] = []
+    let runResult = exec(output, noArguments)
+    if !isOk(runResult) {
+      println(errorMessage(runResult))
       return 1
     }
-    let outputResult = arg(3)
-    let clangResult = arg(4)
-    let runtimeResult = arg(5)
-    if !isOk(outputResult) || !isOk(clangResult) || !isOk(runtimeResult) {
-      println("cannot read build arguments")
-      return 1
-    }
-    return buildNative(
-      second,
-      resultValue(outputResult),
-      resultValue(clangResult),
-      resultValue(runtimeResult)
-    )
+    return resultValue(runResult)
   }
 
   let inputResult = firstResult

@@ -81,6 +81,9 @@ export const RuntimeSignatures = Object.freeze([
   runtime('usesErrorRuntime', 'lumen_error_text', 'ptr', ['ptr']),
   runtime('usesArrayRuntime', 'lumen_array_join', 'ptr', ['i32', 'ptr', 'ptr']),
   runtime('usesProcess', 'lumen_exec', 'ptr', ['ptr', 'ptr', 'i32']),
+  runtime('usesProcess', 'lumen_lsp_read_message', 'ptr'),
+  runtime('usesProcess', 'lumen_lsp_write_message', 'void', ['ptr']),
+  runtime('usesProcess', 'lumen_stdout_write', 'void', ['ptr']),
   runtime('usesStringRuntime', 'lumen_source_snippet', 'ptr', ['ptr', 'i32', 'i32']),
   runtime('usesStringRuntime', 'lumen_string_builder', 'ptr'),
   runtime('usesStringRuntime', 'lumen_string_builder_append', 'ptr', ['ptr', 'ptr']),
@@ -222,6 +225,9 @@ export const BuiltinSignatures = Object.freeze([
   builtin('Exec', 'system', 'exec', ['string', 'string[]'], 'Result<i32>', {
     runtime: 'lumen_exec'
   }),
+  direct('ReadMessage', 'system', 'readMessage', [], 'string', 'lumen_lsp_read_message'),
+  direct('WriteMessage', 'system', 'writeMessage', ['string'], 'void', 'lumen_lsp_write_message'),
+  direct('WriteStdout', 'system', 'writeStdout', ['string'], 'void', 'lumen_stdout_write'),
   builtin('SourceSnippet', 'system', 'sourceSnippet', ['string', 'i32', 'i32'], 'string', { runtime: 'lumen_source_snippet' }),
   direct('StringBuilder', 'system', 'stringBuilder', [], 'string', 'lumen_string_builder'),
   direct('StringBuilderAppend', 'system', 'stringBuilderAppend', ['string', 'string'], 'string', 'lumen_string_builder_append'),

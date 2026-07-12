@@ -67,7 +67,7 @@ const SUPPORT = {
       'arenaAppend', 'arenaGetI32', 'arenaGetString', 'arenaLen', 'arenaNew',
       'arenaSetI32', 'arenaSetString', 'arg', 'argCount', 'atomicReplace', 'errorMessage',
       'exec',
-      'includes', 'indexOf', 'intToString', 'isOk', 'json', 'jsonGet', 'jsonGetRaw',
+      'includes', 'indexOf', 'lastIndexOf', 'intToString', 'isOk', 'json', 'jsonGet', 'jsonGetRaw',
       'list', 'listGet', 'listLen', 'listPush', 'map', 'mapGet', 'mapHas',
       'mapSet', 'println', 'readFile', 'removeFile', 'resultValue', 'stringBuilder',
       'stringBuilderAppend', 'stringEquals', 'stringLen', 'stringToInt', 'uuid', 'writeFile'

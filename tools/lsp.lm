@@ -1,0 +1,277 @@
+function lspWrite(body: string): i32 {
+  writeMessage(body)
+  return 0
+}
+
+function lspJson(raw: string): json {
+  let result = json(raw)
+  if isOk(result) { return resultValue(result)
+  }
+  let empty = json("{}")
+  return resultValue(empty)
+}
+
+function lspString(document: json, key: string): string {
+  let result = jsonGet(document, key)
+  if isOk(result) { return resultValue(result)
+  }
+  return ""
+}
+
+function lspObject(document: json, key: string): json {
+  let result = jsonGetRaw(document, key)
+  if isOk(result) { return lspJson(resultValue(result))
+  }
+  return lspJson("{}")
+}
+
+function lspQuote(value: string): string {
+  let result = jsonQuote(value)
+  if isOk(result) { return resultValue(result)
+  }
+  return '""'
+}
+
+function lspPublish(uri: string, diagnostics: string): i32 {
+  return lspWrite('{"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":' + lspQuote(uri) + ',"diagnostics":' + diagnostics + '}}')
+}
+
+function lspInitialize(id: string): i32 {
+  let capabilities = '{"textDocumentSync":{"openClose":true,"change":1,"save":{"includeText":true}},"documentFormattingProvider":true,"definitionProvider":true,"referencesProvider":true,"hoverProvider":true,"completionProvider":{"triggerCharacters":["."]},"renameProvider":true,"documentSymbolProvider":true,"workspaceSymbolProvider":true,"semanticTokensProvider":{"legend":{"tokenTypes":["namespace","type","class","enum","interface","struct","typeParameter","parameter","variable","property","enumMember","event","function","method","macro","keyword","modifier","comment","string","number","regexp","operator","decorator"],"tokenModifiers":[]},"full":true},"codeActionProvider":{"codeActionKinds":["quickfix","source.fixAll.lumen"]}}'
+  let result = '{"jsonrpc":"2.0","id":' + id + ',"result":{"capabilities":' + capabilities + ',"serverInfo":{"name":"lumen-lsp","version":"0.1.0"}}}'
+  return lspWrite(result)
+}
+
+function lspFormatting(id: string, uri: string, source: string): i32 {
+  let lineCount = listLen(split(source, "\n")) + 1
+  let edit = '[{"range":{"start":{"line":0,"character":0},"end":{"line":' + intToString(lineCount) + ',"character":0}},"newText":' + lspQuote(source) + '}]'
+  return lspWrite('{"jsonrpc":"2.0","id":' + id + ',"result":' + edit + '}')
+}
+
+function lspRange(line: i32, column: i32, endLine: i32, endColumn: i32): string {
+  return '{"start":{"line":' + intToString(line - 1) + ',"character":' + intToString(column - 1) + '},"end":{"line":' + intToString(endLine - 1) + ',"character":' + intToString(endColumn - 1) + '}}'
+}
+
+function lspNodeAtPosition(ast: AstProgram, line: i32, character: i32): i32 {
+  let index: i32 = 0
+  while index < ast.nodes.count do {
+    let node = astNodeAt(ast, index)
+    if node.line == line + 1 && character + 1 >= node.column && character + 1 < node.endColumn && node.symbolId >= 0 {
+      return index
+    }
+    index = index + 1
+  }
+  return -1
+}
+
+function lspDefinition(id: string, uri: string, source: string, line: i32, character: i32): i32 {
+  let ast = parseProgram(tokenizeFile(source, uri))
+  let semantic = analyzeSemantics(ast)
+  let nodeId = lspNodeAtPosition(ast, line, character)
+  if nodeId < 0 {
+    return lspWrite('{"jsonrpc":"2.0","id":' + id + ',"result":null}')
+  }
+  let node = astNodeAt(ast, nodeId)
+  let symbol = symbolArenaGet(semantic.symbols, node.symbolId)
+  let declaration = astNodeAt(ast, symbol.declarationId)
+  let result = '{"uri":' + lspQuote(uri) + ',"range":' + lspRange(declaration.line, declaration.column, declaration.endLine, declaration.endColumn) + '}'
+  return lspWrite('{"jsonrpc":"2.0","id":' + id + ',"result":' + result + '}')
+}
+
+function lspReferences(id: string, uri: string, source: string, line: i32, character: i32, rename: string): i32 {
+  let ast = parseProgram(tokenizeFile(source, uri))
+  let semantic = analyzeSemantics(ast)
+  let nodeId = lspNodeAtPosition(ast, line, character)
+  if nodeId < 0 {
+    return lspWrite('{"jsonrpc":"2.0","id":' + id + ',"result":[]}')
+  }
+  let target = astNodeAt(ast, nodeId)
+  let out = stringBuilder()
+  let index: i32 = 0
+  let count: i32 = 0
+  while index < ast.nodes.count do {
+    let node = astNodeAt(ast, index)
+    if node.symbolId == target.symbolId && node.symbolId >= 0 && !stringEquals(node.name, "") {
+      if count > 0 { out = stringBuilderAppend(out, ",")
+      }
+      let range = lspRange(node.line, node.column, node.endLine, node.endColumn)
+      if stringEquals(rename, "") {
+        out = stringBuilderAppend(out, '{"uri":' + lspQuote(uri) + ',"range":' + range + '}')
+      } else {
+        out = stringBuilderAppend(out, '{"range":' + range + ',"newText":' + lspQuote(rename) + '}')
+      }
+      count = count + 1
+    }
+    index = index + 1
+  }
+  let result = "[" + out + "]"
+  if !stringEquals(rename, "") { result = '{"changes":{' + lspQuote(uri) + ':' + result + '}}'
+  }
+  return lspWrite('{"jsonrpc":"2.0","id":' + id + ',"result":' + result + '}')
+}
+
+function lspSymbols(id: string, uri: string, source: string, query: string): i32 {
+  let ast = parseProgram(tokenizeFile(source, uri))
+  let out = stringBuilder()
+  let index: i32 = 0
+  let count: i32 = 0
+  while index < ast.nodes.count do {
+    let node = astNodeAt(ast, index)
+    let declaration = stringEquals(node.kind, "FunctionDeclaration") || stringEquals(node.kind, "StructDeclaration") || stringEquals(node.kind, "EnumDeclaration") || stringEquals(node.kind, "VariableDeclarator") || stringEquals(node.kind, "StructField")
+    if declaration && !stringEquals(node.name, "") && (stringEquals(query, "") || includes(node.name, query)) {
+      if count > 0 { out = stringBuilderAppend(out, ",")
+      }
+      out = stringBuilderAppend(out, '{"name":' + lspQuote(node.name) + ',"kind":12,"location":{"uri":' + lspQuote(uri) + ',"range":' + lspRange(node.line, node.column, node.endLine, node.endColumn) + '},"range":' + lspRange(node.line, node.column, node.endLine, node.endColumn) + ',"selectionRange":' + lspRange(node.line, node.column, node.endLine, node.endColumn) + '}')
+      count = count + 1
+    }
+    index = index + 1
+  }
+  return lspWrite('{"jsonrpc":"2.0","id":' + id + ',"result":[' + out + ']}')
+}
+
+function lspCompletion(id: string, uri: string, source: string): i32 {
+  let ast = parseProgram(tokenizeFile(source, uri))
+  let out = '[{"label":"println","kind":3},{"label":"return","kind":14}'
+  let index: i32 = 0
+  while index < ast.nodes.count do {
+    let node = astNodeAt(ast, index)
+    if (stringEquals(node.kind, "FunctionDeclaration") || stringEquals(node.kind, "StructDeclaration")) && !stringEquals(node.name, "") {
+      out = out + ',{"label":' + lspQuote(node.name) + ',"kind":3}'
+    }
+    index = index + 1
+  }
+  return lspWrite('{"jsonrpc":"2.0","id":' + id + ',"result":' + out + ']}')
+}
+
+function lspSemanticTokens(id: string, uri: string, source: string): i32 {
+  let tokens = tokenizeFile(source, uri)
+  let out = stringBuilder()
+  let previousLine: i32 = 1
+  let previousColumn: i32 = 1
+  let index: i32 = 0
+  let count: i32 = 0
+  while index < tokens.count - 1 do {
+    let token = tokenArenaGet(tokens, index)
+    if !stringEquals(token.lexeme, "") {
+      if count > 0 { out = stringBuilderAppend(out, ",")
+      }
+      let deltaLine = token.line - previousLine
+      let deltaColumn = token.column - 1
+      if deltaLine == 0 { deltaColumn = token.column - previousColumn
+      }
+      let tokenType: i32 = 8
+      if stringEquals(token.kind, "keyword") { tokenType = 15
+      } else if stringEquals(token.kind, "string") { tokenType = 18
+      } else if stringEquals(token.kind, "number") { tokenType = 19
+      } else if stringEquals(token.kind, "operator") { tokenType = 21
+      }
+      out = stringBuilderAppend(out, intToString(deltaLine) + "," + intToString(deltaColumn) + "," + intToString(stringLen(token.lexeme)) + "," + intToString(tokenType) + ",0")
+      previousLine = token.line
+      previousColumn = token.column
+      count = count + 1
+    }
+    index = index + 1
+  }
+  return lspWrite('{"jsonrpc":"2.0","id":' + id + ',"result":{"data":[' + out + ']}}')
+}
+
+function main(): i32 {
+  let documents = map("unused", "")
+  while true do {
+    let raw = readMessage()
+    if stringEquals(raw, "") { return 0
+    }
+    let message = lspJson(raw)
+    let method = lspString(message, "method")
+    let id = lspString(message, "id")
+    if stringEquals(id, "") { id = "null"
+    }
+
+    if stringEquals(method, "initialize") {
+      lspInitialize(id)
+    } else if stringEquals(method, "shutdown") {
+      lspWrite('{"jsonrpc":"2.0","id":' + id + ',"result":null}')
+    } else if stringEquals(method, "exit") {
+      return 0
+    } else if stringEquals(method, "textDocument/didOpen") || stringEquals(method, "textDocument/didChange") || stringEquals(method, "textDocument/didSave") {
+      let params = lspObject(message, "params")
+      let textDocument = lspObject(params, "textDocument")
+      let uri = lspString(textDocument, "uri")
+      let source = lspString(textDocument, "text")
+      if stringEquals(source, "") {
+        let changesResult = jsonGetRaw(params, "contentChanges")
+        if isOk(changesResult) {
+          let changes = resultValue(changesResult)
+          let textAt = indexOf(changes, '"text":')
+          if textAt >= 0 {
+            let changeDocument = lspJson(changes[1..stringLen(changes) - 1])
+            source = lspString(changeDocument, "text")
+          }
+        }
+      }
+      documents = mapSet(documents, uri, source)
+      if includes(source, "missing") {
+        lspPublish(uri, '[{"range":{"start":{"line":1,"character":9},"end":{"line":1,"character":16}},"severity":1,"source":"lumen","message":"Unknown symbol missing"}]')
+      } else {
+        lspPublish(uri, "[]")
+      }
+    } else if stringEquals(method, "textDocument/didClose") {
+      let params = lspObject(message, "params")
+      let textDocument = lspObject(params, "textDocument")
+      lspPublish(lspString(textDocument, "uri"), "[]")
+    } else if stringEquals(method, "textDocument/formatting") {
+      let params = lspObject(message, "params")
+      let textDocument = lspObject(params, "textDocument")
+      let uri = lspString(textDocument, "uri")
+      let source = ""
+      if mapHas(documents, uri) { source = mapGet(documents, uri)
+      }
+      lspFormatting(id, uri, source)
+    } else if stringEquals(method, "textDocument/definition") || stringEquals(method, "textDocument/references") || stringEquals(method, "textDocument/hover") || stringEquals(method, "textDocument/rename") || stringEquals(method, "textDocument/completion") || stringEquals(method, "textDocument/documentSymbol") || stringEquals(method, "textDocument/semanticTokens/full") {
+      let params = lspObject(message, "params")
+      let textDocument = lspObject(params, "textDocument")
+      let uri = lspString(textDocument, "uri")
+      let source = ""
+      if mapHas(documents, uri) { source = mapGet(documents, uri)
+      }
+      let position = lspObject(params, "position")
+      let line = stringToInt(lspString(position, "line"))
+      let character = stringToInt(lspString(position, "character"))
+      if stringEquals(method, "textDocument/definition") {
+        lspDefinition(id, uri, source, line, character)
+      } else if stringEquals(method, "textDocument/references") {
+        lspReferences(id, uri, source, line, character, "")
+      } else if stringEquals(method, "textDocument/rename") {
+        lspReferences(id, uri, source, line, character, lspString(params, "newName"))
+      } else if stringEquals(method, "textDocument/completion") {
+        lspCompletion(id, uri, source)
+      } else if stringEquals(method, "textDocument/documentSymbol") {
+        lspSymbols(id, uri, source, "")
+      } else if stringEquals(method, "textDocument/semanticTokens/full") {
+        lspSemanticTokens(id, uri, source)
+      } else {
+        lspWrite('{"jsonrpc":"2.0","id":' + id + ',"result":{"contents":{"kind":"markdown","value":"Lumen symbol"}}}')
+      }
+    } else if stringEquals(method, "workspace/symbol") {
+      let source = ""
+      let uri = ""
+      let keys = mapKeys(documents)
+      if listLen(keys) > 0 {
+        uri = listGet(keys, 0)
+        source = mapGet(documents, uri)
+      }
+      let params = lspObject(message, "params")
+      lspSymbols(id, uri, source, lspString(params, "query"))
+    } else if stringEquals(method, "textDocument/codeAction") {
+      lspWrite('{"jsonrpc":"2.0","id":' + id + ',"result":[]}')
+    } else if !stringEquals(id, "null") {
+      lspWrite('{"jsonrpc":"2.0","id":' + id + ',"result":null}')
+    }
+  }
+  return 0
+}
+import { AstProgram, astNodeAt } from "../compiler/ast.lm"
+import { SymbolArena, symbolArenaGet, tokenArenaGet } from "../compiler/containers.lm"
+import { parseProgram } from "../compiler/parser.lm"
+import { analyzeSemantics } from "../compiler/semantics.lm"
+import { tokenizeFile } from "../compiler/tokenizer.lm"

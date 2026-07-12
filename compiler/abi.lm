@@ -58,6 +58,12 @@ function compilerAbiMissing(name: string): CompilerAbiSignature {
 }
 
 function compilerAbiSignature(name: string): CompilerAbiSignature {
+  if stringEquals(name, "readMessage") { return compilerAbi(name, "lumen_lsp_read_message", "string", "", "", "", "", 0, 0, 0, false, "ptr", "", "system")
+  }
+  if stringEquals(name, "writeMessage") { return compilerAbi(name, "lumen_lsp_write_message", "void", "string", "", "", "", 1, 1, 1, false, "void", "ptr", "system")
+  }
+  if stringEquals(name, "writeStdout") { return compilerAbi(name, "lumen_stdout_write", "void", "string", "", "", "", 1, 1, 1, false, "void", "ptr", "system")
+  }
   if stringEquals(name, "println") {
     return compilerAbi(name, "printf", "void", "unknown", "", "", "", 1, 1, 1, true, "i32", "ptr, ...", "libc")
   }

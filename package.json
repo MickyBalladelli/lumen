@@ -29,6 +29,7 @@
   },
   "files": [
     "src",
+    "bin",
     "native",
     "scripts/check-docs.mjs",
     "scripts/generate-support-matrix.mjs",
@@ -48,11 +49,11 @@
     ".": "./src/index.js"
   },
   "bin": {
-    "lumen": "./src/cli/lumen.js",
-    "lmsh": "./src/cli/lmsh.js",
-    "photon": "./src/cli/photon.js",
-    "lumen-format": "./src/cli/format.js",
-    "lumen-lsp": "./src/cli/lsp.js"
+    "lumen": "./bin/lumen",
+    "lmsh": "./bin/lmsh",
+    "photon": "./bin/photon",
+    "lumen-format": "./bin/lumen-format",
+    "lumen-lsp": "./bin/lumen-lsp"
   },
   "scripts": {
     "lumen": "node ./src/cli/lumen.js",

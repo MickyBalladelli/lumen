@@ -3,6 +3,7 @@
 #include <crt_externs.h>
 #endif
 #include <spawn.h>
+#include <strings.h>
 #include "lumen_system.h"
 
 typedef struct LumenAllocation {
@@ -465,6 +466,35 @@ _Bool lumen_has_value(const char *option) {
 char *lumen_value_or(const char *option, const char *fallback) {
   if (strlen(option) > 0) return (char *)option;
   return (char *)fallback;
+}
+
+char *lumen_lsp_read_message(void) {
+  char header[1024];
+  size_t content_length = 0;
+  while (fgets(header, sizeof(header), stdin)) {
+    if (strcmp(header, "\r\n") == 0 || strcmp(header, "\n") == 0) break;
+    if (strncasecmp(header, "Content-Length:", 15) == 0) {
+      content_length = (size_t)strtoul(header + 15, NULL, 10);
+    }
+  }
+  if (content_length == 0) return lumen_strdup("");
+  char *body = malloc(content_length + 1);
+  if (!body) return lumen_strdup("");
+  size_t read = fread(body, 1, content_length, stdin);
+  body[read] = '\0';
+  return body;
+}
+
+void lumen_stdout_write(const char *value) {
+  fputs(value ? value : "", stdout);
+  fflush(stdout);
+}
+
+void lumen_lsp_write_message(const char *value) {
+  const char *body = value ? value : "";
+  fprintf(stdout, "Content-Length: %zu\r\n\r\n", strlen(body));
+  fwrite(body, 1, strlen(body), stdout);
+  fflush(stdout);
 }
 
 char *lumen_strdup(const char *value) {

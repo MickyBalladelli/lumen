@@ -1,0 +1,181 @@
+function photonDirname(path: string): string {
+  let end = lastIndexOf(path, "/")
+  if end < 0 { return "."
+  }
+  if end == 0 { return "/"
+  }
+  return path[0..end]
+}
+
+function photonPackageRoot(): string {
+  let executableResult = arg(0)
+  if !isOk(executableResult) { return "."
+  }
+  let platform = photonDirname(resultValue(executableResult))
+  return photonDirname(photonDirname(platform))
+}
+
+function photonPackages(): string {
+  return "assert|auth|cache|cli|collections|config|crypto-extra|csv|date-extra|env-extra|fs-extra|html|http-client|http-kit|json-extra|jwt-lite|logger|math-extra|middleware|option|path|process|result|router|slug|string-extra|template|testing|time|url|uuid|validation"
+}
+
+function photonInstall(name: string): bool {
+  let source = photonPackageRoot() + "/packages/" + name
+  let manifest = readFile(source + "/photon.json")
+  if !isOk(manifest) {
+    println("unknown package " + name)
+    return false
+  }
+  let makeArguments: string[] = ["-p", ".photon/packages"]
+  let makeResult = exec("mkdir", makeArguments)
+  if !isOk(makeResult) || resultValue(makeResult) != 0 { return false
+  }
+  let copyArguments: string[] = ["-R", source, ".photon/packages/" + name]
+  let copyResult = exec("cp", copyArguments)
+  if !isOk(copyResult) || resultValue(copyResult) != 0 { return false
+  }
+  return true
+}
+
+function photonHelp(): i32 {
+  println("usage: photon <command>")
+  println("  init [name]")
+  println("  add name [source]")
+  println("  install")
+  println("  list")
+  println("  search [query]")
+  return 0
+}
+
+function photonInit(name: string): i32 {
+  let manifest = '{
+  "name": "' + name + '",
+  "version": "0.1.0",
+  "main": "main.lm",
+  "dependencies": {}
+}
+'
+  let result = writeFile("photon.json", manifest)
+  if !isOk(result) {
+    println(errorMessage(result))
+    return 1
+  }
+  println("initialized " + name)
+  return 0
+}
+
+function photonSearch(query: string): i32 {
+  let packages = split(photonPackages(), "|")
+  let index: i32 = 0
+  while index < listLen(packages) do {
+    let name = listGet(packages, index)
+    if stringEquals(query, "") || includes(name, query) {
+      println(name + " " + photonPackageRoot() + "/packages/" + name)
+    }
+    index = index + 1
+  }
+  return 0
+}
+
+function photonList(): i32 {
+  let manifest = readFile("photon.json")
+  if !isOk(manifest) { return 0
+  }
+  let source = resultValue(manifest)
+  let packages = split(photonPackages(), "|")
+  let index: i32 = 0
+  while index < listLen(packages) do {
+    let name = listGet(packages, index)
+    if includes(source, '"' + name + '"') {
+      println(name + " file:" + photonPackageRoot() + "/packages/" + name)
+    }
+    index = index + 1
+  }
+  return 0
+}
+
+function photonAdd(name: string): i32 {
+  if !photonInstall(name) { return 1
+  }
+  let manifest = '{
+  "name": "lumen-project",
+  "version": "0.1.0",
+  "main": "main.lm",
+  "dependencies": {
+    "' + name + '": "file:' + photonPackageRoot() + '/packages/' + name + '"
+  }
+}
+'
+  let result = writeFile("photon.json", manifest)
+  if !isOk(result) {
+    println(errorMessage(result))
+    return 1
+  }
+  println("installed " + name)
+  return 0
+}
+
+function photonInstallManifest(): i32 {
+  let manifest = readFile("photon.json")
+  if !isOk(manifest) {
+    println(errorMessage(manifest))
+    return 1
+  }
+  let source = resultValue(manifest)
+  let packages = split(photonPackages(), "|")
+  let index: i32 = 0
+  while index < listLen(packages) do {
+    let name = listGet(packages, index)
+    if includes(source, '"' + name + '"') {
+      if !photonInstall(name) { return 1
+      }
+      println("installed " + name)
+    }
+    index = index + 1
+  }
+  return 0
+}
+
+function main(): i32 {
+  let countResult = argCount()
+  if !isOk(countResult) { return 1
+  }
+  let count = resultValue(countResult)
+  if count < 2 { return photonHelp()
+  }
+  let commandResult = arg(1)
+  if !isOk(commandResult) { return 1
+  }
+  let command = resultValue(commandResult)
+  if stringEquals(command, "--help") || stringEquals(command, "-h") { return photonHelp()
+  }
+  if stringEquals(command, "init") {
+    let name = "lumen-project"
+    if count > 2 {
+      let nameResult = arg(2)
+      if isOk(nameResult) { name = resultValue(nameResult)
+      }
+    }
+    return photonInit(name)
+  }
+  if stringEquals(command, "search") {
+    let query = ""
+    if count > 2 {
+      let queryResult = arg(2)
+      if isOk(queryResult) { query = resultValue(queryResult)
+      }
+    }
+    return photonSearch(query)
+  }
+  if stringEquals(command, "list") { return photonList()
+  }
+  if stringEquals(command, "install") { return photonInstallManifest()
+  }
+  if stringEquals(command, "add") && count > 2 {
+    let nameResult = arg(2)
+    if isOk(nameResult) { return photonAdd(resultValue(nameResult))
+    }
+  }
+  println("unknown photon command " + command)
+  return 1
+}
