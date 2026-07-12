@@ -1,96 +1,70 @@
-# True Self-Hosting Compiler
+# Make the Lumen compiler canonical
 
-Goal: the compiler in `compiler/` must parse, check, lower, and emit its own
-source. Clang may assemble and link the emitted LLVM. JavaScript may build the
-first seed compiler, but it must not participate in stage 2 or later.
+The compiler can rebuild itself through stage 2 and stage 3. These are the
+remaining tasks before installed tools use that Lumen-built compiler without
+running the JavaScript compiler pipeline.
 
-### Next typed-IR slice
+## Ship the bootstrapped compiler
 
-- [x] Lower each `TypedIrModule` function body into typed instructions and
-  terminators. The new function, block, and value arenas exist; do not add new
-  fields to `IrModule` or the program string map.
+- [x] Produce native compiler artifacts from the verified stage-3 bootstrap.
+  Build Linux and macOS artifacts for supported architectures, publish SHA-256
+  hashes, and keep the stage-2/stage-3 equivalence and no-delegation reports
+  with each release.
 
-- [x] Make the LLVM emitter accept `TypedIrModule` for one function at a time,
-  starting with locals, calls, returns, and integer/string literals.
+- [x] Package or install the correct native compiler for the host platform.
+  Define a stable package layout and platform/architecture selection. Fail with
+  a useful unsupported-platform error when no compiler artifact exists.
 
-- [x] Add typed-IR verifier tests for block ownership, value ranges, and a
-  terminator on every reachable block.
+- [x] Make release artifacts reproducible from the real bootstrap.
+  Build each native compiler twice in clean source-only directories, compare
+  hashes, and publish only artifacts produced by the Lumen compiler and Clang.
 
-- [x] Fix the primary module loader's duplicate relative-import identity. A
-  runtime test importing `parser.lm` and `ir.lm` currently reports duplicate
-  private `AstProgram`/`TokenArena` types instead of reusing one module.
+## Remove JavaScript from normal compilation
 
+- [x] Stop `SelfHostedCompiler` from constructing `new Compiler()`.
+  Resolve the packaged native compiler first. Do not use the JavaScript
+  compiler to populate an empty cache during `lumen emit`, `build`, or `run`.
 
-- [x] Replace `IrModule` summaries with a complete typed IR.
-  Model arbitrary functions, parameters, structs, basic blocks, instructions,
-  values, and terminators. Remove the program string map, `irToProgram`, fixed
-  `statement0` fields, and AST-to-map compatibility bridge.
+- [x] Link native programs without the JavaScript compiler backend.
+  Replace `seedCompiler.buildExecutable()` with a small Clang driver that uses
+  the Lumen compiler's ABI-selected runtime inputs and publishes output
+  atomically.
 
-- [x] Lower typed AST to IR generically.
-  Cover every operation used by the compiler itself: declarations, calls,
-  structs, field access, slicing, assignment, unary/binary expressions,
-  conditionals, loops, break/continue, and returns.
+- [x] Keep JavaScript stage 0 behind an explicit recovery command.
+  The stage-0 seed may build the first bootstrap compiler for development, but
+  normal CLI, package, and release paths must never select it implicitly.
 
-- [x] Implement a Lumen IR verifier.
-  Reject invalid types, missing terminators, bad branch targets, malformed
-  values, duplicate blocks, and invalid control-flow before LLVM emission.
+- [x] Move remaining user-facing compiler entry points to the native compiler.
+  Update `lmsh`, HTTP/chat helpers, speed tests, example compilation, and any
+  other shipped command that still imports `Compiler` for source compilation.
 
-- [x] Make the LLVM emitter consume typed IR only.
-  Emit arbitrary functions and control flow with deterministic symbol and block
-  numbering. Remove token inspection, name guessing, summary-map reads, and
-  duplicated legacy emission paths.
+- [x] Give the LSP a native compiler diagnostics interface.
+  Add machine-readable diagnostics to the Lumen driver, consume them from the
+  LSP, and keep JavaScript parsing only for editor features that have not yet
+  moved to Lumen.
 
-- [x] Complete LLVM type and value lowering for the compiler closure.
-  Correctly lower strings, booleans, integers, structs, arrays, Results,
-  pointers, calls, slices, comparisons, and mutable locals. Escape and
-  deduplicate string globals safely.
+## Prove installed behavior
 
-- [x] Emit runtime declarations and link inputs from the ABI registry.
-  Select required runtime units from referenced symbols instead of hard-coded
-  compiler cases. Run Clang verification on every generated module.
+- [x] Add a clean installed-package test with JavaScript compiler sources
+  unavailable. Run `lumen emit`, `lumen build`, and `lumen run`; verify that all
+  succeed using the packaged native compiler and Clang.
 
-## P4 - Remove the checkpoint and use the Lumen compiler
+- [x] Add a guard against JavaScript compiler use in production paths.
+  Reject imports or construction of `Compiler` from normal CLI and release
+  code. Allow it only in stage-0, recovery, differential, and bootstrap tests.
 
-- [x] Delete compiler-image mode.
-  Remove the `compiler-main` filename switch, both `emitCompilerMain` paths,
-  the `compilerImage` builtin, `lumen_compiler_image`, image embedding in the
-  JavaScript linker, and all checkpoint-specific tests and documentation.
+- [x] Make CI exercise released compiler artifacts on Linux and macOS.
+  Download or install the produced artifact in a clean directory, compile the
+  compiler sources and representative projects, and retain LLVM, binaries,
+  diagnostics, and hashes when a job fails.
 
-- [x] Add a Lumen-native compiler driver.
-  Support module loading, diagnostics, LLVM output, Clang invocation, runtime
-  linking, exit codes, temporary files, and atomic output publishing. Keep
-  Clang as the external machine-code tool.
+## Clean up the old bootstrap story
 
-- [x] Make stage 2 independent of the checkout's JavaScript compiler.
-  Build and test stage 2 in a clean directory containing only the Lumen compiler
-  sources, runtime sources, required package metadata, and external tools.
+- [x] Remove stale checkpoint and `compilerImage` documentation.
+  Update README, the book, support matrix, builtin lists, and bootstrap docs to
+  describe source bootstrapping and the explicit JavaScript stage-0 recovery
+  path.
 
-- [x] Move `lumen emit`, `lumen build`, and `lumen run` to the Lumen compiler.
-  Keep JavaScript only as the documented stage-0 seed or recovery compiler.
-  Normal user compilation must not execute the JavaScript compiler pipeline.
-
-## P5 - Prove parity and make it canonical
-
-- [x] Expand differential tests from the subset to the whole supported language.
-  Compare JavaScript and Lumen compilers for diagnostics, verified LLVM, native
-  output, stderr, and exit status across examples, modules, packages, and
-  generated programs.
-
-- [x] Fuzz every self-hosted boundary.
-  Fuzz the Lumen tokenizer, parser, module loader, semantic passes, IR verifier,
-  and LLVM emitter. Require termination, structured rejection, deterministic
-  output, and Clang-valid LLVM.
-
-- [x] Test compiler-scale inputs and repeated builds.
-  Compile the complete compiler graph repeatedly and under sanitizers. Add
-  limits for recursion, memory use, malformed input, deep nesting, and large
-  modules.
-
-- [x] Run the real three-stage bootstrap on Linux and macOS CI.
-  Start from a clean checkout, retain stage artifacts for diagnosis, and never
-  cache generated compilers or LLVM between stages.
-
-- [x] Make the Lumen implementation the source of truth.
-  Generate release compilers from the real bootstrap, publish reproducible
-  build instructions and hashes, mark the JavaScript compiler as stage 0, and
-  update the support matrix only after the no-delegation bootstrap passes.
+- [x] Document the trust chain and reproducible bootstrap commands.
+  Explain stage 0 -> stage 1 -> stage 2 -> stage 3, which stage creates release
+  artifacts, how equivalence is checked, and how users verify published hashes.

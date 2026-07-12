@@ -6,10 +6,9 @@ Finished" section so the project's progress is visible.
 
 ## Recently Finished
 
-- **Deterministic bootstrap checkpoint** — the JavaScript compiler embeds the
-  stage-1 LLVM image. Stage-2 and stage-3 reproduce it byte-for-byte, and
-  stage-3 runs independently against parity fixtures. Full source self-hosting
-  remains unfinished.
+- **Source bootstrap** — the explicit JavaScript stage-0 seed builds stage 1.
+  Stage 1 and stage 2 compile the Lumen compiler sources to produce stages 2
+  and 3, whose canonical LLVM and native behavior are compared.
 
 - **Fresh mutable state per compilation** — `Compiler` creates fresh semantic,
   type, IR, and backend components through factories for every call. Regression
@@ -40,23 +39,19 @@ Finished" section so the project's progress is visible.
   nullable values, Results, calls and all arguments, access expressions,
   operators, assignments, and return values.
 
-- **Bootstrap IR summary** — typed `IrModule` structures hold module facts,
-  instruction counts, return values, print counts, and call/binary/loop flags.
-  AST lowering still creates the program-map and statement bridge used by
-  emission.
+- **Typed self-host IR** — function, block, and value arenas carry typed
+  instructions and terminators into the LLVM emitter.
 
-- **Self-host LLVM emitter** — `emitIr(...)` entry point with the compiler
-  calling that IR-based path. Internals still delegate through the legacy
-  statement bridge for supported code generation.
+- **Self-host LLVM emitter** — `emitIr(...)` consumes typed IR and emits the
+  compiler closure without a program-map compatibility bridge.
 
 - **Self-host module graph** — `compiler/modules.lm` parses files separately,
   discovers imports from typed AST nodes, resolves canonical local and Photon
   paths, checks exports, rejects cycles, and loads shared dependencies once.
   A token projection still feeds the later compatibility passes.
 
-- **Stage-1 compiler checkpoint path** — the old C fallback has been removed.
-  Compiler-mode emission returns the LLVM image embedded by the JavaScript
-  compiler.
+- **Three-stage compiler path** — the old C fallback and embedded compiler image
+  are removed. Later stages regenerate the compiler from Lumen source.
 
 - **Structs, arrays, enums, match, switch, try/catch, async, loops, and source
   diagnostics** in the self-host path.
@@ -137,16 +132,12 @@ Completed for the currently claimed subset. `npm run test:parity` compares
 diagnostics, LLVM requirements, and executable behavior. Claimed rows are
 generated into [the support matrix](support-matrix.md).
 
-### Bootstrap Compiler Expansion
+### Canonical Compiler Distribution
 
-- Replace the `compilerImage()` checkpoint with source-derived compiler output
-- Prove the compiler can regenerate itself from `compiler/*.lm`
-- Remove the AST-to-map compatibility bridge from the emitter internals —
-  emit directly from IR
-- Grow the parser to cover all JS compiler features
-- Strengthen semantic checks to match JS compiler diagnostic coverage
-- Connect bootstrap builtin and extern checks to the shared typed ABI registry
-- Replace the linked token projection with module-aware semantic and IR passes
+- Ship verified stage-3 native compiler artifacts for supported hosts
+- Make installed commands select the packaged native compiler
+- Keep JavaScript stage 0 available only as an explicit recovery tool
+- Exercise released native artifacts in clean Linux and macOS jobs
 
 ## P1 — Runtime And Portability
 

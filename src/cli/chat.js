@@ -1,11 +1,8 @@
-import { readFile } from 'node:fs/promises'
-import { Compiler } from '../compiler/Compiler.js'
+import { SelfHostedCompiler } from '../compiler/SelfHostedCompiler.js'
+import { runNative } from './RunNative.js'
 
-const source = await readFile('examples/socket-chat.lm', 'utf8')
-const compiler = new Compiler()
-const llvmPath = 'build/socket-chat.ll'
+const compiler = new SelfHostedCompiler()
 const executablePath = 'build/socket-chat'
 
-await compiler.writeLLVM(source, llvmPath)
-await compiler.buildExecutable(llvmPath, executablePath)
-await compiler.run(`./${executablePath}`, [])
+await compiler.buildSource('examples/socket-chat.lm', executablePath)
+process.exitCode = await runNative(executablePath)

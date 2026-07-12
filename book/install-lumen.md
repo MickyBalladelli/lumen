@@ -22,6 +22,8 @@ clang --version
 From a Lumen repo checkout:
 
 ```bash
+npm run test:bootstrap:real
+node scripts/stage-native-compiler.mjs
 npm install -g .
 ```
 
@@ -71,11 +73,11 @@ npm unlink -g lumen
 
 ## Install From A Tarball
 
-Download `lumen-X.Y.Z.tgz` and `SHA256SUMS` from the matching GitHub release,
-then verify it:
+Download `lumen-X.Y.Z.tgz` and the `SHA256SUMS-<platform>-<architecture>` file
+from the matching GitHub release, then verify it:
 
 ```bash
-shasum -a 256 -c SHA256SUMS
+shasum -a 256 -c SHA256SUMS-darwin-arm64
 ```
 
 Install that tarball globally:
@@ -92,7 +94,7 @@ Maintainers can create the tarball, VSIX, and checksum file locally:
 npm ci --prefix vscode-lumen
 npm run release:artifacts
 cd dist
-shasum -a 256 -c SHA256SUMS
+shasum -a 256 -c SHA256SUMS-darwin-arm64
 ```
 
 The release command builds each artifact twice and stops if the bytes differ.
@@ -100,7 +102,7 @@ The release command builds each artifact twice and stops if the bytes differ.
 ## VS Code Extension
 
 Download `lumen-language-X.Y.Z.vsix` from the matching GitHub release, verify
-it with the supplied `SHA256SUMS`, then install it:
+it with the supplied platform checksum file, then install it:
 
 ```bash
 code --install-extension lumen-language-0.1.0.vsix

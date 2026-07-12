@@ -7,6 +7,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  rename,
   rm,
   writeFile
 } from 'node:fs/promises'
@@ -146,6 +147,43 @@ try {
     ])
     expectSuccess(runResult, 'lumen run')
     assert.equal(runResult.stdout, 'installed lumen\n')
+  })
+
+  await suite.test('native CLI works without JavaScript compiler source', async () => {
+    const compilerSource = join(installedPackage, 'src', 'compiler', 'Compiler.js')
+    const parkedSource = join(installedPackage, 'Trash', 'Compiler.js')
+    await mkdir(dirname(parkedSource), { recursive: true })
+    await rename(compilerSource, parkedSource)
+    try {
+      const result = await installed('lumen', [
+        'emit',
+        'main.lm',
+        '-o',
+        join('build', 'native-only.ll')
+      ])
+      expectSuccess(result, 'native-only lumen emit')
+      assert.match(
+        await readFile(join(projectDirectory, 'build', 'native-only.ll'), 'utf8'),
+        /define i32 @main/
+      )
+      const build = await installed('lumen', [
+        'build',
+        'main.lm',
+        '-o',
+        join('build', 'native-only')
+      ])
+      expectSuccess(build, 'native-only lumen build')
+      const runResult = await installed('lumen', [
+        'run',
+        'main.lm',
+        '-o',
+        join('build', 'native-only-run')
+      ])
+      expectSuccess(runResult, 'native-only lumen run')
+      assert.equal(runResult.stdout, 'installed lumen\n')
+    } finally {
+      await rename(parkedSource, compilerSource)
+    }
   })
 
   await suite.test('lmsh compiles and runs through installed command', async () => {

@@ -5,6 +5,7 @@
   "description": "Foundational compiler for the Lumen systems language",
   "keywords": [
     "compiler",
+    "native",
     "language",
     "llvm",
     "lsp"
@@ -28,6 +29,7 @@
   },
   "files": [
     "src",
+    "native",
     "scripts/check-docs.mjs",
     "scripts/generate-support-matrix.mjs",
     "compiler",
@@ -58,7 +60,8 @@
     "format": "node ./src/cli/format.js",
     "lsp": "node ./src/cli/lsp.js",
     "compile": "./build/lumen-compiler",
-    "bootstrap": "node ./src/cli/check-runtime-abi.js && node ./src/cli/compile.js compiler/main.lm -o build/lumen-compiler",
+    "bootstrap": "npm run stage0:bootstrap",
+    "stage0:bootstrap": "node ./src/cli/check-runtime-abi.js && node ./src/cli/compile.js compiler/main.lm -o build/lumen-compiler",
     "check:abi": "node ./src/cli/check-runtime-abi.js",
     "lmsh": "node ./src/cli/lmsh.js",
     "http": "node ./src/cli/http.js",
@@ -84,8 +87,9 @@
     "check:docs": "node ./scripts/generate-support-matrix.mjs --check && node ./scripts/check-docs.mjs",
     "check:versions": "node ./scripts/sync-versions.mjs --check",
     "check:package": "node ./scripts/check-package.mjs",
-    "release:check": "npm run check:docs && npm run check:versions && npm run check:package && npm run check:abi && npm run test:unit && npm run test:package && npm run test:parity && npm run test:properties && npm run test:bootstrap:real",
-    "release:artifacts": "node ./scripts/create-release-artifacts.mjs",
+    "check:native-paths": "node ./scripts/check-native-production-paths.mjs",
+    "release:check": "npm run check:docs && npm run check:versions && npm run check:package && npm run check:abi && npm run check:native-paths && npm run test:unit && npm run test:parity && npm run test:properties && npm run test:bootstrap:real && node ./scripts/stage-native-compiler.mjs && npm run test:package",
+    "release:artifacts": "node ./scripts/verify-native-compiler-reproducibility.mjs && node ./scripts/stage-native-compiler.mjs && node ./scripts/create-release-artifacts.mjs",
     "prepublishOnly": "npm run release:check",
     "version": "node ./scripts/sync-versions.mjs"
   }

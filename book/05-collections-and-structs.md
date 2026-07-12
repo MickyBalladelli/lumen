@@ -302,17 +302,6 @@ The string builder accumulates text efficiently without creating intermediate
 string objects. It's designed for the self-host emitter which builds LLVM IR
 output line by line.
 
-## Compiler Image
-
-`compilerImage()` returns the stage-1 compiler's embedded LLVM checkpoint as a
-string. Later bootstrap stages reproduce that checkpoint. This does not
-regenerate the compiler from its Lumen source.
-
-```lumen
-let image = compilerImage()
-// image contains the LLVM IR of the compiler itself
-```
-
 ## Missing
 
 - **Bootstrap struct support** — the bootstrap compiler still rejects `struct`

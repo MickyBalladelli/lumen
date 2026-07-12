@@ -20,22 +20,35 @@ function diagnosticMessage(entryPath: string, tokens: TokenArena, message: strin
     " near " + token.lexeme
 }
 
-function compileTiny(input: string, output: string): i32 {
+function reportCompilerDiagnostic(machine: bool, file: string, line: i32, column: i32, message: string): i32 {
+  if machine {
+    println("LUMEN_DIAGNOSTIC|" + file + "|" + intToString(line) + "|" + intToString(column) + "|" + message)
+  } else {
+    println(message)
+  }
+  return 1
+}
+
+function compileTiny(input: string, output: string, machine: bool): i32 {
   let graph = loadModuleGraph(input)
   if !graph.ok {
     let diagnosticIndex: i32 = 0
     while diagnosticIndex < graph.diagnostics.count do {
       let diagnostic = diagnosticArenaGet(graph.diagnostics, diagnosticIndex)
-      println(
-        "compile error: " +
-        diagnostic.message +
-        " at " +
-        diagnostic.file +
-        ":" +
-        intToString(diagnostic.line) +
-        ":" +
-        intToString(diagnostic.column)
-      )
+      if machine {
+        reportCompilerDiagnostic(
+          true,
+          diagnostic.file,
+          diagnostic.line,
+          diagnostic.column,
+          "compile error: " + diagnostic.message
+        )
+      } else {
+        println(
+          "compile error: " + diagnostic.message + " at " + diagnostic.file +
+          ":" + intToString(diagnostic.line) + ":" + intToString(diagnostic.column)
+        )
+      }
       diagnosticIndex = diagnosticIndex + 1
     }
     return 1
@@ -47,6 +60,10 @@ function compileTiny(input: string, output: string): i32 {
   if semanticResult.ok {
     let checked = 1
   } else {
+    let token = tokenArenaGet(tokens, semanticResult.tokenIndex)
+    if machine {
+      return reportCompilerDiagnostic(true, token.file, token.line, token.column, semanticResult.message)
+    }
     println(diagnosticMessage(graph.entryPath, tokens, semanticResult.message, semanticResult.tokenIndex))
     return 1
   }
@@ -55,12 +72,20 @@ function compileTiny(input: string, output: string): i32 {
   if typeResult.ok {
     let checkedTypes = 1
   } else {
+    let token = tokenArenaGet(tokens, typeResult.tokenIndex)
+    if machine {
+      return reportCompilerDiagnostic(true, token.file, token.line, token.column, typeResult.message)
+    }
     println(diagnosticMessage(graph.entryPath, tokens, typeResult.message, typeResult.tokenIndex))
     return 1
   }
 
   let flow = analyzeControlFlow(ast, semanticResult.symbols)
   if !flow.ok {
+    let token = tokenArenaGet(tokens, flow.tokenIndex)
+    if machine {
+      return reportCompilerDiagnostic(true, token.file, token.line, token.column, flow.message)
+    }
     println(diagnosticMessage(graph.entryPath, tokens, flow.message, flow.tokenIndex))
     return 1
   }
@@ -68,11 +93,17 @@ function compileTiny(input: string, output: string): i32 {
   let ir = buildIr(ast)
   let backendError = emitIrError(ir)
   if !stringEquals(backendError, "") {
+    if machine {
+      return reportCompilerDiagnostic(true, graph.entryPath, 1, 1, backendError)
+    }
     println(backendError)
     return 1
   }
   let llvm = emitIr(ir)
 
+  if machine {
+    return 0
+  }
   let writeResult = writeFile(output, llvm)
   if !isOk(writeResult) {
     println(errorMessage(writeResult))
@@ -91,7 +122,7 @@ function cleanupCompilerFile(path: string): i32 {
 
 function emitAtomic(input: string, output: string): i32 {
   let temporary = output + "." + uuid() + ".tmp"
-  let code = compileTiny(input, temporary)
+  let code = compileTiny(input, temporary, false)
   if code != 0 {
     cleanupCompilerFile(temporary)
     return code
@@ -110,7 +141,7 @@ function buildNative(input: string, output: string, clang: string, runtimeRoot: 
   let llvmPath = output + "." + nonce + ".tmp.ll"
   let responseFile = output + "." + nonce + ".rsp.tmp"
   let executable = output + "." + nonce + ".exe.tmp"
-  let compileCode = compileTiny(input, llvmPath)
+  let compileCode = compileTiny(input, llvmPath, false)
   if compileCode != 0 {
     cleanupCompilerFile(llvmPath)
     return compileCode
@@ -198,6 +229,10 @@ function main(): i32 {
     return emitAtomic(second, resultValue(outputResult))
   }
 
+  if stringEquals(first, "diagnose") {
+    return compileTiny(second, "", true)
+  }
+
   if stringEquals(first, "build") {
     if args < 6 {
       println("usage: lumen-compiler build input.lm output clang runtime-root")
@@ -229,5 +264,5 @@ function main(): i32 {
     return 1
   }
 
-  return compileTiny(resultValue(inputResult), resultValue(outputResult))
+  return compileTiny(resultValue(inputResult), resultValue(outputResult), false)
 }

@@ -1,25 +1,25 @@
 export const CompilerSupportMatrix = Object.freeze([
   support(
     'javascript-pipeline',
-    'JavaScript compiler pipeline',
-    'supported',
-    'Primary compiler: tokenizer, parser, semantic analysis, type checking, typed IR validation, and LLVM lowering.'
+    'JavaScript stage-0 pipeline',
+    'recovery',
+    'Explicit seed and differential reference. Normal compilation does not select this pipeline.'
   ),
   support(
     'javascript-ir',
-    'JavaScript compiler IR',
+    'JavaScript stage-0 IR',
     'supported',
     'Uses typed IR modules, functions, blocks, instructions, values, and terminators. The LLVM backend consumes this IR.'
   ),
   support(
     'bootstrap-pipeline',
-    'Lumen-written bootstrap compiler',
-    'subset',
-    'Parses and compiles only the features and diagnostics listed in the parity tables below.'
+    'Lumen native compiler',
+    'canonical',
+    'Normal emit, build, run, helper, and diagnostics paths use the packaged native compiler.'
   ),
   support(
     'bootstrap-ir',
-    'Bootstrap compiler IR',
+    'Lumen compiler IR',
     'supported',
     'Uses typed function, block, and value arenas. The Lumen LLVM emitter consumes this typed IR directly.'
   ),
@@ -42,13 +42,13 @@ export const PlatformSupportMatrix = Object.freeze([
     'macos',
     'macOS',
     'targeted',
-    'Development target with Clang and POSIX runtime support.'
+    'Native compiler release artifact, Clang linking, POSIX runtime support, and three-stage CI.'
   ),
   support(
     'linux',
     'Linux',
     'targeted',
-    'Has Linux runtime providers and automated three-stage bootstrap coverage.'
+    'Native compiler release artifact, runtime providers, and automated three-stage bootstrap coverage.'
   ),
   support(
     'windows',

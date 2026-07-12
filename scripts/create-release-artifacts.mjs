@@ -26,9 +26,11 @@ const extensionLock = await readJson(
   join(root, 'vscode-lumen', 'package-lock.json')
 )
 const version = manifest.version
+const nativeCompilerName = `lumen-compiler-${process.platform}-${process.arch}-${version}`
 const artifactNames = [
   `lumen-${version}.tgz`,
-  `lumen-language-${version}.vsix`
+  `lumen-language-${version}.vsix`,
+  nativeCompilerName
 ]
 const outputDirectory = join(root, 'dist')
 const temporaryRoot = await mkdtemp(join(tmpdir(), 'lumen-release-'))
@@ -67,7 +69,10 @@ try {
   const checksums = artifactNames
     .map(name => `${first.get(name)}  ${name}`)
     .join('\n')
-  await writeFile(join(outputDirectory, 'SHA256SUMS'), `${checksums}\n`)
+  await writeFile(
+    join(outputDirectory, `SHA256SUMS-${process.platform}-${process.arch}`),
+    `${checksums}\n`
+  )
 
   console.log(`reproducible release artifacts written to ${outputDirectory}`)
   console.log(checksums)
@@ -84,6 +89,10 @@ async function buildArtifacts(buildRoot) {
   await packageTarball(artifacts, npmCache)
   await stageExtension(extensionRoot)
   await packageExtension(extensionRoot, artifacts)
+  await copyFile(
+    join(root, 'native', `${process.platform}-${process.arch}`, 'lumen-compiler'),
+    join(artifacts, nativeCompilerName)
+  )
 
   const checksums = new Map()
 

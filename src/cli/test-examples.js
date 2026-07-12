@@ -7,18 +7,19 @@ import {
 } from '../testing/TestReporter.js'
 
 const suites = [
-  ['Examples', 'examples'],
-  ['CLI workflows', 'cli-workflows'],
-  ['Negative compilation', 'negative'],
-  ['LSP integration', 'lsp'],
-  ['Bootstrap', 'bootstrap']
+  ['Bootstrap', join('src', 'cli', 'test-suites', 'bootstrap.js')],
+  ['Stage native compiler', join('scripts', 'stage-native-compiler.mjs')],
+  ['Examples', join('src', 'cli', 'test-suites', 'examples.js')],
+  ['CLI workflows', join('src', 'cli', 'test-suites', 'cli-workflows.js')],
+  ['Negative compilation', join('src', 'cli', 'test-suites', 'negative.js')],
+  ['LSP integration', join('src', 'cli', 'test-suites', 'lsp.js')]
 ]
 
 let failures = 0
 
-for (const [name, file] of suites) {
+for (const [name, path] of suites) {
   section(name)
-  const code = await runSuite(join('src', 'cli', 'test-suites', `${file}.js`))
+  const code = await runSuite(path)
   if (code !== 0) failures += 1
 }
 

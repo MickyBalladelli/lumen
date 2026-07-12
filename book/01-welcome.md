@@ -188,7 +188,6 @@ HTTP operations return `Result<T>`.
 - `tokenizeSource(source)`: Lumen-callable tokenizer.
 - `parseSummary(source)`: Lumen-callable parser summary.
 - `sourceSnippet(source, line, column)`: diagnostic line plus caret.
-- `compilerImage()`: returns the embedded stage-1 LLVM checkpoint.
 - `stringBuilder()`, `stringBuilderAppend(...)`: text emission helpers.
 
 ### Packages
