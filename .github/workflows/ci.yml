@@ -56,11 +56,6 @@ jobs:
         continue-on-error: true
         run: npm run test:negative
 
-      - name: Three-stage bootstrap tests
-        id: bootstrap
-        continue-on-error: true
-        run: npm run test:bootstrap -- --real
-
       - name: Compiler parity matrix
         id: parity
         continue-on-error: true
@@ -70,36 +65,6 @@ jobs:
         id: properties
         continue-on-error: true
         run: npm run test:properties
-
-      - name: Stage verified native compiler
-        id: native_compiler
-        continue-on-error: true
-        run: node ./scripts/stage-native-compiler.mjs
-
-      - name: Exercise staged compiler artifact
-        id: native_artifact
-        continue-on-error: true
-        run: |
-          mkdir -p build/native-artifact-clean/src build/native-artifact-clean/examples
-          cp -R compiler build/native-artifact-clean/compiler
-          cp -R src/runtime build/native-artifact-clean/src/runtime
-          cp examples/basic.lm build/native-artifact-clean/examples/basic.lm
-          cp photon.json lumen.json build/native-artifact-clean/
-          cp native/${{ runner.os == 'Linux' && 'linux' || 'darwin' }}-${{ runner.arch == 'X64' && 'x64' || 'arm64' }}/lumen-compiler build/native-artifact-clean/lumen-compiler
-          cd build/native-artifact-clean
-          ./lumen-compiler emit compiler/main.lm artifact-compiler.ll
-          ./lumen-compiler build examples/basic.lm artifact-basic "${LUMEN_CLANG:-clang}" src/runtime
-
-      - name: Retain native compiler proof
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-compiler-proof-${{ runner.os }}-${{ runner.arch }}
-          path: |
-            native/*/lumen-compiler
-            build/native-artifact-clean/artifact-compiler.ll
-            build/native-artifact-clean/artifact-basic
-          if-no-files-found: warn
 
       - name: Package checks
         id: package_check
@@ -121,11 +86,6 @@ jobs:
         continue-on-error: true
         run: npm run test:sanitizers
 
-      - name: Clean-install tests
-        id: clean_install
-        continue-on-error: true
-        run: npm run test:package
-
       - name: Fail when a check failed
         if: >-
           ${{
@@ -133,16 +93,64 @@ jobs:
               steps.unit.outcome != 'success' ||
               steps.examples.outcome != 'success' ||
               steps.negative.outcome != 'success' ||
-              steps.bootstrap.outcome != 'success' ||
               steps.parity.outcome != 'success' ||
               steps.properties.outcome != 'success' ||
-              steps.native_compiler.outcome != 'success' ||
-              steps.native_artifact.outcome != 'success' ||
               steps.package_check.outcome != 'success' ||
               steps.vscode_tools.outcome != 'success' ||
               steps.vscode_package.outcome != 'success' ||
-              steps.sanitizers.outcome != 'success' ||
-              steps.clean_install.outcome != 'success'
+              steps.sanitizers.outcome != 'success'
             )
           }}
         run: exit 1
+
+  bootstrap:
+    name: bootstrap-${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Three-stage bootstrap tests
+        run: npm run test:bootstrap -- --real
+
+      - name: Stage verified native compiler
+        run: node ./scripts/stage-native-compiler.mjs
+
+      - name: Exercise staged compiler artifact
+        run: |
+          mkdir -p build/native-artifact-clean/src build/native-artifact-clean/examples
+          cp -R compiler build/native-artifact-clean/compiler
+          cp -R src/runtime build/native-artifact-clean/src/runtime
+          cp examples/basic.lm build/native-artifact-clean/examples/basic.lm
+          cp photon.json lumen.json build/native-artifact-clean/
+          cp native/${{ runner.os == 'Linux' && 'linux' || 'darwin' }}-${{ runner.arch == 'X64' && 'x64' || 'arm64' }}/lumen-compiler build/native-artifact-clean/lumen-compiler
+          cd build/native-artifact-clean
+          ./lumen-compiler emit compiler/main.lm artifact-compiler.ll
+          ./lumen-compiler build examples/basic.lm artifact-basic "${LUMEN_CLANG:-clang}" src/runtime
+
+      - name: Clean-install tests
+        run: npm run test:package
+
+      - name: Retain native compiler proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-compiler-proof-${{ runner.os }}-${{ runner.arch }}
+          path: |
+            native/*/lumen-compiler
+            build/native-artifact-clean/artifact-compiler.ll
+            build/native-artifact-clean/artifact-basic
+          if-no-files-found: warn
