@@ -104,15 +104,9 @@ jobs:
         run: exit 1
 
   bootstrap:
-    name: bootstrap-${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
+    name: bootstrap-macos
+    runs-on: macos-latest
     timeout-minutes: 120
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
 
     steps:
       - name: Check out source
