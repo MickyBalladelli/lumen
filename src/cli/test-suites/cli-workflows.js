@@ -38,8 +38,8 @@ await suite.test('lumen run workflow', async () => {
     join(outputDir, 'lumen-command-basic-run')
   ], testEnvironment)
 
-  assert.equal(result.code, 0)
-  assert.equal(result.stdout, '7\n')
+  assert.equal(result.code, 3)
+  assert.equal(result.stdout, 'hello\n3\n')
 })
 
 await suite.test('lumen emit workflow', async () => {
