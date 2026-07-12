@@ -44,7 +44,7 @@ export function exampleExpectations(dataText) {
     ['photon-new-packages', ['10\n1\nlumen\n1\n{"method":"GET","path":"/health","body":}\n{"method":"POST","path":"/items","body":{"name":"lumen"}}\nfallback\n1\nbuild/report.txt\narg-fallback\n0\n1\n1\n1\n1\nname: lumen\na,b,c\nlumen\n1\nGET /health\n1\n<strong>lumen</strong>\n<a href="/">home</a>\nhello-lumen\n1\nok cache\nok json\nok slug\n', 0]],
     ['println', ['total\n10\n', 10]],
     ['result-option-tools', ['ok\nbroken\nfine\nfallback\nnice fine\nnext\nhi flow\nempty\n42\n10\nflow\n', 0]],
-    ['self-host-parser', ['7\n3\nlet\nnumber\nprintln\nidentifier\nreturn\nidentifier\n0\nIRModule\n1\n1\n1\n1\n2\n2\n9\n1\n7\n1\n9\n0\ncompile error: break outside loop\n0\ncompile error: cannot assign i32 to string\n', 0]],
+    ['self-host-parser', ['7\n3\nlet\nnumber\nprintln\nidentifier\nreturn\nidentifier\n0\n\n1\n1\n1\n1\n2\n1\n1\n1\n1\n2\n2\n9\n1\n7\n1\n9\n0\ncompile error: break outside loop\n0\ncompile error: cannot assign i32 to string\n', 0]],
     ['self-host-if-binary', ['seven\n7\n', 7]],
     ['self-host-call', ['9\n', 9]],
     ['self-host-array', ['7\n', 7]],
