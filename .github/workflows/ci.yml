@@ -61,6 +61,16 @@ jobs:
         continue-on-error: true
         run: npm run test:bootstrap -- --real
 
+      - name: Compiler parity matrix
+        id: parity
+        continue-on-error: true
+        run: npm run test:parity
+
+      - name: Compiler boundary properties
+        id: properties
+        continue-on-error: true
+        run: npm run test:properties
+
       - name: Package checks
         id: package_check
         continue-on-error: true
@@ -94,6 +104,8 @@ jobs:
               steps.examples.outcome != 'success' ||
               steps.negative.outcome != 'success' ||
               steps.bootstrap.outcome != 'success' ||
+              steps.parity.outcome != 'success' ||
+              steps.properties.outcome != 'success' ||
               steps.package_check.outcome != 'success' ||
               steps.vscode_tools.outcome != 'success' ||
               steps.vscode_package.outcome != 'success' ||

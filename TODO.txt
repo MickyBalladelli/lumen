@@ -71,17 +71,17 @@ first seed compiler, but it must not participate in stage 2 or later.
 
 ## P5 - Prove parity and make it canonical
 
-- [ ] Expand differential tests from the subset to the whole supported language.
+- [x] Expand differential tests from the subset to the whole supported language.
   Compare JavaScript and Lumen compilers for diagnostics, verified LLVM, native
   output, stderr, and exit status across examples, modules, packages, and
   generated programs.
 
-- [ ] Fuzz every self-hosted boundary.
+- [x] Fuzz every self-hosted boundary.
   Fuzz the Lumen tokenizer, parser, module loader, semantic passes, IR verifier,
   and LLVM emitter. Require termination, structured rejection, deterministic
   output, and Clang-valid LLVM.
 
-- [ ] Test compiler-scale inputs and repeated builds.
+- [x] Test compiler-scale inputs and repeated builds.
   Compile the complete compiler graph repeatedly and under sanitizers. Add
   limits for recursion, memory use, malformed input, deep nesting, and large
   modules.
@@ -90,7 +90,7 @@ first seed compiler, but it must not participate in stage 2 or later.
   Start from a clean checkout, retain stage artifacts for diagnosis, and never
   cache generated compilers or LLVM between stages.
 
-- [ ] Make the Lumen implementation the source of truth.
+- [x] Make the Lumen implementation the source of truth.
   Generate release compilers from the real bootstrap, publish reproducible
   build instructions and hashes, mark the JavaScript compiler as stage 0, and
   update the support matrix only after the no-delegation bootstrap passes.

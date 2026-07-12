@@ -221,6 +221,24 @@ if (requireRealBootstrap) {
     assert.equal(hasCompilerDelegation(await readFile(cleanStageThreeLLVM, 'utf8')), false)
   })
 
+  await suite.test('compiler graph is deterministic across repeated builds', async () => {
+    const outputs = []
+    for (let index = 0; index < 3; index += 1) {
+      const output = join(outputDir, `repeated-compiler-${index}.ll`)
+      const result = await compileWith(
+        stageTwoCompiler,
+        join('compiler', 'main.lm'),
+        output,
+        { progressLabel: `repeated compiler build ${index + 1}` }
+      )
+      assert.equal(result.code, 0, result.stdout || result.stderr)
+      await verifyLLVM(output, `repeated compiler LLVM ${index + 1}`)
+      outputs.push(canonicalizeBootstrapLLVM(await readFile(output, 'utf8')))
+    }
+    assert.equal(outputs[1], outputs[0])
+    assert.equal(outputs[2], outputs[0])
+  })
+
   for (const program of programs) {
     await suite.test(`stage-3 ${program[0]}`, () => {
       return testProgram(stageThreeCompiler, 3, program)
