@@ -4,6 +4,7 @@ import { builtinSignature } from '../runtime/BuiltinRegistry.js'
 const SUPPORT = {
   syntaxNodes: support(
     [
+      'ArrayExpression',
       'AssignmentExpression',
       'BinaryExpression',
       'BlockStatement',
@@ -35,7 +36,7 @@ const SUPPORT = {
     []
   ),
   typeFamilies: support(
-    ['bool', 'i32', 'json', 'Result<T>', 'string', 'struct', 'unknown', 'void'],
+    ['array', 'bool', 'i32', 'json', 'Result<T>', 'string', 'struct', 'unknown', 'void'],
     []
   ),
   irOperations: support(
@@ -49,6 +50,7 @@ const SUPPORT = {
       'terminator:fallthrough',
       'terminator:return',
       'value:access',
+      'value:array',
       'value:assign',
       'value:binary',
       'value:call',

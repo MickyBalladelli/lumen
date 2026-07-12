@@ -235,16 +235,20 @@ static void lumen_load_process_arguments(void) {
 }
 #endif
 
-void *lumen_arg(int index) {
-#if defined(__APPLE__) && !defined(LUMEN_FORCE_LINUX_ARGS)
-  int argc = *_NSGetArgc();
-  char **argv = *_NSGetArgv();
+#ifdef __APPLE__
+static int lumen_darwin_argc = 0;
+static char **lumen_darwin_argv = NULL;
+static pthread_once_t lumen_darwin_args_once = PTHREAD_ONCE_INIT;
 
-  if (index < 0 || index >= argc) {
-    return lumen_runtime_error("process", ERANGE, "argument index out of range");
-  }
-  return lumen_ok(argv[index]);
-#elif defined(__linux__) || defined(LUMEN_FORCE_LINUX_ARGS)
+__attribute__((unused))
+static void lumen_load_darwin_args(void) {
+  lumen_darwin_argc = *_NSGetArgc();
+  lumen_darwin_argv = *_NSGetArgv();
+}
+#endif
+
+void *lumen_arg(int index) {
+#if defined(__linux__) || defined(LUMEN_FORCE_LINUX_ARGS)
   pthread_once(&lumen_process_arguments_once, lumen_load_process_arguments);
   if (!lumen_process_arguments.available) {
     return lumen_runtime_error("process", EIO, "cannot read process arguments");
@@ -253,6 +257,12 @@ void *lumen_arg(int index) {
     return lumen_runtime_error("process", ERANGE, "argument index out of range");
   }
   return lumen_ok(lumen_process_arguments.values[index]);
+#elif defined(__APPLE__)
+  pthread_once(&lumen_darwin_args_once, lumen_load_darwin_args);
+  if (index < 0 || index >= lumen_darwin_argc) {
+    return lumen_runtime_error("process", ERANGE, "argument index out of range");
+  }
+  return lumen_ok(lumen_darwin_argv[index]);
 #else
   (void)index;
   return lumen_runtime_error("process", ENOTSUP, "process arguments unsupported");
@@ -260,14 +270,15 @@ void *lumen_arg(int index) {
 }
 
 void *lumen_arg_count(void) {
-#if defined(__APPLE__) && !defined(LUMEN_FORCE_LINUX_ARGS)
-  return lumen_ok_i32(*_NSGetArgc());
-#elif defined(__linux__) || defined(LUMEN_FORCE_LINUX_ARGS)
+#if defined(__linux__) || defined(LUMEN_FORCE_LINUX_ARGS)
   pthread_once(&lumen_process_arguments_once, lumen_load_process_arguments);
   if (!lumen_process_arguments.available) {
     return lumen_runtime_error("process", EIO, "cannot read process arguments");
   }
   return lumen_ok_i32(lumen_process_arguments.count);
+#elif defined(__APPLE__)
+  pthread_once(&lumen_darwin_args_once, lumen_load_darwin_args);
+  return lumen_ok_i32(lumen_darwin_argc);
 #else
   return lumen_runtime_error("process", ENOTSUP, "process arguments unsupported");
 #endif
