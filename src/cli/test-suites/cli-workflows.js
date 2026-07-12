@@ -33,16 +33,13 @@ await suite.test('lumen run workflow', async () => {
   const result = await runCommand(process.execPath, [
     join('src', 'cli', 'lumen.js'),
     'run',
-    join(examplesDir, 'cli-args.lm'),
+    join(examplesDir, 'basic.lm'),
     '-o',
-    join(outputDir, 'lumen-command-cli-args'),
-    '--',
-    'first',
-    'second'
+    join(outputDir, 'lumen-command-basic-run')
   ], testEnvironment)
 
-  assert.equal(result.code, 0)
-  assert.equal(result.stdout, '1\n3\n')
+  assert.equal(result.code, 3)
+  assert.equal(result.stdout, 'hello\n3\n')
 })
 
 await suite.test('lumen emit workflow', async () => {

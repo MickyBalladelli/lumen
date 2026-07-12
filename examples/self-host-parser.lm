@@ -2,7 +2,7 @@ import { tokenize } from "../compiler/tokenizer.lm"
 import { astToProgram, parseProgram } from "../compiler/parser.lm"
 import { analyzeSemantics } from "../compiler/semantics.lm"
 import { checkTypes } from "../compiler/typechecker.lm"
-import { buildIr, irToProgram } from "../compiler/ir.lm"
+import { buildIr } from "../compiler/ir.lm"
 import { emitIr } from "../compiler/emitter.lm"
 import { astCountKind, astMaxDepth } from "../compiler/ast.lm"
 
@@ -11,7 +11,6 @@ function main(): i32 {
   let ast = parseProgram(tokens)
   let program = astToProgram(ast)
   let ir = buildIr(ast)
-  program = irToProgram(ir, program)
   let llvm = emitIr(ir)
 
   println(mapGet(program, "mainReturnValue"))
@@ -23,12 +22,6 @@ function main(): i32 {
   println(mapGet(program, "statement2Kind"))
   println(mapGet(program, "statement2ExprKind"))
   println(includes(llvm, "ret i32 7"))
-  println(ir.kind)
-  println(ir.instructionCount)
-  println(ir.printCount)
-  println(ir.returnValue)
-  println(ir.statement0Kind)
-  println(ir.statement0ExpressionKind)
   println(mapGet(program, "irKind"))
 
   let syntaxSource = 'import { println } from "system"

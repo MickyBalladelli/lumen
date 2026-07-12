@@ -16,3 +16,4 @@ You run: bonsai . --max-tokens 12000 --level 2 --output file --output-file /tmp/
 You inspect: /tmp/bonsai.xml
 Then answer from that context.
 ```
+do not be verbose when writing the answer. Speak to me like a caveman.

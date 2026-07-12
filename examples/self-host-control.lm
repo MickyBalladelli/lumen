@@ -1,6 +1,6 @@
 import { tokenize } from "../compiler/tokenizer.lm"
 import { astToProgram, parseProgram } from "../compiler/parser.lm"
-import { buildIr, irToProgram } from "../compiler/ir.lm"
+import { buildIr } from "../compiler/ir.lm"
 import { emitIr } from "../compiler/emitter.lm"
 
 function main(): i32 {
@@ -14,7 +14,6 @@ function main(): i32 {
   let ast = parseProgram(tokens)
   let program = astToProgram(ast)
   let ir = buildIr(ast)
-  program = irToProgram(ir, program)
   let llvm = emitIr(ir)
 
   println(mapGet(program, "mainReturnValue"))
