@@ -3,7 +3,7 @@ import test from 'node:test'
 import { findBootstrapDelegation } from '../../src/testing/BootstrapDelegationGuard.js'
 
 const shortcuts = [
-  ['llvm', 'call i32 @lumen_exec(ptr %node, ptr %args)', 'subprocess compiler'],
+  ['llvm', 'self-host compiler delegate', 'subprocess compiler'],
   ['binary', 'run JavaScript compiler', 'JavaScript compiler'],
   ['binary', 'node compiler.js', 'JavaScript compiler'],
   ['source', 'exec("node", args)', 'Node compiler']

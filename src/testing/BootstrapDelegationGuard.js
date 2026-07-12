@@ -4,7 +4,7 @@ const RULES = {
     rule('Node compiler', /\bnode(?:js|\.exe)?\b[ \t]+[^\n]*\.m?js\b|node_modules|process\.execPath/i),
     rule(
       'subprocess compiler',
-      /self-host compiler delegate|compiler\.self\.unsupported|call\b[^\n]*@lumen_exec\b/i
+      /self-host compiler delegate|compiler\.self\.unsupported/i
     )
   ],
   binary: [
