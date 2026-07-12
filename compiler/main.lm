@@ -3,6 +3,7 @@ import { AstProgram } from "./ast.lm"
 import { loadModuleGraph } from "./modules.lm"
 import { analyzeSemantics } from "./semantics.lm"
 import { checkTypes } from "./typechecker.lm"
+import { analyzeControlFlow } from "./controlflow.lm"
 import { buildIr } from "./ir.lm"
 import { emitIr, emitIrError } from "./emitter.lm"
 
@@ -54,6 +55,12 @@ function compileTiny(input: string, output: string): i32 {
     let checkedTypes = 1
   } else {
     println(diagnosticMessage(graph.entryPath, tokens, typeResult.message, typeResult.tokenIndex))
+    return 1
+  }
+
+  let flow = analyzeControlFlow(ast, semanticResult.symbols)
+  if !flow.ok {
+    println(diagnosticMessage(graph.entryPath, tokens, flow.message, flow.tokenIndex))
     return 1
   }
 

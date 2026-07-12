@@ -297,7 +297,8 @@ function readTypeName(tokens: TokenArena, index: i32, stop: string): string {
   while index < tokens.count do {
     let value = typeTokenValue(tokenArenaGet(tokens, index))
     if stringEquals(value, stop) || stringEquals(value, "=") ||
-      stringEquals(value, ",") {
+      stringEquals(value, ",") || typeIsTerminator(tokens, index) ||
+      stringEquals(value, "{") || stringEquals(value, "}") {
       return out
     }
     out = stringBuilderAppend(out, value)

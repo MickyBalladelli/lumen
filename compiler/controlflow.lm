@@ -1,0 +1,540 @@
+import { AstProgram, astChildAt, astNodeAt } from "./ast.lm"
+import { SymbolArena, symbolArenaGet } from "./containers.lm"
+
+struct ControlFlowResult {
+  ok: bool
+  message: string
+  tokenIndex: i32
+  initialized: string
+  normal: bool
+  returns: bool
+  breaks: bool
+  continues: bool
+  breakInitialized: string
+  continueInitialized: string
+}
+
+function controlFlowResult(initialized: string): ControlFlowResult {
+  return ControlFlowResult {
+    ok: true,
+    message: "",
+    tokenIndex: 0,
+    initialized: initialized,
+    normal: true,
+    returns: false,
+    breaks: false,
+    continues: false,
+    breakInitialized: initialized,
+    continueInitialized: initialized
+  }
+}
+
+function controlFlowError(
+  initialized: string,
+  message: string,
+  tokenIndex: i32
+): ControlFlowResult {
+  let result = controlFlowResult(initialized)
+  result.ok = false
+  result.message = message
+  result.tokenIndex = tokenIndex
+  return result
+}
+
+function controlFlowInitialState(symbolCount: i32): string {
+  let state = stringBuilder()
+  let index: i32 = 0
+  while index < symbolCount do {
+    state = stringBuilderAppend(state, "0")
+    index = index + 1
+  }
+  return state
+}
+
+function controlFlowIsInitialized(state: string, symbolId: i32): bool {
+  if symbolId < 0 || symbolId >= stringLen(state) {
+    return true
+  }
+  return stringEquals(state[symbolId..symbolId + 1], "1")
+}
+
+function controlFlowSetInitialized(state: string, symbolId: i32): string {
+  if symbolId < 0 || symbolId >= stringLen(state) {
+    return state
+  }
+  return state[0..symbolId] + "1" + state[symbolId + 1..stringLen(state)]
+}
+
+function controlFlowMergeInitialized(left: string, right: string): string {
+  let merged = stringBuilder()
+  let index: i32 = 0
+  while index < stringLen(left) do {
+    if stringEquals(left[index..index + 1], "1") &&
+      stringEquals(right[index..index + 1], "1") {
+      merged = stringBuilderAppend(merged, "1")
+    } else {
+      merged = stringBuilderAppend(merged, "0")
+    }
+    index = index + 1
+  }
+  return merged
+}
+
+function controlFlowExpression(
+  ast: AstProgram,
+  symbols: SymbolArena,
+  nodeId: i32,
+  initialized: string
+): ControlFlowResult {
+  let node = astNodeAt(ast, nodeId)
+
+  if stringEquals(node.kind, "IdentifierExpression") {
+    if node.symbolId >= 0 {
+      let symbol = symbolArenaGet(symbols, node.symbolId)
+      if (stringEquals(symbol.kind, "local") || stringEquals(symbol.kind, "param")) &&
+        !controlFlowIsInitialized(initialized, node.symbolId) {
+        return controlFlowError(
+          initialized,
+          "compile error: " + node.name + " used before initialization",
+          node.tokenStart
+        )
+      }
+    }
+    return controlFlowResult(initialized)
+  }
+
+  if stringEquals(node.kind, "AssignmentExpression") {
+    let result = controlFlowResult(initialized)
+    if node.childCount < 1 {
+      return result
+    }
+    let targetId = astChildAt(ast, nodeId, 0)
+    let target = astNodeAt(ast, targetId)
+    if stringEquals(node.operator, "=") {
+      if node.childCount > 1 {
+        result = controlFlowExpression(
+          ast,
+          symbols,
+          astChildAt(ast, nodeId, 1),
+          result.initialized
+        )
+        if !result.ok {
+          return result
+        }
+      }
+      if stringEquals(target.kind, "IdentifierExpression") {
+        result.initialized = controlFlowSetInitialized(result.initialized, target.symbolId)
+        return result
+      }
+      return controlFlowExpression(ast, symbols, targetId, result.initialized)
+    }
+
+    result = controlFlowExpression(ast, symbols, targetId, result.initialized)
+    if result.ok && stringEquals(target.kind, "IdentifierExpression") {
+      result.initialized = controlFlowSetInitialized(result.initialized, target.symbolId)
+    }
+    return result
+  }
+
+  let result = controlFlowResult(initialized)
+  let index: i32 = 0
+  while index < node.childCount do {
+    result = controlFlowExpression(
+      ast,
+      symbols,
+      astChildAt(ast, nodeId, index),
+      result.initialized
+    )
+    if !result.ok {
+      return result
+    }
+    index = index + 1
+  }
+  return result
+}
+
+function controlFlowVariable(
+  ast: AstProgram,
+  symbols: SymbolArena,
+  nodeId: i32,
+  initialized: string
+): ControlFlowResult {
+  let node = astNodeAt(ast, nodeId)
+  let result = controlFlowResult(initialized)
+  let index: i32 = 0
+
+  while index < node.childCount do {
+    let declarationId = astChildAt(ast, nodeId, index)
+    let declaration = astNodeAt(ast, declarationId)
+    let initializedHere: bool = false
+    let childIndex: i32 = 0
+    while childIndex < declaration.childCount do {
+      let childId = astChildAt(ast, declarationId, childIndex)
+      let child = astNodeAt(ast, childId)
+      if stringEquals(child.kind, "RawExpression") {
+        result = controlFlowExpression(ast, symbols, childId, result.initialized)
+        if !result.ok {
+          return result
+        }
+        initializedHere = true
+      }
+      childIndex = childIndex + 1
+    }
+    if initializedHere {
+      result.initialized = controlFlowSetInitialized(result.initialized, declaration.symbolId)
+    }
+    index = index + 1
+  }
+  return result
+}
+
+function controlFlowBlock(
+  ast: AstProgram,
+  symbols: SymbolArena,
+  nodeId: i32,
+  initialized: string
+): ControlFlowResult {
+  let node = astNodeAt(ast, nodeId)
+  let result = controlFlowResult(initialized)
+  let index: i32 = 0
+
+  while index < node.childCount do {
+    let childId = astChildAt(ast, nodeId, index)
+    let child = astNodeAt(ast, childId)
+    if !result.normal {
+      return controlFlowError(
+        result.initialized,
+        "compile error: unreachable statement",
+        child.tokenStart
+      )
+    }
+    let childResult = controlFlowNode(ast, symbols, childId, result.initialized)
+    if !childResult.ok {
+      return childResult
+    }
+    result.initialized = childResult.initialized
+    result.normal = childResult.normal
+    result.returns = result.returns || childResult.returns
+    if childResult.breaks {
+      if result.breaks {
+        result.breakInitialized = controlFlowMergeInitialized(
+          result.breakInitialized,
+          childResult.breakInitialized
+        )
+      } else {
+        result.breakInitialized = childResult.breakInitialized
+      }
+      result.breaks = true
+    }
+    if childResult.continues {
+      if result.continues {
+        result.continueInitialized = controlFlowMergeInitialized(
+          result.continueInitialized,
+          childResult.continueInitialized
+        )
+      } else {
+        result.continueInitialized = childResult.continueInitialized
+      }
+      result.continues = true
+    }
+    index = index + 1
+  }
+  return result
+}
+
+function controlFlowIf(
+  ast: AstProgram,
+  symbols: SymbolArena,
+  nodeId: i32,
+  initialized: string
+): ControlFlowResult {
+  let node = astNodeAt(ast, nodeId)
+  let condition = controlFlowExpression(
+    ast,
+    symbols,
+    astChildAt(ast, nodeId, 0),
+    initialized
+  )
+  if !condition.ok {
+    return condition
+  }
+
+  let consequent = controlFlowNode(
+    ast,
+    symbols,
+    astChildAt(ast, nodeId, 1),
+    condition.initialized
+  )
+  if !consequent.ok {
+    return consequent
+  }
+
+  let alternate = controlFlowResult(condition.initialized)
+  if node.childCount > 2 {
+    alternate = controlFlowNode(
+      ast,
+      symbols,
+      astChildAt(ast, nodeId, 2),
+      condition.initialized
+    )
+    if !alternate.ok {
+      return alternate
+    }
+  }
+
+  let result = controlFlowResult(condition.initialized)
+  result.normal = consequent.normal || alternate.normal
+  result.returns = consequent.returns || alternate.returns
+  result.breaks = consequent.breaks || alternate.breaks
+  result.continues = consequent.continues || alternate.continues
+  if consequent.breaks && alternate.breaks {
+    result.breakInitialized = controlFlowMergeInitialized(
+      consequent.breakInitialized,
+      alternate.breakInitialized
+    )
+  } else if consequent.breaks {
+    result.breakInitialized = consequent.breakInitialized
+  } else if alternate.breaks {
+    result.breakInitialized = alternate.breakInitialized
+  }
+  if consequent.continues && alternate.continues {
+    result.continueInitialized = controlFlowMergeInitialized(
+      consequent.continueInitialized,
+      alternate.continueInitialized
+    )
+  } else if consequent.continues {
+    result.continueInitialized = consequent.continueInitialized
+  } else if alternate.continues {
+    result.continueInitialized = alternate.continueInitialized
+  }
+  if consequent.normal && alternate.normal {
+    result.initialized = controlFlowMergeInitialized(
+      consequent.initialized,
+      alternate.initialized
+    )
+  } else if consequent.normal {
+    result.initialized = consequent.initialized
+  } else if alternate.normal {
+    result.initialized = alternate.initialized
+  }
+  return result
+}
+
+function controlFlowLiteralTrue(ast: AstProgram, nodeId: i32): bool {
+  let node = astNodeAt(ast, nodeId)
+  if stringEquals(node.kind, "LiteralExpression") {
+    return stringEquals(node.value, "true")
+  }
+  if node.childCount == 1 {
+    return controlFlowLiteralTrue(ast, astChildAt(ast, nodeId, 0))
+  }
+  return false
+}
+
+function controlFlowWhile(
+  ast: AstProgram,
+  symbols: SymbolArena,
+  nodeId: i32,
+  initialized: string
+): ControlFlowResult {
+  let conditionId = astChildAt(ast, nodeId, 0)
+  let condition = controlFlowExpression(ast, symbols, conditionId, initialized)
+  if !condition.ok {
+    return condition
+  }
+  let body = controlFlowNode(
+    ast,
+    symbols,
+    astChildAt(ast, nodeId, 1),
+    condition.initialized
+  )
+  if !body.ok {
+    return body
+  }
+
+  let result = controlFlowResult(condition.initialized)
+  result.returns = body.returns
+  if controlFlowLiteralTrue(ast, conditionId) && body.returns &&
+    !body.normal && !body.breaks && !body.continues {
+    result.normal = false
+  }
+  return result
+}
+
+function controlFlowSwitch(
+  ast: AstProgram,
+  symbols: SymbolArena,
+  nodeId: i32,
+  initialized: string
+): ControlFlowResult {
+  let node = astNodeAt(ast, nodeId)
+  let subject = controlFlowExpression(
+    ast,
+    symbols,
+    astChildAt(ast, nodeId, 0),
+    initialized
+  )
+  if !subject.ok {
+    return subject
+  }
+
+  let result = controlFlowResult(subject.initialized)
+  result.normal = false
+  let merged: string = subject.initialized
+  let hasMerged: bool = false
+  let hasDefault: bool = false
+  let index: i32 = 1
+  while index < node.childCount do {
+    let caseId = astChildAt(ast, nodeId, index)
+    let switchCase = astNodeAt(ast, caseId)
+    if switchCase.flags == 1 {
+      hasDefault = true
+    }
+    let caseResult = controlFlowNode(ast, symbols, caseId, subject.initialized)
+    if !caseResult.ok {
+      return caseResult
+    }
+    result.returns = result.returns || caseResult.returns
+    result.continues = result.continues || caseResult.continues
+    if caseResult.normal {
+      if hasMerged {
+        merged = controlFlowMergeInitialized(merged, caseResult.initialized)
+      } else {
+        merged = caseResult.initialized
+        hasMerged = true
+      }
+      result.normal = true
+    }
+    if caseResult.breaks {
+      if hasMerged {
+        merged = controlFlowMergeInitialized(merged, caseResult.breakInitialized)
+      } else {
+        merged = caseResult.breakInitialized
+        hasMerged = true
+      }
+      result.normal = true
+    }
+    index = index + 1
+  }
+
+  if !hasDefault {
+    if hasMerged {
+      merged = controlFlowMergeInitialized(merged, subject.initialized)
+    } else {
+      merged = subject.initialized
+    }
+    result.normal = true
+  }
+  result.initialized = merged
+  return result
+}
+
+function controlFlowNode(
+  ast: AstProgram,
+  symbols: SymbolArena,
+  nodeId: i32,
+  initialized: string
+): ControlFlowResult {
+  let node = astNodeAt(ast, nodeId)
+  if stringEquals(node.kind, "BlockStatement") {
+    return controlFlowBlock(ast, symbols, nodeId, initialized)
+  }
+  if stringEquals(node.kind, "VariableDeclaration") {
+    return controlFlowVariable(ast, symbols, nodeId, initialized)
+  }
+  if stringEquals(node.kind, "IfStatement") {
+    return controlFlowIf(ast, symbols, nodeId, initialized)
+  }
+  if stringEquals(node.kind, "WhileStatement") {
+    return controlFlowWhile(ast, symbols, nodeId, initialized)
+  }
+  if stringEquals(node.kind, "SwitchStatement") {
+    return controlFlowSwitch(ast, symbols, nodeId, initialized)
+  }
+  if stringEquals(node.kind, "ReturnStatement") {
+    let result = controlFlowExpression(ast, symbols, nodeId, initialized)
+    result.normal = false
+    result.returns = true
+    return result
+  }
+  if stringEquals(node.kind, "BreakStatement") {
+    let result = controlFlowResult(initialized)
+    result.normal = false
+    result.breaks = true
+    result.breakInitialized = initialized
+    return result
+  }
+  if stringEquals(node.kind, "ContinueStatement") {
+    let result = controlFlowResult(initialized)
+    result.normal = false
+    result.continues = true
+    result.continueInitialized = initialized
+    return result
+  }
+  if stringEquals(node.kind, "SwitchCase") {
+    return controlFlowBlock(ast, symbols, nodeId, initialized)
+  }
+  return controlFlowExpression(ast, symbols, nodeId, initialized)
+}
+
+function controlFlowFunction(
+  ast: AstProgram,
+  symbols: SymbolArena,
+  nodeId: i32,
+  symbolCount: i32
+): ControlFlowResult {
+  let node = astNodeAt(ast, nodeId)
+  let initialized = controlFlowInitialState(symbolCount)
+  let returnType = "i32"
+  let bodyId: i32 = -1
+  let index: i32 = 0
+  while index < node.childCount do {
+    let childId = astChildAt(ast, nodeId, index)
+    let child = astNodeAt(ast, childId)
+    if stringEquals(child.kind, "VariableDeclarator") {
+      initialized = controlFlowSetInitialized(initialized, child.symbolId)
+    } else if stringEquals(child.kind, "TypeAnnotation") {
+      returnType = child.typeName
+    } else if stringEquals(child.kind, "BlockStatement") {
+      bodyId = childId
+    }
+    index = index + 1
+  }
+
+  if bodyId < 0 {
+    return controlFlowError(
+      initialized,
+      "compile error: function " + node.name + " has no body",
+      node.tokenStart
+    )
+  }
+  let result = controlFlowBlock(ast, symbols, bodyId, initialized)
+  if result.ok && !stringEquals(returnType, "void") && result.normal {
+    return controlFlowError(
+      result.initialized,
+      "compile error: function " + node.name + " does not return on every path",
+      node.tokenStart
+    )
+  }
+  return result
+}
+
+function analyzeControlFlow(
+  ast: AstProgram,
+  symbols: SymbolArena
+): ControlFlowResult {
+  let root = astNodeAt(ast, ast.root)
+  let index: i32 = 0
+  while index < root.childCount do {
+    let nodeId = astChildAt(ast, ast.root, index)
+    let node = astNodeAt(ast, nodeId)
+    if stringEquals(node.kind, "FunctionDeclaration") {
+      let result = controlFlowFunction(ast, symbols, nodeId, symbols.count)
+      if !result.ok {
+        return result
+      }
+    }
+    index = index + 1
+  }
+  return controlFlowResult(controlFlowInitialState(symbols.count))
+}
