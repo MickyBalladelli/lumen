@@ -7,7 +7,9 @@ const runs = process.env.LUMEN_FUZZ_RUNS ?? '10000'
 const outputDirectory = join('build', 'fuzz')
 const targets = [
   ['http-request', join('tests', 'fuzz', 'http-request.c'), '16384'],
-  ['websocket-frame', join('tests', 'fuzz', 'websocket-frame.c'), '65550']
+  ['http-stream', join('tests', 'fuzz', 'http-stream.c'), '16384'],
+  ['websocket-frame', join('tests', 'fuzz', 'websocket-frame.c'), '65550'],
+  ['websocket-stream', join('tests', 'fuzz', 'websocket-stream.c'), '65550']
 ]
 
 await mkdir(outputDirectory, { recursive: true })

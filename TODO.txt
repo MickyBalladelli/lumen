@@ -5,7 +5,7 @@
 - [x] Harden HTTP and WebSocket input handling: request/body limits, timeouts,
   partial read/write loops, protocol validation, canonical path checks, and
   graceful shutdown.
-- [ ] Expand HTTP and WebSocket fuzzing to cover fragmented input, malformed
+- [x] Expand HTTP and WebSocket fuzzing to cover fragmented input, malformed
   headers, oversized frames, slow clients, and directory traversal attempts.
 - [ ] Audit runtime ownership and cleanup under errors, async cancellation, and
   repeated compiler use with ASan, UBSan, and leak checks on macOS and Linux.
