@@ -1,3 +1,80 @@
 # TODO
 
-No remaining canonical-compiler tasks.
+## P0 — Correctness and security
+
+- [x] Harden HTTP and WebSocket input handling: request/body limits, timeouts,
+  partial read/write loops, protocol validation, canonical path checks, and
+  graceful shutdown.
+- [ ] Expand HTTP and WebSocket fuzzing to cover fragmented input, malformed
+  headers, oversized frames, slow clients, and directory traversal attempts.
+- [ ] Audit runtime ownership and cleanup under errors, async cancellation, and
+  repeated compiler use with ASan, UBSan, and leak checks on macOS and Linux.
+- [ ] Make native Photon match the full package-manager contract: local and Git
+  dependencies, locked commits, atomic rollback, `update`, and frozen installs.
+- [ ] Add cryptographic verification for downloaded package and release
+  artifacts instead of trusting transport and checksums alone.
+
+## P1 — Compiler and language
+
+- [ ] Remove the remaining `RawExpression` compatibility representation so all
+  compiler stages consume direct typed expression nodes.
+- [ ] Add user-defined generic functions and structs with constraint checking
+  and deterministic monomorphization.
+- [ ] Specify numeric conversions, overflow behavior, integer widths, and mixed
+  numeric operators; add diagnostics and parity fixtures for every rule.
+- [ ] Improve bootstrap diagnostics to collect multiple errors with full file
+  ranges, snippets, imported-module notes, and recovery matching the canonical
+  compiler contract.
+- [ ] Grow native-compiler parity beyond the current fixture subset, including
+  modules, generics, async cancellation, collections, errors, and runtime APIs.
+- [ ] Profile stage-2/stage-3 builds and cache unchanged module IR so bootstrap
+  verification is fast enough for routine cross-platform automation.
+- [ ] Add optimization levels and a release pipeline using LLVM optimization
+  passes while keeping debug builds deterministic and easy to inspect.
+
+## P1 — Native tools and distribution
+
+- [ ] Make native LSP behavior match the tested editor server: real compiler
+  diagnostics, cross-file indexing, hover types, completion, rename, symbols,
+  semantic tokens, formatting, cancellation, and stale-build protection.
+- [ ] Share one formatter implementation between `lumen-format` and the LSP so
+  formatting is syntax-aware, comment-safe, configurable, and idempotent.
+- [ ] Add protocol-level native LSP tests for every advertised capability, not
+  only initialize/shutdown.
+- [ ] Verify npm and standalone archives from clean machines where repository
+  files and JavaScript compiler sources are unavailable.
+- [ ] Restore reliable Linux and macOS automation using a CI provider or
+  self-hosted runner that can finish the real three-stage bootstrap.
+- [ ] Publish reproducible native artifacts for each supported OS/architecture
+  with signatures, checksums, provenance, and an unsupported-host message.
+- [ ] Define the Windows portability plan: supported target, experimental
+  target, or explicit long-term non-goal.
+
+## P2 — Runtime and packages
+
+- [ ] Add outbound HTTP/HTTPS with certificate validation, redirects, proxy
+  support, streaming bodies, cancellation, and connection reuse.
+- [ ] Replace experimental auth and JWT helpers with standards-compliant token
+  exchange, parsing, signature verification, claims validation, and tests.
+- [ ] Implement correct URL parsing, normalization, and percent encoding.
+- [ ] Add bounded concurrency primitives, non-blocking I/O, timers, and a clear
+  async scheduling model for server workloads.
+- [ ] Version the runtime ABI and reject compiler/runtime combinations with an
+  incompatible ABI before linking.
+- [ ] Add package API documentation and executable examples for every bundled
+  Photon package; mark stability and compatibility guarantees explicitly.
+
+## P2 — Quality and maintenance
+
+- [ ] Split large integration runners into focused suites with per-suite
+  timeouts, artifacts, and failure isolation.
+- [ ] Add differential property tests between JavaScript stage 0 and the native
+  compiler for tokenizer, parser, diagnostics, IR, and executable behavior.
+- [ ] Add corpus fuzzing for tokenizer, parser, module resolver, formatter,
+  Photon manifests, LSP framing, and runtime protocol parsers.
+- [ ] Add benchmark baselines for compile time, bootstrap time, executable size,
+  runtime speed, and memory use; detect meaningful regressions.
+- [ ] Reconcile README, support matrix, install guide, and missing-pieces chapter
+  with actual native-tool behavior and removed automation.
+- [ ] Remove duplicated legacy JavaScript command paths after native parity is
+  proven, while retaining one clearly documented stage-0 recovery entry point.

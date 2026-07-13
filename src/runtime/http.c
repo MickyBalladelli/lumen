@@ -10,6 +10,7 @@
 #define LUMEN_HTTP_MAX_HEADER_COUNT 100
 #define LUMEN_HTTP_MAX_CONNECTIONS 128
 #define LUMEN_HTTP_IO_TIMEOUT_SECONDS 10
+#define LUMEN_HTTP_SHUTDOWN_GRACE_SECONDS 5
 #define LUMEN_WEBSOCKET_MAX_PAYLOAD (64 * 1024)
 
 typedef struct {
@@ -1444,8 +1445,19 @@ static int run_server(LumenHttpServer *server, int port, const char *label) {
   server->listener = -1;
 
   pthread_mutex_lock(&server->mutex);
-  for (int index = 0; index < server->client_count; index += 1) {
-    shutdown(server->clients[index], SHUT_RDWR);
+  struct timespec drain_deadline;
+  clock_gettime(CLOCK_REALTIME, &drain_deadline);
+  drain_deadline.tv_sec += LUMEN_HTTP_SHUTDOWN_GRACE_SECONDS;
+
+  int drain_status = 0;
+  while (server->client_count > 0 && drain_status == 0) {
+    drain_status = pthread_cond_timedwait(&server->idle, &server->mutex, &drain_deadline);
+  }
+
+  if (server->client_count > 0) {
+    for (int index = 0; index < server->client_count; index += 1) {
+      shutdown(server->clients[index], SHUT_RDWR);
+    }
   }
   while (server->client_count > 0) pthread_cond_wait(&server->idle, &server->mutex);
   pthread_mutex_unlock(&server->mutex);
